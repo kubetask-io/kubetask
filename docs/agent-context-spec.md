@@ -222,6 +222,73 @@ Result for each task:
 - `/home/agent/.claude/CLAUDE.md`: Claude configuration (from WorkspaceConfig)
 - `/workspace/repo-config.json`: Repository-specific config (from variableContexts)
 
+## Credentials
+
+WorkspaceConfig supports credentials for providing secrets to agents. Credentials can be exposed as:
+- **Environment Variables**: For API tokens, passwords, etc.
+- **File Mounts**: For SSH keys, service account files, etc.
+
+### Credential Configuration
+
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: WorkspaceConfig
+metadata:
+  name: default
+spec:
+  agentImage: quay.io/myorg/claude-agent:v1.0
+  credentials:
+    # GitHub token as environment variable
+    - name: github-token
+      secretRef:
+        name: github-credentials
+        key: token
+      env: GITHUB_TOKEN
+
+    # SSH key as file mount
+    - name: ssh-key
+      secretRef:
+        name: ssh-credentials
+        key: id_rsa
+      mountPath: /home/agent/.ssh/id_rsa
+      fileMode: 0400  # Read-only for SSH keys
+
+    # Anthropic API key as environment variable
+    - name: anthropic-api-key
+      secretRef:
+        name: ai-credentials
+        key: anthropic-key
+      env: ANTHROPIC_API_KEY
+
+    # GCP service account as file mount
+    - name: gcp-credentials
+      secretRef:
+        name: gcp-sa
+        key: credentials.json
+      mountPath: /home/agent/.config/gcloud/application_default_credentials.json
+      fileMode: 0600
+```
+
+### Credential Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Descriptive name for documentation |
+| `secretRef.name` | Yes | Name of the Kubernetes Secret |
+| `secretRef.key` | Yes | Key within the Secret to use |
+| `env` | No | Environment variable name to expose the secret |
+| `mountPath` | No | File path to mount the secret |
+| `fileMode` | No | File permission mode (default: 0600) |
+
+A credential can have both `env` and `mountPath` specified to expose the same secret value in both ways.
+
+### Security Best Practices
+
+1. **Use restrictive file modes**: Default is `0600` (read/write owner only). Use `0400` for read-only files like SSH keys.
+2. **Avoid logging secrets**: Agents should never log secret values.
+3. **Use short-lived tokens**: Prefer short-lived tokens over long-lived credentials.
+4. **Principle of least privilege**: Only include credentials that are actually needed.
+
 ## Agent Implementation Guide
 
 Agents should:
@@ -229,6 +296,7 @@ Agents should:
 1. **Always check `/workspace/task.md`** for the main task description
 2. **Handle additional mounted files** as specified in their documentation
 3. **Not assume any specific file structure** beyond `/workspace/task.md`
+4. **Use credentials securely**: Never log or expose credential values
 
 ### Environment Variables
 
@@ -238,6 +306,9 @@ The controller provides these environment variables to the agent:
 |----------|-------------|
 | `TASK_NAME` | Name of the Task CR |
 | `TASK_NAMESPACE` | Namespace of the Task CR |
+| `GITHUB_TOKEN` | (if configured) GitHub API token |
+| `ANTHROPIC_API_KEY` | (if configured) Anthropic API key |
+| ... | Other credentials as configured in WorkspaceConfig |
 
 ### Recommended Agent Behavior
 

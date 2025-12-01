@@ -85,8 +85,8 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	// Get agent image, tools image, and default contexts from WorkspaceConfig
-	agentImage, toolsImage, defaultContexts := r.getWorkspaceConfig(ctx, task)
+	// Get workspace configuration
+	wsConfig := r.getWorkspaceConfig(ctx, task)
 
 	// Generate Job name
 	jobName := fmt.Sprintf("%s-job", task.Name)
@@ -104,8 +104,8 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 	}
 
 	// Merge contexts: defaultContexts + task.Spec.Contexts
-	allContexts := make([]kubetaskv1alpha1.Context, 0, len(defaultContexts)+len(task.Spec.Contexts))
-	allContexts = append(allContexts, defaultContexts...)
+	allContexts := make([]kubetaskv1alpha1.Context, 0, len(wsConfig.defaultContexts)+len(task.Spec.Contexts))
+	allContexts = append(allContexts, wsConfig.defaultContexts...)
 	allContexts = append(allContexts, task.Spec.Contexts...)
 
 	// Process contexts and create ConfigMap for aggregated content
@@ -159,8 +159,8 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		}
 	}
 
-	// Create Job with agent image, tools image, and context mounts
-	job := r.buildJob(task, jobName, agentImage, toolsImage, contextConfigMap, explicitMounts)
+	// Create Job with workspace configuration and context mounts
+	job := r.buildJob(task, jobName, wsConfig, contextConfigMap, explicitMounts)
 
 	if err := r.Create(ctx, job); err != nil {
 		log.Error(err, "unable to create Job", "job", jobName)
@@ -178,7 +178,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		return ctrl.Result{}, err
 	}
 
-	log.Info("initialized Task", "job", jobName, "image", agentImage)
+	log.Info("initialized Task", "job", jobName, "image", wsConfig.agentImage)
 	return ctrl.Result{}, nil
 }
 
@@ -227,8 +227,16 @@ func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// getWorkspaceConfig retrieves the agent image, tools image, and default contexts from WorkspaceConfig
-func (r *TaskReconciler) getWorkspaceConfig(ctx context.Context, task *kubetaskv1alpha1.Task) (agentImage, toolsImage string, defaultContexts []kubetaskv1alpha1.Context) {
+// workspaceConfig holds the resolved configuration from WorkspaceConfig
+type workspaceConfig struct {
+	agentImage      string
+	toolsImage      string
+	defaultContexts []kubetaskv1alpha1.Context
+	credentials     []kubetaskv1alpha1.Credential
+}
+
+// getWorkspaceConfig retrieves the workspace configuration from WorkspaceConfig
+func (r *TaskReconciler) getWorkspaceConfig(ctx context.Context, task *kubetaskv1alpha1.Task) workspaceConfig {
 	log := log.FromContext(ctx)
 
 	// Determine which WorkspaceConfig to use
@@ -248,16 +256,21 @@ func (r *TaskReconciler) getWorkspaceConfig(ctx context.Context, task *kubetaskv
 		if !errors.IsNotFound(err) {
 			log.Error(err, "unable to get WorkspaceConfig, using defaults", "workspaceConfig", configName)
 		}
-		return DefaultAgentImage, "", nil
+		return workspaceConfig{agentImage: DefaultAgentImage}
 	}
 
 	// Get agent image
-	agentImage = DefaultAgentImage
+	agentImage := DefaultAgentImage
 	if config.Spec.AgentImage != "" {
 		agentImage = config.Spec.AgentImage
 	}
 
-	return agentImage, config.Spec.ToolsImage, config.Spec.DefaultContexts
+	return workspaceConfig{
+		agentImage:      agentImage,
+		toolsImage:      config.Spec.ToolsImage,
+		defaultContexts: config.Spec.DefaultContexts,
+		credentials:     config.Spec.Credentials,
+	}
 }
 
 // explicitMount represents a file that should be mounted at a specific path
@@ -391,7 +404,7 @@ func (r *TaskReconciler) resolveFileContent(ctx context.Context, namespace strin
 }
 
 // buildJob creates a Job object for the task with context mounts
-func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName, agentImage, toolsImage string, contextConfigMap *corev1.ConfigMap, explicitMounts []explicitMount) *batchv1.Job {
+func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, wsConfig workspaceConfig, contextConfigMap *corev1.ConfigMap, explicitMounts []explicitMount) *batchv1.Job {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var initContainers []corev1.Container
@@ -404,7 +417,7 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName, agentIma
 	)
 
 	// Add tools volume and initContainer if toolsImage is specified
-	if toolsImage != "" {
+	if wsConfig.toolsImage != "" {
 		volumes = append(volumes, corev1.Volume{
 			Name: "tools-volume",
 			VolumeSource: corev1.VolumeSource{
@@ -417,7 +430,7 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName, agentIma
 		})
 		initContainers = append(initContainers, corev1.Container{
 			Name:    "copy-tools",
-			Image:   toolsImage,
+			Image:   wsConfig.toolsImage,
 			Command: []string{"sh", "-c", "cp -a /tools/. /shared-tools/"},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -432,6 +445,57 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName, agentIma
 			corev1.EnvVar{Name: "NODE_PATH", Value: "/tools/lib/node_modules"},
 			corev1.EnvVar{Name: "LD_LIBRARY_PATH", Value: "/tools/lib"},
 		)
+	}
+
+	// Add credentials (secrets as env vars or file mounts)
+	for i, cred := range wsConfig.credentials {
+		// Add as environment variable if Env is specified
+		if cred.Env != nil && *cred.Env != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name: *cred.Env,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: cred.SecretRef.Name,
+						},
+						Key: cred.SecretRef.Key,
+					},
+				},
+			})
+		}
+
+		// Add as file mount if MountPath is specified
+		if cred.MountPath != nil && *cred.MountPath != "" {
+			volumeName := fmt.Sprintf("credential-%d", i)
+
+			// Default file mode is 0600 (read/write for owner only)
+			var fileMode int32 = 0600
+			if cred.FileMode != nil {
+				fileMode = *cred.FileMode
+			}
+
+			volumes = append(volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: cred.SecretRef.Name,
+						Items: []corev1.KeyToPath{
+							{
+								Key:  cred.SecretRef.Key,
+								Path: "secret-file",
+								Mode: &fileMode,
+							},
+						},
+						DefaultMode: &fileMode,
+					},
+				},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      volumeName,
+				MountPath: *cred.MountPath,
+				SubPath:   "secret-file",
+			})
+		}
 	}
 
 	// Add aggregated context volume if ConfigMap exists
@@ -537,7 +601,7 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName, agentIma
 					Containers: []corev1.Container{
 						{
 							Name:         "agent",
-							Image:        agentImage,
+							Image:        wsConfig.agentImage,
 							Env:          envVars,
 							VolumeMounts: volumeMounts,
 						},

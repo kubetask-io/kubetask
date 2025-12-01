@@ -451,6 +451,60 @@ type WorkspaceConfigSpec struct {
 	// or common tool configurations that should apply to all tasks.
 	// +optional
 	DefaultContexts []Context `json:"defaultContexts,omitempty"`
+
+	// Credentials defines secrets that should be available to the agent.
+	// Similar to GitHub Actions secrets, these can be mounted as files or
+	// exposed as environment variables.
+	//
+	// Example use cases:
+	//   - GitHub token for repository access (env: GITHUB_TOKEN)
+	//   - SSH keys for git operations (file: ~/.ssh/id_rsa)
+	//   - API keys for external services (env: ANTHROPIC_API_KEY)
+	//   - Cloud credentials (file: ~/.config/gcloud/credentials.json)
+	// +optional
+	Credentials []Credential `json:"credentials,omitempty"`
+}
+
+// Credential represents a secret that should be available to the agent.
+// Each credential references a Kubernetes Secret and specifies how to expose it.
+type Credential struct {
+	// Name is a descriptive name for this credential (for documentation purposes).
+	// +required
+	Name string `json:"name"`
+
+	// SecretRef references the Kubernetes Secret containing the credential.
+	// +required
+	SecretRef SecretReference `json:"secretRef"`
+
+	// MountPath specifies where to mount the secret as a file.
+	// If specified, the secret key's value is written to this path.
+	// Example: "/home/agent/.ssh/id_rsa" for SSH keys
+	// +optional
+	MountPath *string `json:"mountPath,omitempty"`
+
+	// Env specifies the environment variable name to expose the secret value.
+	// If specified, the secret key's value is set as this environment variable.
+	// Example: "GITHUB_TOKEN" for GitHub API access
+	// +optional
+	Env *string `json:"env,omitempty"`
+
+	// FileMode specifies the permission mode for mounted files.
+	// Only applicable when MountPath is specified.
+	// Defaults to 0600 (read/write for owner only) for security.
+	// Use 0400 for read-only files like SSH keys.
+	// +optional
+	FileMode *int32 `json:"fileMode,omitempty"`
+}
+
+// SecretReference references a specific key in a Kubernetes Secret.
+type SecretReference struct {
+	// Name of the Secret.
+	// +required
+	Name string `json:"name"`
+
+	// Key of the Secret to select.
+	// +required
+	Key string `json:"key"`
 }
 
 // SecretKeySelector selects a key of a Secret.
