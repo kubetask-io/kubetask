@@ -111,10 +111,75 @@ spec:
                       - name
                       - source
                       type: object
+                    remoteFile:
+                      description: RemoteFile context (required when Type == "RemoteFile")
+                      properties:
+                        headers:
+                          description: |-
+                            Headers specifies optional HTTP headers to include in the request.
+                            Useful for authentication (e.g., Authorization header for private repos).
+                          items:
+                            description: HTTPHeader represents an HTTP header key-value
+                              pair
+                            properties:
+                              name:
+                                description: Name is the header name (e.g., "Authorization",
+                                  "Accept")
+                                type: string
+                              value:
+                                description: |-
+                                  Value is the header value.
+                                  For sensitive values, use ValueFrom instead.
+                                type: string
+                              valueFrom:
+                                description: ValueFrom references a secret for sensitive
+                                  header values.
+                                properties:
+                                  key:
+                                    description: Key of the secret to select from
+                                    type: string
+                                  name:
+                                    description: Name of the secret
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret must be
+                                      defined
+                                    type: boolean
+                                required:
+                                - key
+                                - name
+                                type: object
+                            required:
+                            - name
+                            type: object
+                          type: array
+                        mountPath:
+                          description: |-
+                            MountPath specifies where to mount this file in the agent pod.
+                            If not specified, the file content will be aggregated into /workspace/task.md
+                            along with other contexts that don't have a mountPath specified.
+                          type: string
+                        name:
+                          description: |-
+                            Name is the filename to use when saving the fetched content.
+                            (e.g., "CLAUDE.md", "config.json")
+                          type: string
+                        url:
+                          description: |-
+                            URL is the HTTP/HTTPS URL to fetch the file from.
+                            For GitHub files, use raw URLs like:
+                              https://raw.githubusercontent.com/owner/repo/branch/path/to/file
+                          type: string
+                      required:
+                      - name
+                      - url
+                      type: object
                     type:
-                      description: 'Type of context: File, API, Database, etc.'
+                      description: 'Type of context: File, RemoteFile, API, Database,
+                        etc.'
                       enum:
                       - File
+                      - RemoteFile
                       type: string
                   required:
                   - type
@@ -201,10 +266,75 @@ spec:
                         - name
                         - source
                         type: object
+                      remoteFile:
+                        description: RemoteFile context (required when Type == "RemoteFile")
+                        properties:
+                          headers:
+                            description: |-
+                              Headers specifies optional HTTP headers to include in the request.
+                              Useful for authentication (e.g., Authorization header for private repos).
+                            items:
+                              description: HTTPHeader represents an HTTP header key-value
+                                pair
+                              properties:
+                                name:
+                                  description: Name is the header name (e.g., "Authorization",
+                                    "Accept")
+                                  type: string
+                                value:
+                                  description: |-
+                                    Value is the header value.
+                                    For sensitive values, use ValueFrom instead.
+                                  type: string
+                                valueFrom:
+                                  description: ValueFrom references a secret for sensitive
+                                    header values.
+                                  properties:
+                                    key:
+                                      description: Key of the secret to select from
+                                      type: string
+                                    name:
+                                      description: Name of the secret
+                                      type: string
+                                    optional:
+                                      description: Specify whether the Secret must
+                                        be defined
+                                      type: boolean
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - name
+                              type: object
+                            type: array
+                          mountPath:
+                            description: |-
+                              MountPath specifies where to mount this file in the agent pod.
+                              If not specified, the file content will be aggregated into /workspace/task.md
+                              along with other contexts that don't have a mountPath specified.
+                            type: string
+                          name:
+                            description: |-
+                              Name is the filename to use when saving the fetched content.
+                              (e.g., "CLAUDE.md", "config.json")
+                            type: string
+                          url:
+                            description: |-
+                              URL is the HTTP/HTTPS URL to fetch the file from.
+                              For GitHub files, use raw URLs like:
+                                https://raw.githubusercontent.com/owner/repo/branch/path/to/file
+                            type: string
+                        required:
+                        - name
+                        - url
+                        type: object
                       type:
-                        description: 'Type of context: File, API, Database, etc.'
+                        description: 'Type of context: File, RemoteFile, API, Database,
+                          etc.'
                         enum:
                         - File
+                        - RemoteFile
                         type: string
                     required:
                     - type

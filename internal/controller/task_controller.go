@@ -85,8 +85,8 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	// Get agent image and default contexts from WorkspaceConfig
-	agentImage, defaultContexts := r.getWorkspaceConfig(ctx, task)
+	// Get agent image, tools image, and default contexts from WorkspaceConfig
+	agentImage, toolsImage, defaultContexts := r.getWorkspaceConfig(ctx, task)
 
 	// Generate Job name
 	jobName := fmt.Sprintf("%s-job", task.Name)
@@ -159,8 +159,8 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		}
 	}
 
-	// Create Job with agent image and context mounts
-	job := r.buildJob(task, jobName, agentImage, contextConfigMap, explicitMounts)
+	// Create Job with agent image, tools image, and context mounts
+	job := r.buildJob(task, jobName, agentImage, toolsImage, contextConfigMap, explicitMounts)
 
 	if err := r.Create(ctx, job); err != nil {
 		log.Error(err, "unable to create Job", "job", jobName)
@@ -227,8 +227,8 @@ func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// getWorkspaceConfig retrieves the agent image and default contexts from WorkspaceConfig
-func (r *TaskReconciler) getWorkspaceConfig(ctx context.Context, task *kubetaskv1alpha1.Task) (string, []kubetaskv1alpha1.Context) {
+// getWorkspaceConfig retrieves the agent image, tools image, and default contexts from WorkspaceConfig
+func (r *TaskReconciler) getWorkspaceConfig(ctx context.Context, task *kubetaskv1alpha1.Task) (agentImage, toolsImage string, defaultContexts []kubetaskv1alpha1.Context) {
 	log := log.FromContext(ctx)
 
 	// Determine which WorkspaceConfig to use
@@ -248,16 +248,16 @@ func (r *TaskReconciler) getWorkspaceConfig(ctx context.Context, task *kubetaskv
 		if !errors.IsNotFound(err) {
 			log.Error(err, "unable to get WorkspaceConfig, using defaults", "workspaceConfig", configName)
 		}
-		return DefaultAgentImage, nil
+		return DefaultAgentImage, "", nil
 	}
 
 	// Get agent image
-	agentImage := DefaultAgentImage
+	agentImage = DefaultAgentImage
 	if config.Spec.AgentImage != "" {
 		agentImage = config.Spec.AgentImage
 	}
 
-	return agentImage, config.Spec.DefaultContexts
+	return agentImage, config.Spec.ToolsImage, config.Spec.DefaultContexts
 }
 
 // explicitMount represents a file that should be mounted at a specific path
@@ -391,9 +391,48 @@ func (r *TaskReconciler) resolveFileContent(ctx context.Context, namespace strin
 }
 
 // buildJob creates a Job object for the task with context mounts
-func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName, agentImage string, contextConfigMap *corev1.ConfigMap, explicitMounts []explicitMount) *batchv1.Job {
+func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName, agentImage, toolsImage string, contextConfigMap *corev1.ConfigMap, explicitMounts []explicitMount) *batchv1.Job {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
+	var initContainers []corev1.Container
+	var envVars []corev1.EnvVar
+
+	// Base environment variables
+	envVars = append(envVars,
+		corev1.EnvVar{Name: "TASK_NAME", Value: task.Name},
+		corev1.EnvVar{Name: "TASK_NAMESPACE", Value: task.Namespace},
+	)
+
+	// Add tools volume and initContainer if toolsImage is specified
+	if toolsImage != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: "tools-volume",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "tools-volume",
+			MountPath: "/tools",
+		})
+		initContainers = append(initContainers, corev1.Container{
+			Name:    "copy-tools",
+			Image:   toolsImage,
+			Command: []string{"sh", "-c", "cp -a /tools/. /shared-tools/"},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "tools-volume",
+					MountPath: "/shared-tools",
+				},
+			},
+		})
+		// Add PATH and other environment variables for tools
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "PATH", Value: "/tools/bin:/usr/local/bin:/usr/bin:/bin"},
+			corev1.EnvVar{Name: "NODE_PATH", Value: "/tools/lib/node_modules"},
+			corev1.EnvVar{Name: "LD_LIBRARY_PATH", Value: "/tools/lib"},
+		)
+	}
 
 	// Add aggregated context volume if ConfigMap exists
 	if contextConfigMap != nil {
@@ -494,20 +533,12 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName, agentIma
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					ServiceAccountName: "kubetask-agent",
+					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						{
-							Name:  "agent",
-							Image: agentImage,
-							Env: []corev1.EnvVar{
-								{
-									Name:  "TASK_NAME",
-									Value: task.Name,
-								},
-								{
-									Name:  "TASK_NAMESPACE",
-									Value: task.Namespace,
-								},
-							},
+							Name:         "agent",
+							Image:        agentImage,
+							Env:          envVars,
 							VolumeMounts: volumeMounts,
 						},
 					},

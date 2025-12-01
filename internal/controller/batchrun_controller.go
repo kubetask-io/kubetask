@@ -171,6 +171,19 @@ func (r *BatchRunReconciler) ensureTasks(ctx context.Context, batchRun *kubetask
 			continue
 		}
 
+		// Get workspaceConfigRef from BatchSpec
+		var workspaceConfigRef string
+		if batchRun.Spec.BatchSpec != nil {
+			workspaceConfigRef = batchRun.Spec.BatchSpec.WorkspaceConfigRef
+		} else if batchRun.Spec.BatchRef != "" {
+			// Get from referenced Batch
+			batch := &kubetaskv1alpha1.Batch{}
+			batchKey := types.NamespacedName{Name: batchRun.Spec.BatchRef, Namespace: batchRun.Namespace}
+			if err := r.Get(ctx, batchKey, batch); err == nil {
+				workspaceConfigRef = batch.Spec.WorkspaceConfigRef
+			}
+		}
+
 		// Create Task CR
 		task := &kubetaskv1alpha1.Task{
 			ObjectMeta: metav1.ObjectMeta{
@@ -190,7 +203,8 @@ func (r *BatchRunReconciler) ensureTasks(ctx context.Context, batchRun *kubetask
 				},
 			},
 			Spec: kubetaskv1alpha1.TaskSpec{
-				Contexts: taskStatus.Contexts,
+				Contexts:           taskStatus.Contexts,
+				WorkspaceConfigRef: workspaceConfigRef,
 			},
 		}
 

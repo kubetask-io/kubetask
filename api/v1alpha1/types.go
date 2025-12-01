@@ -57,12 +57,17 @@ type BatchSpec struct {
 type ContextSet []Context
 
 // ContextType defines the type of context
-// +kubebuilder:validation:Enum=File
+// +kubebuilder:validation:Enum=File;RemoteFile
 type ContextType string
 
 const (
 	// ContextTypeFile represents a file context (task.md, guide.md, etc.)
 	ContextTypeFile ContextType = "File"
+
+	// ContextTypeRemoteFile represents a remote file context fetched via HTTP/HTTPS.
+	// Use this for files that need to be fetched at runtime (e.g., from GitHub raw URLs).
+	// The content is fetched fresh each time the task runs.
+	ContextTypeRemoteFile ContextType = "RemoteFile"
 
 	// Future context types:
 	// ContextTypeAPI        ContextType = "API"
@@ -73,13 +78,17 @@ const (
 // Context represents different types of task inputs
 // This is a polymorphic type that can represent File, API, Database, etc.
 type Context struct {
-	// Type of context: File, API, Database, etc.
+	// Type of context: File, RemoteFile, API, Database, etc.
 	// +required
 	Type ContextType `json:"type"`
 
 	// File context (required when Type == "File")
 	// +optional
 	File *FileContext `json:"file,omitempty"`
+
+	// RemoteFile context (required when Type == "RemoteFile")
+	// +optional
+	RemoteFile *RemoteFileContext `json:"remoteFile,omitempty"`
 
 	// Future context types can be added here:
 	// API *APIContext `json:"api,omitempty"`
@@ -101,6 +110,49 @@ type FileContext struct {
 	// along with other contexts that don't have a mountPath specified.
 	// +optional
 	MountPath *string `json:"mountPath,omitempty"`
+}
+
+// RemoteFileContext represents a file fetched from a remote URL at runtime.
+// This is useful for files that may be updated frequently, such as files from
+// GitHub repositories that need to be fetched fresh each time a task runs.
+type RemoteFileContext struct {
+	// Name is the filename to use when saving the fetched content.
+	// (e.g., "CLAUDE.md", "config.json")
+	// +required
+	Name string `json:"name"`
+
+	// URL is the HTTP/HTTPS URL to fetch the file from.
+	// For GitHub files, use raw URLs like:
+	//   https://raw.githubusercontent.com/owner/repo/branch/path/to/file
+	// +required
+	URL string `json:"url"`
+
+	// Headers specifies optional HTTP headers to include in the request.
+	// Useful for authentication (e.g., Authorization header for private repos).
+	// +optional
+	Headers []HTTPHeader `json:"headers,omitempty"`
+
+	// MountPath specifies where to mount this file in the agent pod.
+	// If not specified, the file content will be aggregated into /workspace/task.md
+	// along with other contexts that don't have a mountPath specified.
+	// +optional
+	MountPath *string `json:"mountPath,omitempty"`
+}
+
+// HTTPHeader represents an HTTP header key-value pair
+type HTTPHeader struct {
+	// Name is the header name (e.g., "Authorization", "Accept")
+	// +required
+	Name string `json:"name"`
+
+	// Value is the header value.
+	// For sensitive values, use ValueFrom instead.
+	// +optional
+	Value string `json:"value,omitempty"`
+
+	// ValueFrom references a secret for sensitive header values.
+	// +optional
+	ValueFrom *SecretKeySelector `json:"valueFrom,omitempty"`
 }
 
 // FileSource represents a source for file content
@@ -369,6 +421,22 @@ type WorkspaceConfigSpec struct {
 	// If not specified, defaults to "quay.io/zhaoxue/kubetask-agent:latest".
 	// +optional
 	AgentImage string `json:"agentImage,omitempty"`
+
+	// Tools container image that provides CLI tools (git, gh, kubectl, etc.)
+	// for the agent to use during task execution.
+	//
+	// The tools image must follow the standard directory structure:
+	//   /tools/bin/  - Executables (added to PATH)
+	//   /tools/lib/  - Shared libraries and runtimes (e.g., node_modules)
+	//
+	// When specified, the controller creates an initContainer that copies
+	// /tools from this image to a shared volume, making the tools available
+	// to the agent container via PATH environment variable.
+	//
+	// This enables decoupling of agent and tools - each can be built and
+	// versioned independently, and combined at runtime.
+	// +optional
+	ToolsImage string `json:"toolsImage,omitempty"`
 
 	// DefaultContexts defines the base-level contexts that are included in all tasks
 	// using this WorkspaceConfig. These contexts are applied at the lowest priority,
