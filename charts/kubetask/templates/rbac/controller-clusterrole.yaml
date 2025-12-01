@@ -11,6 +11,7 @@ rules:
   resources:
   - batches
   - batchruns
+  - tasks
   - workspaceconfigs
   verbs:
   - get
@@ -26,6 +27,7 @@ rules:
   resources:
   - batches/status
   - batchruns/status
+  - tasks/status
   - workspaceconfigs/status
   verbs:
   - get
