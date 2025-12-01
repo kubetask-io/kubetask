@@ -21,7 +21,6 @@ env.bak/
 venv.bak/
 
 # Go
-vendor/
 bin/
 
 
