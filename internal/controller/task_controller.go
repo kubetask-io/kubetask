@@ -286,11 +286,19 @@ type explicitMount struct {
 	inlineFileName string
 }
 
+// aggregatedContext holds content and metadata for a context to be aggregated
+type aggregatedContext struct {
+	content     string
+	name        string
+	contextType string
+	sourceType  string
+}
+
 // processContexts processes all contexts and returns:
 // - ConfigMap for aggregated content (contexts without mountPath)
 // - List of explicit mounts (contexts with mountPath)
 func (r *TaskReconciler) processContexts(ctx context.Context, task *kubetaskv1alpha1.Task, contexts []kubetaskv1alpha1.Context) (*corev1.ConfigMap, []explicitMount, error) {
-	var aggregatedContent []string
+	var aggregatedContexts []aggregatedContext
 	var explicitMounts []explicitMount
 
 	for _, c := range contexts {
@@ -324,15 +332,38 @@ func (r *TaskReconciler) processContexts(ctx context.Context, task *kubetaskv1al
 				return nil, nil, err
 			}
 			if content != "" {
-				aggregatedContent = append(aggregatedContent, content)
+				// Determine source type
+				sourceType := "unknown"
+				switch {
+				case file.Source.Inline != nil:
+					sourceType = "inline"
+				case file.Source.ConfigMapKeyRef != nil:
+					sourceType = "configMap"
+				case file.Source.SecretKeyRef != nil:
+					sourceType = "secret"
+				}
+
+				aggregatedContexts = append(aggregatedContexts, aggregatedContext{
+					content:     content,
+					name:        file.Name,
+					contextType: string(c.Type),
+					sourceType:  sourceType,
+				})
 			}
 		}
 	}
 
 	// Create ConfigMap for aggregated content if any
 	var configMap *corev1.ConfigMap
-	if len(aggregatedContent) > 0 {
-		aggregated := strings.Join(aggregatedContent, "\n\n---\n\n")
+	if len(aggregatedContexts) > 0 {
+		// Wrap each context in XML tags with metadata
+		var wrappedContents []string
+		for i, ac := range aggregatedContexts {
+			wrapped := fmt.Sprintf("<context index=\"%d\" name=\"%s\" type=\"%s\" source=\"%s\">\n%s\n</context>",
+				i, ac.name, ac.contextType, ac.sourceType, ac.content)
+			wrappedContents = append(wrappedContents, wrapped)
+		}
+		aggregated := strings.Join(wrappedContents, "\n\n")
 		configMapName := task.Name + ContextConfigMapSuffix
 
 		configMap = &corev1.ConfigMap{
