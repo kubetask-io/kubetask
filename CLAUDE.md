@@ -135,6 +135,35 @@ make docker-push
 make docker-buildx
 ```
 
+### Agent Images
+
+Agent images are located in `workspace/agents/`. Each subdirectory contains a Dockerfile for a specific AI agent (gemini, claude, codex, etc.).
+
+```bash
+# Build specific agent (default: gemini)
+make agent-build                    # Build gemini agent
+make agent-build AGENT=gemini       # Build gemini agent (explicit)
+make agent-build AGENT=claude       # Build claude agent
+make agent-build AGENT=echo         # Build echo agent (for testing)
+
+# Push agent image to registry
+make agent-push                     # Push gemini agent
+make agent-push AGENT=claude        # Push claude agent
+
+# Multi-arch build and push
+make agent-buildx                   # Multi-arch build gemini
+make agent-buildx AGENT=claude      # Multi-arch build claude
+
+# List available agents
+make -C workspace/agents list
+```
+
+The agent images are tagged as `quay.io/zhaoxue/kubetask-agent-<AGENT>:latest` by default. You can customize the registry, org, and version:
+
+```bash
+make agent-build AGENT=gemini IMG_REGISTRY=docker.io IMG_ORG=myorg VERSION=v1.0.0
+```
+
 ## Key Files and Directories
 
 ```
