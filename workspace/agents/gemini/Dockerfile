@@ -25,14 +25,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Gemini CLI globally
 RUN npm install -g @google/gemini-cli
 
+# Build argument for workspace directory
+ARG WORKSPACE_DIR=/workspace
+
+# Set workspace directory as environment variable for runtime use
+ENV WORKSPACE_DIR=${WORKSPACE_DIR}
+
 # Create non-root user for security
 RUN useradd -m -s /bin/bash gemini
 USER gemini
-WORKDIR /workspace
+WORKDIR ${WORKSPACE_DIR}
 
 # Default entrypoint - run Gemini CLI in headless mode
-# The agent reads the task from /workspace/task.md and executes it
+# The agent reads the task from ${WORKSPACE_DIR}/task.md and executes it
 # Using -p flag for direct prompt input from the mounted context file
 # Using --yolo to auto-approve actions (safe in container environment)
 # Using stream-json output with jq to filter assistant messages for real-time logs
-ENTRYPOINT ["sh", "-c", "gemini --output-format stream-json --yolo -p \"$(cat /workspace/task.md)\" | jq -r 'select(.type == \"message\" and .role == \"assistant\") | .content'"]
+ENTRYPOINT ["sh", "-c", "gemini --output-format stream-json --yolo -p \"$(cat ${WORKSPACE_DIR}/task.md)\" | jq -r 'select(.type == \"message\" and .role == \"assistant\") | .content'"]
