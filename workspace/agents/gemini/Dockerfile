@@ -1,7 +1,7 @@
 # Gemini CLI Agent Image
 FROM node:24-slim
 
-# Install git, jq, gh, yq and other common tools needed for repository operations
+# Install git, jq, gh, yq, kubectl and other common tools needed for repository operations
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     jq \
@@ -16,6 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends gh \
     && curl -fsSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$(dpkg --print-architecture) -o /usr/local/bin/yq \
     && chmod +x /usr/local/bin/yq \
+    && curl -fsSL "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/$(dpkg --print-architecture | sed 's/aarch64/arm64/' | sed 's/x86_64/amd64/')/kubectl" -o /usr/local/bin/kubectl \
+    && chmod +x /usr/local/bin/kubectl \
     && apt-get purge -y curl gpg \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
