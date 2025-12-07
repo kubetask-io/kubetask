@@ -40,7 +40,7 @@ var _ = Describe("BatchRunController", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "common.md",
+									FilePath: "/workspace/common.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &commonContent,
 									},
@@ -52,7 +52,7 @@ var _ = Describe("BatchRunController", func() {
 								{
 									Type: kubetaskv1alpha1.ContextTypeFile,
 									File: &kubetaskv1alpha1.FileContext{
-										Name: "variable.md",
+										FilePath: "/workspace/variable.md",
 										Source: kubetaskv1alpha1.FileSource{
 											Inline: &variableContent1,
 										},
@@ -63,7 +63,7 @@ var _ = Describe("BatchRunController", func() {
 								{
 									Type: kubetaskv1alpha1.ContextTypeFile,
 									File: &kubetaskv1alpha1.FileContext{
-										Name: "variable.md",
+										FilePath: "/workspace/variable.md",
 										Source: kubetaskv1alpha1.FileSource{
 											Inline: &variableContent2,
 										},
@@ -144,7 +144,7 @@ var _ = Describe("BatchRunController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "common.md",
+								FilePath: "/workspace/common.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &commonContent,
 								},
@@ -156,7 +156,7 @@ var _ = Describe("BatchRunController", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "variable.md",
+									FilePath: "/workspace/variable.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &variableContent,
 									},
@@ -221,7 +221,7 @@ var _ = Describe("BatchRunController", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "task.md",
+									FilePath: "/workspace/task.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &content,
 									},
@@ -296,7 +296,7 @@ var _ = Describe("BatchRunController", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "task.md",
+									FilePath: "/workspace/task.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &content,
 									},
@@ -380,7 +380,7 @@ var _ = Describe("BatchRunController", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "task.md",
+									FilePath: "/workspace/task.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &content,
 									},
@@ -429,7 +429,7 @@ var _ = Describe("BatchRunController", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "task.md",
+									FilePath: "/workspace/task.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &content,
 									},
@@ -498,7 +498,7 @@ var _ = Describe("BatchRunController", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "task.md",
+									FilePath: "/workspace/task.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &content,
 									},
@@ -563,7 +563,7 @@ var _ = Describe("BatchRunController", func() {
 					{
 						Type: kubetaskv1alpha1.ContextTypeFile,
 						File: &kubetaskv1alpha1.FileContext{
-							Name: "variable.md",
+							FilePath: "/workspace/variable.md",
 							Source: kubetaskv1alpha1.FileSource{
 								Inline: &content,
 							},
@@ -584,7 +584,7 @@ var _ = Describe("BatchRunController", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "common.md",
+									FilePath: "/workspace/common.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &commonContent,
 									},
@@ -641,7 +641,7 @@ var _ = Describe("BatchRunController", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "task.md",
+									FilePath: "/workspace/task.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &content,
 									},

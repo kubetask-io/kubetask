@@ -98,29 +98,26 @@ type Context struct {
 
 // FileContext represents a file with content from various sources
 type FileContext struct {
-	// File name (e.g., "task.md", "config.json")
+	// FilePath is the full path where this file will be mounted in the agent pod.
+	// Multiple contexts with the same FilePath will be aggregated into a single file.
+	// Example: "/workspace/task.md", "/workspace/config/settings.json"
 	// +required
-	Name string `json:"name"`
+	FilePath string `json:"filePath"`
 
 	// File content source (exactly one must be specified)
 	// +required
 	Source FileSource `json:"source"`
-
-	// MountPath specifies where to mount this file in the agent pod.
-	// If not specified, the file content will be aggregated into /workspace/task.md
-	// along with other contexts that don't have a mountPath specified.
-	// +optional
-	MountPath *string `json:"mountPath,omitempty"`
 }
 
 // RemoteFileContext represents a file fetched from a remote URL at runtime.
 // This is useful for files that may be updated frequently, such as files from
 // GitHub repositories that need to be fetched fresh each time a task runs.
 type RemoteFileContext struct {
-	// Name is the filename to use when saving the fetched content.
-	// (e.g., "CLAUDE.md", "config.json")
+	// FilePath is the full path where this file will be mounted in the agent pod.
+	// Multiple contexts with the same FilePath will be aggregated into a single file.
+	// Example: "/workspace/task.md", "/workspace/CLAUDE.md"
 	// +required
-	Name string `json:"name"`
+	FilePath string `json:"filePath"`
 
 	// URL is the HTTP/HTTPS URL to fetch the file from.
 	// For GitHub files, use raw URLs like:
@@ -132,12 +129,6 @@ type RemoteFileContext struct {
 	// Useful for authentication (e.g., Authorization header for private repos).
 	// +optional
 	Headers []HTTPHeader `json:"headers,omitempty"`
-
-	// MountPath specifies where to mount this file in the agent pod.
-	// If not specified, the file content will be aggregated into /workspace/task.md
-	// along with other contexts that don't have a mountPath specified.
-	// +optional
-	MountPath *string `json:"mountPath,omitempty"`
 }
 
 // HTTPHeader represents an HTTP header key-value pair

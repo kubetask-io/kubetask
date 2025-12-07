@@ -26,9 +26,6 @@ const (
 	// DefaultAgentImage is the default agent container image
 	DefaultAgentImage = "quay.io/zhaoxue/kubetask-agent-gemini:latest"
 
-	// AggregatedContextPath is the default path for aggregated context file
-	AggregatedContextPath = "/workspace/task.md"
-
 	// ContextConfigMapSuffix is the suffix for ConfigMap names created for context
 	ContextConfigMapSuffix = "-context"
 )
@@ -126,7 +123,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 	allContexts = append(allContexts, task.Spec.Contexts...)
 
 	// Process contexts and create ConfigMap for aggregated content
-	contextConfigMap, explicitMounts, err := r.processContexts(ctx, task, allContexts)
+	contextConfigMap, fileMounts, err := r.processContexts(ctx, task, allContexts)
 	if err != nil {
 		log.Error(err, "unable to process contexts")
 		return ctrl.Result{}, err
@@ -142,42 +139,8 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		}
 	}
 
-	// Create ConfigMaps for inline content with explicit mountPath
-	for i, mount := range explicitMounts {
-		if mount.inlineContent != nil {
-			inlineConfigMap := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("%s-inline-%d", task.Name, i),
-					Namespace: task.Namespace,
-					Labels: map[string]string{
-						"app":              "kubetask",
-						"kubetask.io/task": task.Name,
-					},
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion: task.APIVersion,
-							Kind:       task.Kind,
-							Name:       task.Name,
-							UID:        task.UID,
-							Controller: boolPtr(true),
-						},
-					},
-				},
-				Data: map[string]string{
-					mount.inlineFileName: *mount.inlineContent,
-				},
-			}
-			if err := r.Create(ctx, inlineConfigMap); err != nil {
-				if !errors.IsAlreadyExists(err) {
-					log.Error(err, "unable to create inline ConfigMap", "index", i)
-					return ctrl.Result{}, err
-				}
-			}
-		}
-	}
-
 	// Create Job with workspace configuration and context mounts
-	job := r.buildJob(task, jobName, wsConfig, contextConfigMap, explicitMounts)
+	job := r.buildJob(task, jobName, wsConfig, contextConfigMap, fileMounts)
 
 	if err := r.Create(ctx, job); err != nil {
 		log.Error(err, "unable to create Job", "job", jobName)
@@ -300,29 +263,21 @@ func (r *TaskReconciler) getWorkspaceConfig(ctx context.Context, task *kubetaskv
 	}, nil
 }
 
-// explicitMount represents a file that should be mounted at a specific path
-type explicitMount struct {
-	mountPath      string
-	configMapRef   *kubetaskv1alpha1.ConfigMapKeySelector
-	secretRef      *kubetaskv1alpha1.SecretKeySelector
-	inlineContent  *string
-	inlineFileName string
-}
-
-// aggregatedContext holds content and metadata for a context to be aggregated
-type aggregatedContext struct {
-	content     string
-	name        string
-	contextType string
-	sourceType  string
+// fileMount represents a file to be mounted at a specific path
+type fileMount struct {
+	filePath string
 }
 
 // processContexts processes all contexts and returns:
-// - ConfigMap for aggregated content (contexts without mountPath)
-// - List of explicit mounts (contexts with mountPath)
-func (r *TaskReconciler) processContexts(ctx context.Context, task *kubetaskv1alpha1.Task, contexts []kubetaskv1alpha1.Context) (*corev1.ConfigMap, []explicitMount, error) {
-	var aggregatedContexts []aggregatedContext
-	var explicitMounts []explicitMount
+// - ConfigMap for aggregated content (grouped by FilePath)
+// - List of file mounts for the job
+//
+// All context types (inline, configMap, secret) are resolved and aggregated by FilePath.
+// Multiple contexts with the same FilePath will have their contents merged.
+func (r *TaskReconciler) processContexts(ctx context.Context, task *kubetaskv1alpha1.Task, contexts []kubetaskv1alpha1.Context) (*corev1.ConfigMap, []fileMount, error) {
+	// Group resolved contents by FilePath
+	// Key: filePath, Value: list of resolved contents to aggregate
+	contentsByPath := make(map[string][]string)
 
 	for _, c := range contexts {
 		if c.Type != kubetaskv1alpha1.ContextTypeFile || c.File == nil {
@@ -330,65 +285,50 @@ func (r *TaskReconciler) processContexts(ctx context.Context, task *kubetaskv1al
 		}
 
 		file := c.File
+		filePath := file.FilePath
 
-		if file.MountPath != nil && *file.MountPath != "" {
-			// Explicit mount path specified
-			mount := explicitMount{
-				mountPath: *file.MountPath,
-			}
-
-			switch {
-			case file.Source.Inline != nil:
-				mount.inlineContent = file.Source.Inline
-				mount.inlineFileName = file.Name
-			case file.Source.ConfigMapKeyRef != nil:
-				mount.configMapRef = file.Source.ConfigMapKeyRef
-			case file.Source.SecretKeyRef != nil:
-				mount.secretRef = file.Source.SecretKeyRef
-			}
-
-			explicitMounts = append(explicitMounts, mount)
-		} else {
-			// No mount path - aggregate into task.md
-			content, err := r.resolveFileContent(ctx, task.Namespace, file)
-			if err != nil {
-				return nil, nil, err
-			}
-			if content != "" {
-				// Determine source type
-				sourceType := "unknown"
-				switch {
-				case file.Source.Inline != nil:
-					sourceType = "inline"
-				case file.Source.ConfigMapKeyRef != nil:
-					sourceType = "configMap"
-				case file.Source.SecretKeyRef != nil:
-					sourceType = "secret"
-				}
-
-				aggregatedContexts = append(aggregatedContexts, aggregatedContext{
-					content:     content,
-					name:        file.Name,
-					contextType: string(c.Type),
-					sourceType:  sourceType,
-				})
-			}
+		// Resolve content from any source type
+		content, err := r.resolveFileContent(ctx, task.Namespace, file)
+		if err != nil {
+			return nil, nil, err
+		}
+		if content != "" {
+			contentsByPath[filePath] = append(contentsByPath[filePath], content)
 		}
 	}
 
-	// Create ConfigMap for aggregated content if any
-	var configMap *corev1.ConfigMap
-	if len(aggregatedContexts) > 0 {
-		// Wrap each context in XML tags with metadata
-		var wrappedContents []string
-		for i, ac := range aggregatedContexts {
-			wrapped := fmt.Sprintf("<context index=\"%d\" name=\"%s\" type=\"%s\" source=\"%s\">\n%s\n</context>",
-				i, ac.name, ac.contextType, ac.sourceType, ac.content)
-			wrappedContents = append(wrappedContents, wrapped)
-		}
-		aggregated := strings.Join(wrappedContents, "\n\n")
-		configMapName := task.Name + ContextConfigMapSuffix
+	// Build file mounts and ConfigMap data
+	var fileMounts []fileMount
+	configMapData := make(map[string]string)
 
+	for filePath, contents := range contentsByPath {
+		var aggregated string
+		if len(contents) == 1 {
+			// Single content - use as is
+			aggregated = contents[0]
+		} else {
+			// Multiple contents - wrap each in XML tags
+			var wrappedContents []string
+			for i, content := range contents {
+				wrapped := fmt.Sprintf("<context index=\"%d\">\n%s\n</context>", i, content)
+				wrappedContents = append(wrappedContents, wrapped)
+			}
+			aggregated = strings.Join(wrappedContents, "\n\n")
+		}
+
+		// Use a sanitized key for ConfigMap (replace / with -)
+		configMapKey := sanitizeConfigMapKey(filePath)
+		configMapData[configMapKey] = aggregated
+
+		fileMounts = append(fileMounts, fileMount{
+			filePath: filePath,
+		})
+	}
+
+	// Create ConfigMap if there's any content
+	var configMap *corev1.ConfigMap
+	if len(configMapData) > 0 {
+		configMapName := task.Name + ContextConfigMapSuffix
 		configMap = &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      configMapName,
@@ -407,13 +347,20 @@ func (r *TaskReconciler) processContexts(ctx context.Context, task *kubetaskv1al
 					},
 				},
 			},
-			Data: map[string]string{
-				"task.md": aggregated,
-			},
+			Data: configMapData,
 		}
 	}
 
-	return configMap, explicitMounts, nil
+	return configMap, fileMounts, nil
+}
+
+// sanitizeConfigMapKey converts a file path to a valid ConfigMap key
+// ConfigMap keys must be alphanumeric, '-', '_', or '.'
+func sanitizeConfigMapKey(filePath string) string {
+	// Remove leading slash and replace remaining slashes with dashes
+	key := strings.TrimPrefix(filePath, "/")
+	key = strings.ReplaceAll(key, "/", "-")
+	return key
 }
 
 // resolveFileContent resolves the content of a file from its source
@@ -462,7 +409,7 @@ func (r *TaskReconciler) resolveFileContent(ctx context.Context, namespace strin
 }
 
 // buildJob creates a Job object for the task with context mounts
-func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, wsConfig workspaceConfig, contextConfigMap *corev1.ConfigMap, explicitMounts []explicitMount) *batchv1.Job {
+func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, wsConfig workspaceConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount) *batchv1.Job {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var initContainers []corev1.Container
@@ -556,10 +503,10 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, w
 		}
 	}
 
-	// Add aggregated context volume if ConfigMap exists
+	// Add context ConfigMap volume if it exists (for aggregated content)
 	if contextConfigMap != nil {
 		volumes = append(volumes, corev1.Volume{
-			Name: "aggregated-context",
+			Name: "context-files",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -568,67 +515,14 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, w
 				},
 			},
 		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "aggregated-context",
-			MountPath: AggregatedContextPath,
-			SubPath:   "task.md",
-		})
-	}
 
-	// Add explicit mount volumes
-	for i, mount := range explicitMounts {
-		volumeName := fmt.Sprintf("explicit-mount-%d", i)
-
-		switch {
-		case mount.configMapRef != nil:
-			// Mount from ConfigMap
-			volumes = append(volumes, corev1.Volume{
-				Name: volumeName,
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: mount.configMapRef.Name,
-						},
-					},
-				},
-			})
+		// Add volume mounts for each file path
+		for _, mount := range fileMounts {
+			configMapKey := sanitizeConfigMapKey(mount.filePath)
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      volumeName,
-				MountPath: mount.mountPath,
-				SubPath:   mount.configMapRef.Key,
-			})
-		case mount.secretRef != nil:
-			// Mount from Secret
-			volumes = append(volumes, corev1.Volume{
-				Name: volumeName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: mount.secretRef.Name,
-					},
-				},
-			})
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      volumeName,
-				MountPath: mount.mountPath,
-				SubPath:   mount.secretRef.Key,
-			})
-		case mount.inlineContent != nil:
-			// For inline content with explicit mountPath, we create a separate ConfigMap
-			inlineConfigMapName := fmt.Sprintf("%s-inline-%d", task.Name, i)
-			volumes = append(volumes, corev1.Volume{
-				Name: volumeName,
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: inlineConfigMapName,
-						},
-					},
-				},
-			})
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      volumeName,
-				MountPath: mount.mountPath,
-				SubPath:   mount.inlineFileName,
+				Name:      "context-files",
+				MountPath: mount.filePath,
+				SubPath:   configMapKey,
 			})
 		}
 	}

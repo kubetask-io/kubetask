@@ -57,14 +57,11 @@ spec:
                     file:
                       description: File context (required when Type == "File")
                       properties:
-                        mountPath:
+                        filePath:
                           description: |-
-                            MountPath specifies where to mount this file in the agent pod.
-                            If not specified, the file content will be aggregated into /workspace/task.md
-                            along with other contexts that don't have a mountPath specified.
-                          type: string
-                        name:
-                          description: File name (e.g., "task.md", "config.json")
+                            FilePath is the full path where this file will be mounted in the agent pod.
+                            Multiple contexts with the same FilePath will be aggregated into a single file.
+                            Example: "/workspace/task.md", "/workspace/config/settings.json"
                           type: string
                         source:
                           description: File content source (exactly one must be specified)
@@ -108,12 +105,18 @@ spec:
                               type: object
                           type: object
                       required:
-                      - name
+                      - filePath
                       - source
                       type: object
                     remoteFile:
                       description: RemoteFile context (required when Type == "RemoteFile")
                       properties:
+                        filePath:
+                          description: |-
+                            FilePath is the full path where this file will be mounted in the agent pod.
+                            Multiple contexts with the same FilePath will be aggregated into a single file.
+                            Example: "/workspace/task.md", "/workspace/CLAUDE.md"
+                          type: string
                         headers:
                           description: |-
                             Headers specifies optional HTTP headers to include in the request.
@@ -153,17 +156,6 @@ spec:
                             - name
                             type: object
                           type: array
-                        mountPath:
-                          description: |-
-                            MountPath specifies where to mount this file in the agent pod.
-                            If not specified, the file content will be aggregated into /workspace/task.md
-                            along with other contexts that don't have a mountPath specified.
-                          type: string
-                        name:
-                          description: |-
-                            Name is the filename to use when saving the fetched content.
-                            (e.g., "CLAUDE.md", "config.json")
-                          type: string
                         url:
                           description: |-
                             URL is the HTTP/HTTPS URL to fetch the file from.
@@ -171,7 +163,7 @@ spec:
                               https://raw.githubusercontent.com/owner/repo/branch/path/to/file
                           type: string
                       required:
-                      - name
+                      - filePath
                       - url
                       type: object
                     type:
@@ -211,14 +203,11 @@ spec:
                       file:
                         description: File context (required when Type == "File")
                         properties:
-                          mountPath:
+                          filePath:
                             description: |-
-                              MountPath specifies where to mount this file in the agent pod.
-                              If not specified, the file content will be aggregated into /workspace/task.md
-                              along with other contexts that don't have a mountPath specified.
-                            type: string
-                          name:
-                            description: File name (e.g., "task.md", "config.json")
+                              FilePath is the full path where this file will be mounted in the agent pod.
+                              Multiple contexts with the same FilePath will be aggregated into a single file.
+                              Example: "/workspace/task.md", "/workspace/config/settings.json"
                             type: string
                           source:
                             description: File content source (exactly one must be
@@ -263,12 +252,18 @@ spec:
                                 type: object
                             type: object
                         required:
-                        - name
+                        - filePath
                         - source
                         type: object
                       remoteFile:
                         description: RemoteFile context (required when Type == "RemoteFile")
                         properties:
+                          filePath:
+                            description: |-
+                              FilePath is the full path where this file will be mounted in the agent pod.
+                              Multiple contexts with the same FilePath will be aggregated into a single file.
+                              Example: "/workspace/task.md", "/workspace/CLAUDE.md"
+                            type: string
                           headers:
                             description: |-
                               Headers specifies optional HTTP headers to include in the request.
@@ -308,17 +303,6 @@ spec:
                               - name
                               type: object
                             type: array
-                          mountPath:
-                            description: |-
-                              MountPath specifies where to mount this file in the agent pod.
-                              If not specified, the file content will be aggregated into /workspace/task.md
-                              along with other contexts that don't have a mountPath specified.
-                            type: string
-                          name:
-                            description: |-
-                              Name is the filename to use when saving the fetched content.
-                              (e.g., "CLAUDE.md", "config.json")
-                            type: string
                           url:
                             description: |-
                               URL is the HTTP/HTTPS URL to fetch the file from.
@@ -326,7 +310,7 @@ spec:
                                 https://raw.githubusercontent.com/owner/repo/branch/path/to/file
                             type: string
                         required:
-                        - name
+                        - filePath
                         - url
                         type: object
                       type:

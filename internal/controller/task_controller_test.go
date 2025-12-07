@@ -39,7 +39,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &inlineContent,
 								},
@@ -93,9 +93,9 @@ var _ = Describe("TaskController", func() {
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, configMapLookupKey, createdConfigMap) == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdConfigMap.Data).Should(HaveKey("task.md"))
-			// Content is wrapped in XML context tags by the controller
-			Expect(createdConfigMap.Data["task.md"]).Should(ContainSubstring(inlineContent))
+			// Key is sanitized from FilePath: /workspace/task.md -> workspace-task.md
+			Expect(createdConfigMap.Data).Should(HaveKey("workspace-task.md"))
+			Expect(createdConfigMap.Data["workspace-task.md"]).Should(ContainSubstring(inlineContent))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -134,7 +134,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &inlineContent,
 								},
@@ -197,7 +197,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &inlineContent,
 								},
@@ -303,7 +303,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &inlineContent,
 								},
@@ -388,7 +388,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &inlineContent,
 								},
@@ -465,7 +465,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &inlineContent,
 								},
@@ -501,14 +501,14 @@ var _ = Describe("TaskController", func() {
 		})
 	})
 
-	Context("When creating a Task with explicit mountPath", func() {
-		It("Should mount file at specified path", func() {
-			taskName := "test-task-explicit-mount"
-			mountPath := "/workspace/config/settings.json"
+	Context("When creating a Task with multiple file paths", func() {
+		It("Should mount files at specified paths", func() {
+			taskName := "test-task-multi-path"
+			configPath := "/workspace/config/settings.json"
 			configContent := `{"debug": true}`
 			inlineContent := "# Main task content"
 
-			By("Creating Task with explicit mountPath")
+			By("Creating Task with multiple file paths")
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
@@ -519,7 +519,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &inlineContent,
 								},
@@ -528,8 +528,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name:      "settings.json",
-								MountPath: &mountPath,
+								FilePath: configPath,
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &configContent,
 								},
@@ -540,7 +539,7 @@ var _ = Describe("TaskController", func() {
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
-			By("Checking Job has explicit mount")
+			By("Checking Job has both file mounts")
 			jobName := fmt.Sprintf("%s-job", taskName)
 			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
 			createdJob := &batchv1.Job{}
@@ -551,14 +550,14 @@ var _ = Describe("TaskController", func() {
 				return len(createdJob.Spec.Template.Spec.Containers) > 0
 			}, timeout, interval).Should(BeTrue())
 
-			var explicitMount *corev1.VolumeMount
+			var configMount *corev1.VolumeMount
 			for _, mount := range createdJob.Spec.Template.Spec.Containers[0].VolumeMounts {
-				if mount.MountPath == mountPath {
-					explicitMount = &mount
+				if mount.MountPath == configPath {
+					configMount = &mount
 					break
 				}
 			}
-			Expect(explicitMount).ShouldNot(BeNil())
+			Expect(configMount).ShouldNot(BeNil())
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -595,7 +594,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									ConfigMapKeyRef: &kubetaskv1alpha1.ConfigMapKeySelector{
 										Name: configMapName,
@@ -616,8 +615,8 @@ var _ = Describe("TaskController", func() {
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, contextConfigMapLookupKey, createdContextConfigMap) == nil
 			}, timeout, interval).Should(BeTrue())
-			// Content is wrapped in XML context tags by the controller
-			Expect(createdContextConfigMap.Data["task.md"]).Should(ContainSubstring(configMapContent))
+			// Key is sanitized from FilePath: /workspace/task.md -> workspace-task.md
+			Expect(createdContextConfigMap.Data["workspace-task.md"]).Should(ContainSubstring(configMapContent))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -644,7 +643,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "guidelines.md",
+								FilePath: "/workspace/guidelines.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &defaultContent,
 								},
@@ -667,7 +666,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &taskContent,
 								},
@@ -678,7 +677,7 @@ var _ = Describe("TaskController", func() {
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
-			By("Checking context ConfigMap contains merged content")
+			By("Checking context ConfigMap contains both contexts")
 			contextConfigMapName := taskName + ContextConfigMapSuffix
 			contextConfigMapLookupKey := types.NamespacedName{Name: contextConfigMapName, Namespace: taskNamespace}
 			createdContextConfigMap := &corev1.ConfigMap{}
@@ -686,9 +685,11 @@ var _ = Describe("TaskController", func() {
 				return k8sClient.Get(ctx, contextConfigMapLookupKey, createdContextConfigMap) == nil
 			}, timeout, interval).Should(BeTrue())
 
-			// Both defaultContexts and task contexts should be merged
-			Expect(createdContextConfigMap.Data["task.md"]).Should(ContainSubstring(defaultContent))
-			Expect(createdContextConfigMap.Data["task.md"]).Should(ContainSubstring(taskContent))
+			// Each context has its own key based on FilePath
+			// /workspace/guidelines.md -> workspace-guidelines.md
+			// /workspace/task.md -> workspace-task.md
+			Expect(createdContextConfigMap.Data["workspace-guidelines.md"]).Should(ContainSubstring(defaultContent))
+			Expect(createdContextConfigMap.Data["workspace-task.md"]).Should(ContainSubstring(taskContent))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -712,7 +713,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &inlineContent,
 								},
@@ -771,7 +772,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &inlineContent,
 								},

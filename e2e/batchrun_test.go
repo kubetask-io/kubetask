@@ -63,7 +63,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "common.md",
+									FilePath: "/workspace/common.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &commonContent,
 									},
@@ -75,7 +75,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 								{
 									Type: kubetaskv1alpha1.ContextTypeFile,
 									File: &kubetaskv1alpha1.FileContext{
-										Name: "variable.md",
+										FilePath: "/workspace/variable.md",
 										Source: kubetaskv1alpha1.FileSource{
 											Inline: &var1Content,
 										},
@@ -86,7 +86,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 								{
 									Type: kubetaskv1alpha1.ContextTypeFile,
 									File: &kubetaskv1alpha1.FileContext{
-										Name: "variable.md",
+										FilePath: "/workspace/variable.md",
 										Source: kubetaskv1alpha1.FileSource{
 											Inline: &var2Content,
 										},
@@ -97,7 +97,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 								{
 									Type: kubetaskv1alpha1.ContextTypeFile,
 									File: &kubetaskv1alpha1.FileContext{
-										Name: "variable.md",
+										FilePath: "/workspace/variable.md",
 										Source: kubetaskv1alpha1.FileSource{
 											Inline: &var3Content,
 										},
@@ -201,7 +201,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "common.md",
+								FilePath: "/workspace/common.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &commonContent,
 								},
@@ -213,7 +213,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "variable.md",
+									FilePath: "/workspace/variable.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &varContent,
 									},
@@ -284,7 +284,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "task.md",
+									FilePath: "/workspace/task.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &content,
 									},
@@ -360,7 +360,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "task.md",
+									FilePath: "/workspace/task.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &content,
 									},
@@ -427,7 +427,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "task.md",
+									FilePath: "/workspace/task.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &content,
 									},
@@ -497,7 +497,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
 								File: &kubetaskv1alpha1.FileContext{
-									Name: "common.md",
+									FilePath: "/workspace/common.md",
 									Source: kubetaskv1alpha1.FileSource{
 										Inline: &commonContent,
 									},
@@ -509,7 +509,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 								{
 									Type: kubetaskv1alpha1.ContextTypeFile,
 									File: &kubetaskv1alpha1.FileContext{
-										Name: "file-a.md",
+										FilePath: "/workspace/file-a.md",
 										Source: kubetaskv1alpha1.FileSource{
 											Inline: &var1File1,
 										},
@@ -518,7 +518,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 								{
 									Type: kubetaskv1alpha1.ContextTypeFile,
 									File: &kubetaskv1alpha1.FileContext{
-										Name: "file-b.md",
+										FilePath: "/workspace/file-b.md",
 										Source: kubetaskv1alpha1.FileSource{
 											Inline: &var1File2,
 										},
@@ -529,7 +529,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 								{
 									Type: kubetaskv1alpha1.ContextTypeFile,
 									File: &kubetaskv1alpha1.FileContext{
-										Name: "file-a.md",
+										FilePath: "/workspace/file-a.md",
 										Source: kubetaskv1alpha1.FileSource{
 											Inline: &var2File1,
 										},
@@ -538,7 +538,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 								{
 									Type: kubetaskv1alpha1.ContextTypeFile,
 									File: &kubetaskv1alpha1.FileContext{
-										Name: "file-b.md",
+										FilePath: "/workspace/file-b.md",
 										Source: kubetaskv1alpha1.FileSource{
 											Inline: &var2File2,
 										},

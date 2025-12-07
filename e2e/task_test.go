@@ -66,7 +66,7 @@ var _ = Describe("Task E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &taskContent,
 								},
@@ -146,7 +146,7 @@ var _ = Describe("Task E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "intro.md",
+								FilePath: "/workspace/intro.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &content1,
 								},
@@ -155,7 +155,7 @@ var _ = Describe("Task E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "details.md",
+								FilePath: "/workspace/details.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &content2,
 								},
@@ -164,7 +164,7 @@ var _ = Describe("Task E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "conclusion.md",
+								FilePath: "/workspace/conclusion.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &content3,
 								},
@@ -227,7 +227,7 @@ var _ = Describe("Task E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									ConfigMapKeyRef: &kubetaskv1alpha1.ConfigMapKeySelector{
 										Name: configMapName,
@@ -283,7 +283,7 @@ var _ = Describe("Task E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "guidelines.md",
+								FilePath: "/workspace/guidelines.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &defaultContent,
 								},
@@ -306,7 +306,7 @@ var _ = Describe("Task E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &taskContent,
 								},
@@ -356,7 +356,7 @@ var _ = Describe("Task E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &taskContent,
 								},
@@ -420,7 +420,7 @@ var _ = Describe("Task E2E Tests", func() {
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
 							File: &kubetaskv1alpha1.FileContext{
-								Name: "task.md",
+								FilePath: "/workspace/task.md",
 								Source: kubetaskv1alpha1.FileSource{
 									Inline: &taskContent,
 								},
