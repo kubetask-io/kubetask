@@ -81,7 +81,8 @@ update-crds: controller-gen
 		paths="./api/v1alpha1" \
 		output:crd:dir=./deploy/crds
 	@echo "Copying CRDs to Helm chart..."
-	@cp -f ./deploy/crds/*.yaml ./charts/kubetask/templates/crds/
+	@mkdir -p ./charts/kubetask/crds
+	@cp -f ./deploy/crds/*.yaml ./charts/kubetask/crds/
 	@echo "CRDs updated successfully in both locations"
 .PHONY: update-crds
 
@@ -247,9 +248,11 @@ e2e-verify-image: ## Verify image is loaded in kind cluster
 	@echo "Image verified successfully"
 .PHONY: e2e-verify-image
 
-# Deploy controller to kind cluster using Helm (CRDs are included in the chart)
+# Deploy controller to kind cluster using Helm (CRDs are in crds/ directory)
+# Using uninstall + install instead of upgrade to ensure CRDs are properly installed
 e2e-deploy: ## Deploy controller and CRDs to kind cluster using Helm
-	helm upgrade --install kubetask charts/kubetask \
+	@helm uninstall kubetask --namespace kubetask-system 2>/dev/null || true
+	helm install kubetask charts/kubetask \
 		--namespace kubetask-system \
 		--create-namespace \
 		--set controller.image.repository=$(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME) \

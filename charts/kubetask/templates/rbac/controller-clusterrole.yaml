@@ -9,10 +9,9 @@ rules:
 - apiGroups:
   - kubetask.io
   resources:
-  - batches
-  - batchruns
+  - agents
+  - kubetaskconfigs
   - tasks
-  - workspaceconfigs
   verbs:
   - get
   - list
@@ -25,10 +24,9 @@ rules:
 - apiGroups:
   - kubetask.io
   resources:
-  - batches/status
-  - batchruns/status
+  - agents/status
+  - kubetaskconfigs/status
   - tasks/status
-  - workspaceconfigs/status
   verbs:
   - get
   - update
