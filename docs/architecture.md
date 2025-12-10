@@ -43,6 +43,7 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks using Cust
 | Resource | Purpose | Stability |
 |----------|---------|-----------|
 | **Task** | Single task execution (primary API) | Stable - semantic name |
+| **CronTask** | Scheduled/recurring task execution | Stable - follows K8s CronJob pattern |
 | **Agent** | AI agent configuration (HOW to execute) | Stable - independent of project name |
 | **KubeTaskConfig** | System-level configuration (TTL, lifecycle) | Stable - system settings |
 
@@ -89,6 +90,20 @@ Task (single task execution)
     ├── startTime: Time
     └── completionTime: Time
 
+CronTask (scheduled task execution)
+├── CronTaskSpec
+│   ├── schedule: string (cron expression)
+│   ├── concurrencyPolicy: ConcurrencyPolicy
+│   ├── suspend: *bool
+│   ├── successfulTasksHistoryLimit: *int32
+│   ├── failedTasksHistoryLimit: *int32
+│   └── taskTemplate: TaskTemplateSpec
+└── CronTaskStatus
+    ├── active: []ObjectReference
+    ├── lastScheduleTime: *Time
+    ├── lastSuccessfulTime: *Time
+    └── conditions: []Condition
+
 Agent (execution configuration)
 └── AgentSpec
     ├── agentImage: string
@@ -126,6 +141,40 @@ type TaskExecutionStatus struct {
     StartTime      *metav1.Time
     CompletionTime *metav1.Time
     Conditions     []metav1.Condition
+}
+
+// CronTask represents scheduled task execution
+type CronTask struct {
+    Spec   CronTaskSpec
+    Status CronTaskStatus
+}
+
+type CronTaskSpec struct {
+    Schedule                    string            // Cron expression (e.g., "0 9 * * *")
+    ConcurrencyPolicy           ConcurrencyPolicy // Allow|Forbid|Replace
+    Suspend                     *bool             // Suspend scheduling
+    SuccessfulTasksHistoryLimit *int32            // Keep N successful tasks (default: 3)
+    FailedTasksHistoryLimit     *int32            // Keep N failed tasks (default: 1)
+    TaskTemplate                TaskTemplateSpec  // Template for created Tasks
+}
+
+type ConcurrencyPolicy string
+const (
+    AllowConcurrent   ConcurrencyPolicy = "Allow"   // Allow concurrent runs
+    ForbidConcurrent  ConcurrencyPolicy = "Forbid"  // Skip if previous running
+    ReplaceConcurrent ConcurrencyPolicy = "Replace" // Cancel previous, start new
+)
+
+type TaskTemplateSpec struct {
+    metav1.ObjectMeta  // Labels and annotations for created Tasks
+    Spec TaskSpec      // TaskSpec to use
+}
+
+type CronTaskStatus struct {
+    Active             []corev1.ObjectReference // Currently running Tasks
+    LastScheduleTime   *metav1.Time             // Last scheduled time
+    LastSuccessfulTime *metav1.Time             // Last successful completion
+    Conditions         []metav1.Condition
 }
 
 // Agent defines the AI agent configuration
@@ -335,6 +384,90 @@ file:
     configMapRef:
       name: my-configs  # All keys become files in directory
 ```
+
+### CronTask (Scheduled Execution)
+
+CronTask creates Task resources on a schedule, similar to how Kubernetes CronJob creates Jobs.
+
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: CronTask
+metadata:
+  name: daily-report
+  namespace: kubetask-system
+spec:
+  # Cron schedule (required)
+  schedule: "0 9 * * *"  # Every day at 9:00 AM
+
+  # Concurrency policy (optional, default: Forbid)
+  # - Allow: run concurrent Tasks
+  # - Forbid: skip if previous Task still running
+  # - Replace: cancel previous Task and start new one
+  concurrencyPolicy: Forbid
+
+  # Suspend scheduling (optional, default: false)
+  suspend: false
+
+  # History limits (optional)
+  successfulTasksHistoryLimit: 3  # Keep 3 successful Tasks
+  failedTasksHistoryLimit: 1      # Keep 1 failed Task
+
+  # Task template (required)
+  taskTemplate:
+    metadata:
+      labels:
+        app: daily-report
+    spec:
+      contexts:
+        - type: File
+          file:
+            filePath: /workspace/task.md
+            source:
+              inline: "Generate daily status report"
+      agentRef: claude
+
+status:
+  # Currently running Tasks
+  active:
+    - name: daily-report-1733846400
+      namespace: kubetask-system
+
+  # Last scheduled time
+  lastScheduleTime: "2025-12-10T09:00:00Z"
+
+  # Last successful completion
+  lastSuccessfulTime: "2025-12-09T09:05:00Z"
+
+  # Conditions
+  conditions:
+    - type: Scheduled
+      status: "True"
+      reason: TaskCreated
+      message: "Created Task daily-report-1733846400"
+```
+
+**Field Description:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `spec.schedule` | String | Yes | - | Cron expression (e.g., "0 9 * * *") |
+| `spec.concurrencyPolicy` | String | No | Forbid | Allow\|Forbid\|Replace |
+| `spec.suspend` | Bool | No | false | Suspend scheduling |
+| `spec.successfulTasksHistoryLimit` | Int32 | No | 3 | Number of successful Tasks to keep |
+| `spec.failedTasksHistoryLimit` | Int32 | No | 1 | Number of failed Tasks to keep |
+| `spec.taskTemplate` | TaskTemplateSpec | Yes | - | Template for created Tasks |
+
+**Concurrency Policies:**
+
+| Policy | Behavior |
+|--------|----------|
+| `Allow` | Allow multiple Tasks to run concurrently |
+| `Forbid` | Skip this run if previous Task still running (default) |
+| `Replace` | Cancel the currently running Task and start a new one |
+
+**Task Naming:**
+
+Created Tasks are named `{crontask-name}-{unix-timestamp}` (e.g., `daily-report-1733846400`).
 
 ### Agent (Execution Configuration)
 
@@ -645,6 +778,34 @@ kubectl logs job/$(kubectl get task update-service-a -o jsonpath='{.status.jobNa
 kubectl delete task update-service-a -n kubetask-system
 ```
 
+### CronTask Operations
+
+```bash
+# Create a scheduled task
+kubectl apply -f crontask.yaml
+
+# List scheduled tasks
+kubectl get crontasks -n kubetask-system
+
+# Watch scheduled task status
+kubectl get crontask daily-report -n kubetask-system -w
+
+# Check scheduled task details
+kubectl get crontask daily-report -o yaml
+
+# Suspend a scheduled task
+kubectl patch crontask daily-report -p '{"spec":{"suspend":true}}' --type=merge
+
+# Resume a scheduled task
+kubectl patch crontask daily-report -p '{"spec":{"suspend":false}}' --type=merge
+
+# View child tasks created by CronTask
+kubectl get tasks -l kubetask.io/crontask=daily-report -n kubetask-system
+
+# Delete scheduled task
+kubectl delete crontask daily-report -n kubetask-system
+```
+
 ### Agent Operations
 
 ```bash
@@ -664,9 +825,10 @@ kubectl get agent default -o yaml
 
 ### 1. Simplicity
 
-- **Two CRDs only**: Task and Agent
-- **Clear separation**: WHAT (Task) vs HOW (Agent)
+- **Core CRDs**: Task, CronTask, and Agent
+- **Clear separation**: WHAT (Task) vs WHEN (CronTask) vs HOW (Agent)
 - **Kubernetes-native batch**: Use Helm/Kustomize for multiple Tasks
+- **Follows K8s patterns**: CronTask mirrors CronJob behavior
 
 ### 2. Stability
 
@@ -691,6 +853,7 @@ kubectl get agent default -o yaml
 
 **API**:
 - **Task** - primary API for single task execution
+- **CronTask** - scheduled/recurring task execution (creates Tasks on cron schedule)
 - **Agent** - stable, project-independent configuration
 - **KubeTaskConfig** - system-level settings (TTL, lifecycle)
 

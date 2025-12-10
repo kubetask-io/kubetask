@@ -24,7 +24,8 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks using Cust
 ### Resource Hierarchy
 
 1. **Task** - Single task execution (the primary API)
-2. **Agent** - AI agent configuration (HOW to execute)
+2. **CronTask** - Scheduled/recurring task execution (creates Tasks on cron schedule)
+3. **Agent** - AI agent configuration (HOW to execute)
 
 ### Important Design Decisions
 
@@ -66,7 +67,7 @@ All Go files must include the copyright header:
 3. **Kubernetes Resources**:
    - CRD Group: `kubetask.io`
    - API Version: `v1alpha1`
-   - Kinds: `Task`, `Agent`
+   - Kinds: `Task`, `CronTask`, `Agent`
 
 ### Code Comments
 
@@ -172,15 +173,16 @@ kubetask/
 │   ├── images/          # Agent Dockerfiles (gemini, claude, echo, etc.)
 │   └── tools/           # Tools image for shared CLI tools
 ├── api/v1alpha1/          # CRD type definitions
-│   ├── types.go           # Main API types (Task, Agent)
+│   ├── types.go           # Main API types (Task, CronTask, Agent)
 │   ├── register.go        # Scheme registration
 │   └── zz_generated.deepcopy.go  # Generated deepcopy
 ├── cmd/controller/        # Controller main entry point
 │   └── main.go
 ├── internal/controller/   # Controller reconcilers
-│   └── task_controller.go
+│   ├── task_controller.go
+│   └── crontask_controller.go
 ├── deploy/               # Kubernetes manifests
-│   └── crds/            # Generated CRD YAMLs (Task, Agent)
+│   └── crds/            # Generated CRD YAMLs (Task, CronTask, Agent)
 ├── charts/kubetask/     # Helm chart
 ├── hack/                # Build and codegen scripts
 ├── docs/                # Documentation

@@ -160,6 +160,14 @@ var _ = AfterSuite(func() {
 		}
 	}
 
+	// Delete all CronTasks in test namespace
+	cronTasks := &kubetaskv1alpha1.CronTaskList{}
+	if err := k8sClient.List(ctx, cronTasks, client.InNamespace(testNS)); err == nil {
+		for i := range cronTasks.Items {
+			_ = k8sClient.Delete(ctx, &cronTasks.Items[i])
+		}
+	}
+
 	// Delete all Agents in test namespace
 	agents := &kubetaskv1alpha1.AgentList{}
 	if err := k8sClient.List(ctx, agents, client.InNamespace(testNS)); err == nil {
