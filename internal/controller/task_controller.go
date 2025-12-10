@@ -290,7 +290,6 @@ func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // agentConfig holds the resolved configuration from Agent
 type agentConfig struct {
 	agentImage         string
-	toolsImage         string
 	command            []string
 	defaultContexts    []kubetaskv1alpha1.Context
 	credentials        []kubetaskv1alpha1.Credential
@@ -336,7 +335,6 @@ func (r *TaskReconciler) getAgentConfig(ctx context.Context, task *kubetaskv1alp
 
 	return agentConfig{
 		agentImage:         agentImage,
-		toolsImage:         agent.Spec.ToolsImage,
 		command:            agent.Spec.Command,
 		defaultContexts:    agent.Spec.DefaultContexts,
 		credentials:        agent.Spec.Credentials,
@@ -508,7 +506,6 @@ func (r *TaskReconciler) resolveFileContent(ctx context.Context, namespace strin
 func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount) *batchv1.Job {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
-	var initContainers []corev1.Container
 	var envVars []corev1.EnvVar
 
 	// Base environment variables
@@ -516,37 +513,6 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, c
 		corev1.EnvVar{Name: "TASK_NAME", Value: task.Name},
 		corev1.EnvVar{Name: "TASK_NAMESPACE", Value: task.Namespace},
 	)
-
-	// Add tools volume and initContainer if toolsImage is specified
-	if cfg.toolsImage != "" {
-		volumes = append(volumes, corev1.Volume{
-			Name: "tools-volume",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "tools-volume",
-			MountPath: "/tools",
-		})
-		initContainers = append(initContainers, corev1.Container{
-			Name:    "copy-tools",
-			Image:   cfg.toolsImage,
-			Command: []string{"sh", "-c", "cp -a /tools/. /shared-tools/"},
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "tools-volume",
-					MountPath: "/shared-tools",
-				},
-			},
-		})
-		// Add PATH and other environment variables for tools
-		envVars = append(envVars,
-			corev1.EnvVar{Name: "PATH", Value: "/tools/bin:/usr/local/bin:/usr/bin:/bin"},
-			corev1.EnvVar{Name: "NODE_PATH", Value: "/tools/lib/node_modules"},
-			corev1.EnvVar{Name: "LD_LIBRARY_PATH", Value: "/tools/lib"},
-		)
-	}
 
 	// Add human-in-the-loop keep-alive environment variable if enabled
 	if cfg.humanInTheLoop != nil && cfg.humanInTheLoop.Enabled {
@@ -701,7 +667,6 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, c
 	// Build PodSpec with scheduling configuration
 	podSpec := corev1.PodSpec{
 		ServiceAccountName: cfg.serviceAccountName,
-		InitContainers:     initContainers,
 		Containers:         []corev1.Container{agentContainer},
 		Volumes:            volumes,
 		RestartPolicy:      corev1.RestartPolicyNever,

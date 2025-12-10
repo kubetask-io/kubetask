@@ -99,7 +99,6 @@ metadata:
   name: default
 spec:
   agentImage: quay.io/myorg/claude-agent:v2.0
-  toolsImage: quay.io/myorg/dev-tools:latest
   credentials:
     - name: github-token
       secretRef:

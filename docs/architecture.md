@@ -92,7 +92,6 @@ Task (single task execution)
 Agent (execution configuration)
 └── AgentSpec
     ├── agentImage: string
-    ├── toolsImage: string
     ├── command: []string
     ├── humanInTheLoop: *HumanInTheLoop
     ├── defaultContexts: []Context
@@ -136,7 +135,6 @@ type Agent struct {
 
 type AgentSpec struct {
     AgentImage         string
-    ToolsImage         string
     Command            []string          // Custom entrypoint command
     HumanInTheLoop     *HumanInTheLoop   // Keep container alive after task completion
     DefaultContexts    []Context
@@ -352,9 +350,6 @@ spec:
   # Agent container image
   agentImage: quay.io/myorg/claude-agent:v1.0
 
-  # Optional: Tools image (provides CLI tools like git, gh, kubectl)
-  toolsImage: quay.io/myorg/tools:v1.0
-
   # Optional: Custom entrypoint command (required for humanInTheLoop)
   command: ["sh", "-c", "gemini --yolo -p \"$(cat /workspace/task.md)\""]
 
@@ -411,7 +406,6 @@ spec:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `spec.agentImage` | String | No | Agent container image |
-| `spec.toolsImage` | String | No | Tools image (git, gh, kubectl, etc.) |
 | `spec.command` | []String | No | Custom entrypoint command (required for humanInTheLoop) |
 | `spec.humanInTheLoop` | *HumanInTheLoop | No | Keep container alive after completion |
 | `spec.defaultContexts` | []Context | No | Default contexts for all tasks |

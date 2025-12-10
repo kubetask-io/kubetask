@@ -209,22 +209,6 @@ type AgentSpec struct {
 	// +optional
 	Command []string `json:"command,omitempty"`
 
-	// Tools container image that provides CLI tools (git, gh, kubectl, etc.)
-	// for the agent to use during task execution.
-	//
-	// The tools image must follow the standard directory structure:
-	//   /tools/bin/  - Executables (added to PATH)
-	//   /tools/lib/  - Shared libraries and runtimes (e.g., node_modules)
-	//
-	// When specified, the controller creates an initContainer that copies
-	// /tools from this image to a shared volume, making the tools available
-	// to the agent container via PATH environment variable.
-	//
-	// This enables decoupling of agent and tools - each can be built and
-	// versioned independently, and combined at runtime.
-	// +optional
-	ToolsImage string `json:"toolsImage,omitempty"`
-
 	// DefaultContexts defines the base-level contexts that are included in all tasks
 	// using this Agent. These contexts are applied at the lowest priority,
 	// meaning task-specific contexts take precedence.

@@ -1271,22 +1271,6 @@ spec:
                   Users are responsible for creating the ServiceAccount and appropriate RBAC bindings
                   based on what permissions their agent needs.
                 type: string
-              toolsImage:
-                description: |-
-                  Tools container image that provides CLI tools (git, gh, kubectl, etc.)
-                  for the agent to use during task execution.
-
-                  The tools image must follow the standard directory structure:
-                    /tools/bin/  - Executables (added to PATH)
-                    /tools/lib/  - Shared libraries and runtimes (e.g., node_modules)
-
-                  When specified, the controller creates an initContainer that copies
-                  /tools from this image to a shared volume, making the tools available
-                  to the agent container via PATH environment variable.
-
-                  This enables decoupling of agent and tools - each can be built and
-                  versioned independently, and combined at runtime.
-                type: string
             required:
             - serviceAccountName
             type: object
