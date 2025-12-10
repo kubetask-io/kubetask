@@ -10,6 +10,7 @@ rules:
   - kubetask.io
   resources:
   - agents
+  - crontasks
   - kubetaskconfigs
   - tasks
   verbs:
@@ -25,6 +26,7 @@ rules:
   - kubetask.io
   resources:
   - agents/status
+  - crontasks/status
   - kubetaskconfigs/status
   - tasks/status
   verbs:
