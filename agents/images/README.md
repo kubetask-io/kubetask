@@ -30,13 +30,13 @@ make agent-buildx                   # Multi-arch build gemini
 make agent-buildx AGENT=claude      # Multi-arch build claude
 
 # List available agents
-make -C workspace/agents list
+make -C agents/images list
 ```
 
 ### From This Directory
 
 ```bash
-cd workspace/agents
+cd agents/images
 
 # Build gemini agent
 make build

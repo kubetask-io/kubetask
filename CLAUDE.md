@@ -137,7 +137,7 @@ make docker-buildx
 
 ### Agent Images
 
-Agent images are located in `workspace/agents/`. Each subdirectory contains a Dockerfile for a specific AI agent (gemini, claude, codex, etc.).
+Agent images are located in `agents/images/`. Each subdirectory contains a Dockerfile for a specific AI agent (gemini, claude, codex, etc.).
 
 ```bash
 # Build specific agent (default: gemini)
@@ -155,7 +155,7 @@ make agent-buildx                   # Multi-arch build gemini
 make agent-buildx AGENT=claude      # Multi-arch build claude
 
 # List available agents
-make -C workspace/agents list
+make -C agents/images list
 ```
 
 The agent images are tagged as `quay.io/zhaoxue/kubetask-agent-<AGENT>:latest` by default. You can customize the registry, org, and version:
@@ -168,6 +168,9 @@ make agent-build AGENT=gemini IMG_REGISTRY=docker.io IMG_ORG=myorg VERSION=v1.0.
 
 ```
 kubetask/
+├── agents/               # Agent images and tools
+│   ├── images/          # Agent Dockerfiles (gemini, claude, echo, etc.)
+│   └── tools/           # Tools image for shared CLI tools
 ├── api/v1alpha1/          # CRD type definitions
 │   ├── types.go           # Main API types (Task, Agent)
 │   ├── register.go        # Scheme registration

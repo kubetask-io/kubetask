@@ -283,7 +283,7 @@ e2e-reload: e2e-docker-build e2e-kind-load e2e-verify-image ## Rebuild and reloa
 
 # Build echo agent image for e2e testing
 e2e-agent-build: ## Build echo agent image for e2e testing
-	docker build -t quay.io/zhaoxue/kubetask-agent-echo:latest workspace/agents/echo/
+	docker build -t quay.io/zhaoxue/kubetask-agent-echo:latest agents/images/echo/
 .PHONY: e2e-agent-build
 
 # Load echo agent image into kind cluster
@@ -315,13 +315,13 @@ e2e: e2e-setup e2e-test ## Run full e2e test workflow
 ##@ Agent
 
 agent-build: ## Build agent image
-	$(MAKE) -C workspace/agents build
+	$(MAKE) -C agents/images build
 
 agent-push: ## Push agent image
-	$(MAKE) -C workspace/agents push
+	$(MAKE) -C agents/images push
 
 agent-buildx: ## Multi-arch build and push agent image
-	$(MAKE) -C workspace/agents buildx
+	$(MAKE) -C agents/images buildx
 
 ##@ Help
 
