@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: workspaceconfigs.kubetask.io
+  name: agents.kubetask.io
 spec:
   group: kubetask.io
   names:
-    kind: WorkspaceConfig
-    listKind: WorkspaceConfigList
-    plural: workspaceconfigs
-    singular: workspaceconfig
+    kind: Agent
+    listKind: AgentList
+    plural: agents
+    singular: agent
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -22,8 +22,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          WorkspaceConfig defines the workspace environment for task execution.
-          Workspace = AI agent + permissions + tools + infrastructure
+          Agent defines the AI agent configuration for task execution.
+          Agent = AI agent + permissions + tools + infrastructure
           This is the execution black box - Batch creators don't need to understand execution details.
         properties:
           apiVersion:
@@ -44,7 +44,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the workspace configuration
+            description: Spec defines the agent configuration
             properties:
               agentImage:
                 description: |-
@@ -114,11 +114,11 @@ spec:
               defaultContexts:
                 description: |-
                   DefaultContexts defines the base-level contexts that are included in all tasks
-                  using this WorkspaceConfig. These contexts are applied at the lowest priority,
+                  using this Agent. These contexts are applied at the lowest priority,
                   meaning Batch commonContext and variableContexts take precedence.
 
                   Context priority (lowest to highest):
-                    1. WorkspaceConfig.defaultContexts (base layer)
+                    1. Agent.defaultContexts (base layer)
                     2. Batch.commonContext (shared across all tasks in the batch)
                     3. Batch.variableContexts[i] (task-specific contexts)
 

@@ -43,8 +43,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&BatchRunList{},
 		&Task{},
 		&TaskList{},
-		&WorkspaceConfig{},
-		&WorkspaceConfigList{},
+		&Agent{},
+		&AgentList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

@@ -85,13 +85,13 @@ With raw Jobs, users would need to manually:
 - Configure multiple Volume and VolumeMount entries
 - Handle content aggregation logic themselves
 
-#### WorkspaceConfig Reuse
+#### Agent Reuse
 
-WorkspaceConfig centralizes execution environment configuration:
+Agent centralizes execution environment configuration:
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: default
 spec:
@@ -132,7 +132,7 @@ BatchRun creates Task CRs, not Jobs directly. This means:
 |--------|-------------------|----------|
 | **Abstraction Level** | Generic container execution | AI-task-specific semantics |
 | **Context Handling** | Manual ConfigMap/Volume setup | Automatic aggregation from multiple sources |
-| **Environment Config** | Per-Job specification | WorkspaceConfig reference (reusable) |
+| **Environment Config** | Per-Job specification | Agent reference (reusable) |
 | **Batch Execution** | External orchestration required | Native BatchRun integration |
 | **Extensibility** | Modify Job templates | Add new Context types |
 | **API Semantics** | Container/Pod focused | Task/Workflow focused |
@@ -161,7 +161,7 @@ We rejected this approach because it would complicate the user experience for si
 - **Clear Domain Model**: Users think in terms of "Tasks" not "Jobs with specific configurations"
 - **Reduced Boilerplate**: Context aggregation eliminates manual ConfigMap/Volume setup
 - **Consistent API**: Same Task abstraction works standalone and in batches
-- **Separation of Concerns**: WHAT (Batch) + WHERE (Repository) + HOW (WorkspaceConfig)
+- **Separation of Concerns**: WHAT (Batch) + WHERE (Repository) + HOW (Agent)
 - **GitOps Ready**: Declarative resources work naturally with GitOps tools
 - **Observability**: `kubectl get tasks` provides AI-task-centric view
 

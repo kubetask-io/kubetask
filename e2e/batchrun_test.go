@@ -15,30 +15,30 @@ import (
 
 var _ = Describe("BatchRun E2E Tests", func() {
 	var (
-		wsConfig     *kubetaskv1alpha1.WorkspaceConfig
-		wsConfigName string
+		agent     *kubetaskv1alpha1.Agent
+		agentName string
 	)
 
 	BeforeEach(func() {
-		// Create a WorkspaceConfig with echo agent for all tests
-		wsConfigName = uniqueName("echo-ws-br")
-		wsConfig = &kubetaskv1alpha1.WorkspaceConfig{
+		// Create a Agent with echo agent for all tests
+		agentName = uniqueName("echo-ws-br")
+		agent = &kubetaskv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      wsConfigName,
+				Name:      agentName,
 				Namespace: testNS,
 			},
-			Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+			Spec: kubetaskv1alpha1.AgentSpec{
 				AgentImage:         echoImage,
 				ServiceAccountName: testServiceAccount,
 			},
 		}
-		Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+		Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 	})
 
 	AfterEach(func() {
-		// Clean up WorkspaceConfig
-		if wsConfig != nil {
-			_ = k8sClient.Delete(ctx, wsConfig)
+		// Clean up Agent
+		if agent != nil {
+			_ = k8sClient.Delete(ctx, agent)
 		}
 	})
 
@@ -58,7 +58,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 				},
 				Spec: kubetaskv1alpha1.BatchRunSpec{
 					BatchSpec: &kubetaskv1alpha1.BatchSpec{
-						WorkspaceConfigRef: wsConfigName,
+						AgentRef: agentName,
 						CommonContext: []kubetaskv1alpha1.Context{
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
@@ -165,7 +165,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 				Expect(k8sClient.Get(ctx, taskKey, task)).Should(Succeed())
 				// Each task should have common + variable contexts
 				Expect(task.Spec.Contexts).Should(HaveLen(2))
-				Expect(task.Spec.WorkspaceConfigRef).Should(Equal(wsConfigName))
+				Expect(task.Spec.AgentRef).Should(Equal(agentName))
 			}
 
 			By("Verifying echo output contains task content")
@@ -196,7 +196,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.BatchSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					CommonContext: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -248,12 +248,12 @@ var _ = Describe("BatchRun E2E Tests", func() {
 				return br.Status.Phase
 			}, timeout, interval).Should(Equal(kubetaskv1alpha1.BatchRunPhaseCompleted))
 
-			By("Verifying Task was created and has correct WorkspaceConfigRef")
+			By("Verifying Task was created and has correct AgentRef")
 			taskName := fmt.Sprintf("%s-task-0", batchRunName)
 			taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
 			task := &kubetaskv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, taskKey, task)).Should(Succeed())
-			Expect(task.Spec.WorkspaceConfigRef).Should(Equal(wsConfigName))
+			Expect(task.Spec.AgentRef).Should(Equal(agentName))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, batchRun)).Should(Succeed())
@@ -279,7 +279,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 				},
 				Spec: kubetaskv1alpha1.BatchRunSpec{
 					BatchSpec: &kubetaskv1alpha1.BatchSpec{
-						WorkspaceConfigRef: wsConfigName,
+						AgentRef: agentName,
 						CommonContext: []kubetaskv1alpha1.Context{
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
@@ -355,7 +355,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 				},
 				Spec: kubetaskv1alpha1.BatchRunSpec{
 					BatchSpec: &kubetaskv1alpha1.BatchSpec{
-						WorkspaceConfigRef: wsConfigName,
+						AgentRef: agentName,
 						CommonContext: []kubetaskv1alpha1.Context{
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
@@ -422,7 +422,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 				},
 				Spec: kubetaskv1alpha1.BatchRunSpec{
 					BatchSpec: &kubetaskv1alpha1.BatchSpec{
-						WorkspaceConfigRef: wsConfigName,
+						AgentRef: agentName,
 						CommonContext: []kubetaskv1alpha1.Context{
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
@@ -492,7 +492,7 @@ var _ = Describe("BatchRun E2E Tests", func() {
 				},
 				Spec: kubetaskv1alpha1.BatchRunSpec{
 					BatchSpec: &kubetaskv1alpha1.BatchSpec{
-						WorkspaceConfigRef: wsConfigName,
+						AgentRef: agentName,
 						CommonContext: []kubetaskv1alpha1.Context{
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,

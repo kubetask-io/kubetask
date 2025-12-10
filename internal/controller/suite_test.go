@@ -108,18 +108,18 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 	}()
 
-	// Create default WorkspaceConfig for tests that don't specify one
-	By("Creating default WorkspaceConfig")
-	defaultWSConfig := &kubetaskv1alpha1.WorkspaceConfig{
+	// Create default Agent for tests that don't specify one
+	By("Creating default Agent")
+	defaultAgent := &kubetaskv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "default",
 			Namespace: "default",
 		},
-		Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+		Spec: kubetaskv1alpha1.AgentSpec{
 			ServiceAccountName: "test-agent",
 		},
 	}
-	Expect(k8sClient.Create(ctx, defaultWSConfig)).Should(Succeed())
+	Expect(k8sClient.Create(ctx, defaultAgent)).Should(Succeed())
 })
 
 var _ = AfterSuite(func() {

@@ -15,21 +15,21 @@ import (
 	kubetaskv1alpha1 "github.com/xuezhaojun/kubetask/api/v1alpha1"
 )
 
-var _ = Describe("WorkspaceConfig E2E Tests", func() {
+var _ = Describe("Agent E2E Tests", func() {
 
-	Context("WorkspaceConfig with custom podLabels", func() {
+	Context("Agent with custom podLabels", func() {
 		It("should apply podLabels to generated Jobs", func() {
-			wsConfigName := uniqueName("ws-labels")
+			agentName := uniqueName("ws-labels")
 			taskName := uniqueName("task-labels")
 			content := "# Labels Test"
 
-			By("Creating WorkspaceConfig with podLabels")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with podLabels")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentName,
 					Namespace: testNS,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
 					PodLabels: map[string]string{
@@ -39,16 +39,16 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
-			By("Creating Task using WorkspaceConfig")
+			By("Creating Task using Agent")
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -98,23 +98,23 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
 
-	Context("WorkspaceConfig with scheduling constraints", func() {
+	Context("Agent with scheduling constraints", func() {
 		It("should apply nodeSelector to generated Jobs", func() {
-			wsConfigName := uniqueName("ws-scheduling")
+			agentName := uniqueName("ws-scheduling")
 			taskName := uniqueName("task-scheduling")
 			content := "# Scheduling Test"
 
-			By("Creating WorkspaceConfig with scheduling")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with scheduling")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentName,
 					Namespace: testNS,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
 					Scheduling: &kubetaskv1alpha1.PodScheduling{
@@ -124,7 +124,7 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
 			task := &kubetaskv1alpha1.Task{
@@ -133,7 +133,7 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -166,13 +166,13 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
 
-	Context("WorkspaceConfig with credentials", func() {
+	Context("Agent with credentials", func() {
 		It("should inject credentials as environment variables", func() {
-			wsConfigName := uniqueName("ws-creds")
+			agentName := uniqueName("ws-creds")
 			taskName := uniqueName("task-creds")
 			secretName := uniqueName("test-secret")
 			content := "# Credentials Test"
@@ -190,13 +190,13 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
 			envName := "TEST_API_KEY"
-			By("Creating WorkspaceConfig with credentials")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with credentials")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentName,
 					Namespace: testNS,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
 					Credentials: []kubetaskv1alpha1.Credential{
@@ -211,7 +211,7 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
 			task := &kubetaskv1alpha1.Task{
@@ -220,7 +220,7 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -248,26 +248,26 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 		})
 	})
 
-	Context("WorkspaceConfig with defaultContexts propagated to BatchRun", func() {
+	Context("Agent with defaultContexts propagated to BatchRun", func() {
 		It("should merge defaultContexts with BatchRun contexts", func() {
-			wsConfigName := uniqueName("ws-default-br")
+			agentName := uniqueName("ws-default-br")
 			batchRunName := uniqueName("br-default-ctx")
 			defaultContent := "# Organization Guidelines\n\nFollow these guidelines."
 			commonContent := "# Batch Common\n\nBatch-level common content."
 			varContent := "# Variable Specific"
 
-			By("Creating WorkspaceConfig with defaultContexts")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with defaultContexts")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentName,
 					Namespace: testNS,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
 					DefaultContexts: []kubetaskv1alpha1.Context{
@@ -283,9 +283,9 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
-			By("Creating BatchRun using WorkspaceConfig")
+			By("Creating BatchRun using Agent")
 			batchRun := &kubetaskv1alpha1.BatchRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      batchRunName,
@@ -293,7 +293,7 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 				},
 				Spec: kubetaskv1alpha1.BatchRunSpec{
 					BatchSpec: &kubetaskv1alpha1.BatchSpec{
-						WorkspaceConfigRef: wsConfigName,
+						AgentRef: agentName,
 						CommonContext: []kubetaskv1alpha1.Context{
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
@@ -335,7 +335,7 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 
 			By("Verifying all context layers are in echo output")
 			logs := getPodLogs(ctx, testNS, fmt.Sprintf("%s-task-0-job", batchRunName))
-			// WorkspaceConfig defaultContexts should be included
+			// Agent defaultContexts should be included
 			Expect(logs).Should(ContainSubstring("Organization Guidelines"))
 			// Batch commonContext should be included
 			Expect(logs).Should(ContainSubstring("Batch Common"))
@@ -344,37 +344,37 @@ var _ = Describe("WorkspaceConfig E2E Tests", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, batchRun)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
 
-	Context("Default WorkspaceConfig resolution", func() {
-		It("should use 'default' WorkspaceConfig when not specified", func() {
+	Context("Default Agent resolution", func() {
+		It("should use 'default' Agent when not specified", func() {
 			defaultWSConfigName := "default"
 			taskName := uniqueName("task-default-ws")
 			content := "# Default WS Test"
 
-			By("Creating 'default' WorkspaceConfig in test namespace")
-			defaultWSConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating 'default' Agent in test namespace")
+			defaultWSConfig := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      defaultWSConfigName,
 					Namespace: testNS,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
 				},
 			}
 			Expect(k8sClient.Create(ctx, defaultWSConfig)).Should(Succeed())
 
-			By("Creating Task without WorkspaceConfigRef")
+			By("Creating Task without AgentRef")
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					// WorkspaceConfigRef is NOT specified
+					// AgentRef is NOT specified
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,

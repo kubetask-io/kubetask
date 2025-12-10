@@ -7,7 +7,7 @@ This document defines the specification for building tools images that can be us
 Tools images provide CLI tools (git, gh, kubectl, etc.) for AI agents to use during task execution. They are decoupled from agent images, allowing:
 
 - Independent versioning of tools and agents
-- Runtime composition via WorkspaceConfig
+- Runtime composition via Agent
 - Reuse of tools across different agent types
 
 ## Directory Structure
@@ -30,10 +30,10 @@ Tools images must organize their contents under `/tools`:
 
 ## How It Works
 
-1. **WorkspaceConfig specifies toolsImage**:
+1. **Agent specifies toolsImage**:
    ```yaml
    apiVersion: kubetask.io/v1alpha1
-   kind: WorkspaceConfig
+   kind: Agent
    metadata:
      name: my-workspace
    spec:
@@ -163,11 +163,11 @@ quay.io/zhaoxue/kubetask-tools:v1.0.0
 quay.io/zhaoxue/kubetask-tools:v1.0.0-kubectl1.31-gh2.62
 ```
 
-## Example WorkspaceConfig
+## Example Agent
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: gemini-with-devtools
 spec:

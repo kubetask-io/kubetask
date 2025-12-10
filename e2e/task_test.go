@@ -22,30 +22,30 @@ import (
 
 var _ = Describe("Task E2E Tests", func() {
 	var (
-		wsConfig     *kubetaskv1alpha1.WorkspaceConfig
-		wsConfigName string
+		agent     *kubetaskv1alpha1.Agent
+		agentName string
 	)
 
 	BeforeEach(func() {
-		// Create a WorkspaceConfig with echo agent for all tests
-		wsConfigName = uniqueName("echo-ws")
-		wsConfig = &kubetaskv1alpha1.WorkspaceConfig{
+		// Create a Agent with echo agent for all tests
+		agentName = uniqueName("echo-ws")
+		agent = &kubetaskv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      wsConfigName,
+				Name:      agentName,
 				Namespace: testNS,
 			},
-			Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+			Spec: kubetaskv1alpha1.AgentSpec{
 				AgentImage:         echoImage,
 				ServiceAccountName: testServiceAccount,
 			},
 		}
-		Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+		Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 	})
 
 	AfterEach(func() {
-		// Clean up WorkspaceConfig
-		if wsConfig != nil {
-			_ = k8sClient.Delete(ctx, wsConfig)
+		// Clean up Agent
+		if agent != nil {
+			_ = k8sClient.Delete(ctx, agent)
 		}
 	})
 
@@ -61,7 +61,7 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -141,7 +141,7 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -222,7 +222,7 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -263,20 +263,20 @@ var _ = Describe("Task E2E Tests", func() {
 		})
 	})
 
-	Context("Task with WorkspaceConfig defaultContexts", func() {
+	Context("Task with Agent defaultContexts", func() {
 		It("should merge defaultContexts with task contexts", func() {
 			taskName := uniqueName("task-default-ctx")
 			customWSConfigName := uniqueName("ws-default-ctx")
 			defaultContent := "# Default Guidelines\n\nThese are organization-wide default guidelines."
 			taskContent := "# Specific Task\n\nThis is the specific task to execute."
 
-			By("Creating WorkspaceConfig with defaultContexts")
-			customWSConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with defaultContexts")
+			customWSConfig := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      customWSConfigName,
 					Namespace: testNS,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
 					DefaultContexts: []kubetaskv1alpha1.Context{
@@ -301,7 +301,7 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: customWSConfigName,
+					AgentRef: customWSConfigName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -351,7 +351,7 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -415,7 +415,7 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,

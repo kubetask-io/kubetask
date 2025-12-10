@@ -48,10 +48,10 @@ type BatchSpec struct {
 	// +required
 	VariableContexts []ContextSet `json:"variableContexts"`
 
-	// WorkspaceConfigRef references a WorkspaceConfig for this Batch.
-	// If not specified, uses the "default" WorkspaceConfig in the same namespace.
+	// AgentRef references an Agent for this Batch.
+	// If not specified, uses the "default" Agent in the same namespace.
 	// +optional
-	WorkspaceConfigRef string `json:"workspaceConfigRef,omitempty"`
+	AgentRef string `json:"agentRef,omitempty"`
 }
 
 // ContextSet represents a set of contexts for one task
@@ -226,7 +226,7 @@ const (
 	// Individual task outcomes should be checked separately.
 	BatchRunPhaseCompleted BatchRunPhase = "Completed"
 	// BatchRunPhaseFailed means one or more tasks had infrastructure failures
-	// (e.g., Job crashed, unable to schedule, missing WorkspaceConfig).
+	// (e.g., Job crashed, unable to schedule, missing Agent).
 	BatchRunPhaseFailed BatchRunPhase = "Failed"
 )
 
@@ -301,7 +301,7 @@ const (
 	// The actual outcome should be determined by examining the agent's output.
 	TaskPhaseCompleted TaskPhase = "Completed"
 	// TaskPhaseFailed means the task had an infrastructure failure
-	// (e.g., Job crashed, unable to schedule, missing WorkspaceConfig).
+	// (e.g., Job crashed, unable to schedule, missing Agent).
 	TaskPhaseFailed TaskPhase = "Failed"
 )
 
@@ -369,10 +369,10 @@ type TaskSpec struct {
 	// +required
 	Contexts []Context `json:"contexts"`
 
-	// WorkspaceConfigRef references a WorkspaceConfig for this task.
-	// If not specified, uses the "default" WorkspaceConfig in the same namespace.
+	// AgentRef references an Agent for this task.
+	// If not specified, uses the "default" Agent in the same namespace.
 	// +optional
-	WorkspaceConfigRef string `json:"workspaceConfigRef,omitempty"`
+	AgentRef string `json:"agentRef,omitempty"`
 }
 
 // TaskExecutionStatus defines the observed state of Task
@@ -412,19 +412,19 @@ type TaskList struct {
 // +kubebuilder:resource:scope="Namespaced"
 // +kubebuilder:printcolumn:JSONPath=`.metadata.creationTimestamp`,name="Age",type=date
 
-// WorkspaceConfig defines the workspace environment for task execution.
-// Workspace = AI agent + permissions + tools + infrastructure
+// Agent defines the AI agent configuration for task execution.
+// Agent = AI agent + permissions + tools + infrastructure
 // This is the execution black box - Batch creators don't need to understand execution details.
-type WorkspaceConfig struct {
+type Agent struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the workspace configuration
-	Spec WorkspaceConfigSpec `json:"spec"`
+	// Spec defines the agent configuration
+	Spec AgentSpec `json:"spec"`
 }
 
-// WorkspaceConfigSpec defines workspace configuration
-type WorkspaceConfigSpec struct {
+// AgentSpec defines agent configuration
+type AgentSpec struct {
 	// Agent container image to use for task execution.
 	// The controller generates Jobs with this image.
 	// If not specified, defaults to "quay.io/zhaoxue/kubetask-agent:latest".
@@ -448,11 +448,11 @@ type WorkspaceConfigSpec struct {
 	ToolsImage string `json:"toolsImage,omitempty"`
 
 	// DefaultContexts defines the base-level contexts that are included in all tasks
-	// using this WorkspaceConfig. These contexts are applied at the lowest priority,
+	// using this Agent. These contexts are applied at the lowest priority,
 	// meaning Batch commonContext and variableContexts take precedence.
 	//
 	// Context priority (lowest to highest):
-	//   1. WorkspaceConfig.defaultContexts (base layer)
+	//   1. Agent.defaultContexts (base layer)
 	//   2. Batch.commonContext (shared across all tasks in the batch)
 	//   3. Batch.variableContexts[i] (task-specific contexts)
 	//
@@ -617,9 +617,9 @@ type ConfigMapKeySelector struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// WorkspaceConfigList contains a list of WorkspaceConfig
-type WorkspaceConfigList struct {
+// AgentList contains a list of Agent
+type AgentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []WorkspaceConfig `json:"items"`
+	Items           []Agent `json:"items"`
 }

@@ -348,26 +348,26 @@ var _ = Describe("BatchRunController", func() {
 		})
 	})
 
-	Context("When creating a BatchRun with WorkspaceConfigRef in BatchSpec", func() {
-		It("Should propagate WorkspaceConfigRef to Tasks", func() {
+	Context("When creating a BatchRun with AgentRef in BatchSpec", func() {
+		It("Should propagate AgentRef to Tasks", func() {
 			batchRunName := "test-batchrun-wsconfig"
-			wsConfigName := "test-batch-wsconfig"
-			content := "# WorkspaceConfig test"
+			agentName := "test-batch-wsconfig"
+			content := "# Agent test"
 
-			By("Creating WorkspaceConfig")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentName,
 					Namespace: batchRunNamespace,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         "custom-agent:v2.0.0",
 					ServiceAccountName: "test-agent",
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
-			By("Creating BatchRun with WorkspaceConfigRef")
+			By("Creating BatchRun with AgentRef")
 			batchRun := &kubetaskv1alpha1.BatchRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      batchRunName,
@@ -375,7 +375,7 @@ var _ = Describe("BatchRunController", func() {
 				},
 				Spec: kubetaskv1alpha1.BatchRunSpec{
 					BatchSpec: &kubetaskv1alpha1.BatchSpec{
-						WorkspaceConfigRef: wsConfigName,
+						AgentRef: agentName,
 						CommonContext: []kubetaskv1alpha1.Context{
 							{
 								Type: kubetaskv1alpha1.ContextTypeFile,
@@ -395,7 +395,7 @@ var _ = Describe("BatchRunController", func() {
 			}
 			Expect(k8sClient.Create(ctx, batchRun)).Should(Succeed())
 
-			By("Checking Task has WorkspaceConfigRef")
+			By("Checking Task has AgentRef")
 			taskName := fmt.Sprintf("%s-task-0", batchRunName)
 			taskKey := types.NamespacedName{Name: taskName, Namespace: batchRunNamespace}
 			task := &kubetaskv1alpha1.Task{}
@@ -403,12 +403,12 @@ var _ = Describe("BatchRunController", func() {
 				if err := k8sClient.Get(ctx, taskKey, task); err != nil {
 					return ""
 				}
-				return task.Spec.WorkspaceConfigRef
-			}, timeout, interval).Should(Equal(wsConfigName))
+				return task.Spec.AgentRef
+			}, timeout, interval).Should(Equal(agentName))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, batchRun)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
 

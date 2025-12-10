@@ -176,11 +176,11 @@ var _ = AfterSuite(func() {
 		}
 	}
 
-	// Delete all WorkspaceConfigs in test namespace
-	wsConfigs := &kubetaskv1alpha1.WorkspaceConfigList{}
-	if err := k8sClient.List(ctx, wsConfigs, client.InNamespace(testNS)); err == nil {
-		for _, wc := range wsConfigs.Items {
-			_ = k8sClient.Delete(ctx, &wc)
+	// Delete all Agents in test namespace
+	agents := &kubetaskv1alpha1.AgentList{}
+	if err := k8sClient.List(ctx, agents, client.InNamespace(testNS)); err == nil {
+		for _, a := range agents.Items {
+			_ = k8sClient.Delete(ctx, &a)
 		}
 	}
 

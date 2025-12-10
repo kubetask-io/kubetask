@@ -52,6 +52,11 @@ spec:
           spec:
             description: Spec defines the desired state of Task
             properties:
+              agentRef:
+                description: |-
+                  AgentRef references an Agent for this task.
+                  If not specified, uses the "default" Agent in the same namespace.
+                type: string
               contexts:
                 description: |-
                   Contexts defines what this task operates on
@@ -185,11 +190,6 @@ spec:
                   - type
                   type: object
                 type: array
-              workspaceConfigRef:
-                description: |-
-                  WorkspaceConfigRef references a WorkspaceConfig for this task.
-                  If not specified, uses the "default" WorkspaceConfig in the same namespace.
-                type: string
             required:
             - contexts
             type: object

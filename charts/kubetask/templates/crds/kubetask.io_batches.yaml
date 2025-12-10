@@ -45,6 +45,11 @@ spec:
           spec:
             description: Spec defines the desired state of Batch
             properties:
+              agentRef:
+                description: |-
+                  AgentRef references an Agent for this Batch.
+                  If not specified, uses the "default" Agent in the same namespace.
+                type: string
               commonContext:
                 description: |-
                   CommonContext - contexts shared across all tasks (the constant part)
@@ -325,11 +330,6 @@ spec:
                     type: object
                   type: array
                 type: array
-              workspaceConfigRef:
-                description: |-
-                  WorkspaceConfigRef references a WorkspaceConfig for this Batch.
-                  If not specified, uses the "default" WorkspaceConfig in the same namespace.
-                type: string
             required:
             - commonContext
             - variableContexts

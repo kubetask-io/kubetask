@@ -48,7 +48,7 @@ KubeTask enables you to execute AI agent tasks (like Claude) across multiple rep
 - **Batch**: Task template defining WHAT to do and WHERE (repositories)
 - **BatchRun**: Execution instance of a Batch
 - **Task**: Single task execution (simplified API)
-- **WorkspaceConfig**: Workspace environment configuration (HOW to execute)
+- **Agent**: Workspace environment configuration (HOW to execute)
 
 ## Quick Start
 
@@ -215,18 +215,18 @@ KubeTask supports multiple context types:
 - **Repository Context**: GitHub repositories
 - **Extensible**: Easy to add new context types (API, Database, etc.)
 
-### WorkspaceConfig and Agent Image
+### Agent and Agent Image
 
-KubeTask uses WorkspaceConfig to define the agent container image:
+KubeTask uses Agent to define the agent container image:
 
-1. **Batch/Task** references a WorkspaceConfig via `workspaceConfigRef`
-2. **Default**: If not specified, uses WorkspaceConfig named "default"
-3. **Fallback**: If no WorkspaceConfig found, uses built-in default image
+1. **Batch/Task** references a Agent via `agentRef`
+2. **Default**: If not specified, uses Agent named "default"
+3. **Fallback**: If no Agent found, uses built-in default image
 
 ```yaml
-# Create WorkspaceConfig
+# Create Agent
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: default
   namespace: kubetask-system
@@ -236,20 +236,20 @@ spec:
 
 ### Multi-AI Support
 
-Use different WorkspaceConfigs for different AI agents:
+Use different Agents for different AI agents:
 
 ```bash
-# Create WorkspaceConfigs for different agents
+# Create Agents for different agents
 kubectl apply -f - <<EOF
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: claude-workspace
 spec:
   agentImage: quay.io/myorg/claude-agent:v1.0
 ---
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: gemini-workspace
 spec:
@@ -263,7 +263,7 @@ kind: Batch
 metadata:
   name: update-with-gemini
 spec:
-  workspaceConfigRef: gemini-workspace
+  agentRef: gemini-workspace
   commonContext:
     - type: File
       file:

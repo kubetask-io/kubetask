@@ -39,7 +39,7 @@ type TaskReconciler struct {
 // +kubebuilder:rbac:groups=kubetask.io,resources=tasks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=kubetask.io,resources=tasks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kubetask.io,resources=tasks/finalizers,verbs=update
-// +kubebuilder:rbac:groups=kubetask.io,resources=workspaceconfigs,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kubetask.io,resources=agents,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
@@ -83,23 +83,23 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	// Get workspace configuration
-	wsConfig, err := r.getWorkspaceConfig(ctx, task)
+	// Get agent configuration
+	agentConfig, err := r.getAgentConfig(ctx, task)
 	if err != nil {
-		log.Error(err, "unable to get WorkspaceConfig")
+		log.Error(err, "unable to get Agent")
 		// Update task status to Failed
 		task.Status.Phase = kubetaskv1alpha1.TaskPhaseFailed
 		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
 			Type:    "Ready",
 			Status:  metav1.ConditionFalse,
-			Reason:  "WorkspaceConfigError",
+			Reason:  "AgentError",
 			Message: err.Error(),
 		})
 		if updateErr := r.Status().Update(ctx, task); updateErr != nil {
 			log.Error(updateErr, "unable to update Task status")
 			return ctrl.Result{}, updateErr
 		}
-		return ctrl.Result{}, nil // Don't requeue, user needs to fix WorkspaceConfig
+		return ctrl.Result{}, nil // Don't requeue, user needs to fix Agent
 	}
 
 	// Generate Job name
@@ -118,8 +118,8 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 	}
 
 	// Merge contexts: defaultContexts + task.Spec.Contexts
-	allContexts := make([]kubetaskv1alpha1.Context, 0, len(wsConfig.defaultContexts)+len(task.Spec.Contexts))
-	allContexts = append(allContexts, wsConfig.defaultContexts...)
+	allContexts := make([]kubetaskv1alpha1.Context, 0, len(agentConfig.defaultContexts)+len(task.Spec.Contexts))
+	allContexts = append(allContexts, agentConfig.defaultContexts...)
 	allContexts = append(allContexts, task.Spec.Contexts...)
 
 	// Process contexts and create ConfigMap for aggregated content
@@ -139,8 +139,8 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		}
 	}
 
-	// Create Job with workspace configuration and context mounts
-	job := r.buildJob(task, jobName, wsConfig, contextConfigMap, fileMounts)
+	// Create Job with agent configuration and context mounts
+	job := r.buildJob(task, jobName, agentConfig, contextConfigMap, fileMounts)
 
 	if err := r.Create(ctx, job); err != nil {
 		log.Error(err, "unable to create Job", "job", jobName)
@@ -158,7 +158,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		return ctrl.Result{}, err
 	}
 
-	log.Info("initialized Task", "job", jobName, "image", wsConfig.agentImage)
+	log.Info("initialized Task", "job", jobName, "image", agentConfig.agentImage)
 	return ctrl.Result{}, nil
 }
 
@@ -207,8 +207,8 @@ func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// workspaceConfig holds the resolved configuration from WorkspaceConfig
-type workspaceConfig struct {
+// agentConfig holds the resolved configuration from Agent
+type agentConfig struct {
 	agentImage         string
 	toolsImage         string
 	defaultContexts    []kubetaskv1alpha1.Context
@@ -218,48 +218,48 @@ type workspaceConfig struct {
 	serviceAccountName string
 }
 
-// getWorkspaceConfig retrieves the workspace configuration from WorkspaceConfig.
-// Returns an error if WorkspaceConfig is not found or invalid.
-func (r *TaskReconciler) getWorkspaceConfig(ctx context.Context, task *kubetaskv1alpha1.Task) (workspaceConfig, error) {
+// getAgentConfig retrieves the agent configuration from Agent.
+// Returns an error if Agent is not found or invalid.
+func (r *TaskReconciler) getAgentConfig(ctx context.Context, task *kubetaskv1alpha1.Task) (agentConfig, error) {
 	log := log.FromContext(ctx)
 
-	// Determine which WorkspaceConfig to use
-	configName := "default"
-	if task.Spec.WorkspaceConfigRef != "" {
-		configName = task.Spec.WorkspaceConfigRef
+	// Determine which Agent to use
+	agentName := "default"
+	if task.Spec.AgentRef != "" {
+		agentName = task.Spec.AgentRef
 	}
 
-	// Get WorkspaceConfig
-	config := &kubetaskv1alpha1.WorkspaceConfig{}
-	configKey := types.NamespacedName{
-		Name:      configName,
+	// Get Agent
+	agent := &kubetaskv1alpha1.Agent{}
+	agentKey := types.NamespacedName{
+		Name:      agentName,
 		Namespace: task.Namespace,
 	}
 
-	if err := r.Get(ctx, configKey, config); err != nil {
-		log.Error(err, "unable to get WorkspaceConfig", "workspaceConfig", configName)
-		return workspaceConfig{}, fmt.Errorf("WorkspaceConfig %q not found in namespace %q: %w", configName, task.Namespace, err)
+	if err := r.Get(ctx, agentKey, agent); err != nil {
+		log.Error(err, "unable to get Agent", "agent", agentName)
+		return agentConfig{}, fmt.Errorf("Agent %q not found in namespace %q: %w", agentName, task.Namespace, err)
 	}
 
 	// Get agent image (optional, has default)
 	agentImage := DefaultAgentImage
-	if config.Spec.AgentImage != "" {
-		agentImage = config.Spec.AgentImage
+	if agent.Spec.AgentImage != "" {
+		agentImage = agent.Spec.AgentImage
 	}
 
 	// ServiceAccountName is required
-	if config.Spec.ServiceAccountName == "" {
-		return workspaceConfig{}, fmt.Errorf("WorkspaceConfig %q is missing required field serviceAccountName", configName)
+	if agent.Spec.ServiceAccountName == "" {
+		return agentConfig{}, fmt.Errorf("Agent %q is missing required field serviceAccountName", agentName)
 	}
 
-	return workspaceConfig{
+	return agentConfig{
 		agentImage:         agentImage,
-		toolsImage:         config.Spec.ToolsImage,
-		defaultContexts:    config.Spec.DefaultContexts,
-		credentials:        config.Spec.Credentials,
-		podLabels:          config.Spec.PodLabels,
-		scheduling:         config.Spec.Scheduling,
-		serviceAccountName: config.Spec.ServiceAccountName,
+		toolsImage:         agent.Spec.ToolsImage,
+		defaultContexts:    agent.Spec.DefaultContexts,
+		credentials:        agent.Spec.Credentials,
+		podLabels:          agent.Spec.PodLabels,
+		scheduling:         agent.Spec.Scheduling,
+		serviceAccountName: agent.Spec.ServiceAccountName,
 	}, nil
 }
 
@@ -409,7 +409,7 @@ func (r *TaskReconciler) resolveFileContent(ctx context.Context, namespace strin
 }
 
 // buildJob creates a Job object for the task with context mounts
-func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, wsConfig workspaceConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount) *batchv1.Job {
+func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount) *batchv1.Job {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var initContainers []corev1.Container
@@ -422,7 +422,7 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, w
 	)
 
 	// Add tools volume and initContainer if toolsImage is specified
-	if wsConfig.toolsImage != "" {
+	if cfg.toolsImage != "" {
 		volumes = append(volumes, corev1.Volume{
 			Name: "tools-volume",
 			VolumeSource: corev1.VolumeSource{
@@ -435,7 +435,7 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, w
 		})
 		initContainers = append(initContainers, corev1.Container{
 			Name:    "copy-tools",
-			Image:   wsConfig.toolsImage,
+			Image:   cfg.toolsImage,
 			Command: []string{"sh", "-c", "cp -a /tools/. /shared-tools/"},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -453,7 +453,7 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, w
 	}
 
 	// Add credentials (secrets as env vars or file mounts)
-	for i, cred := range wsConfig.credentials {
+	for i, cred := range cfg.credentials {
 		// Add as environment variable if Env is specified
 		if cred.Env != nil && *cred.Env != "" {
 			envVars = append(envVars, corev1.EnvVar{
@@ -533,19 +533,19 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, w
 		"kubetask.io/task": task.Name,
 	}
 
-	// Add custom pod labels from WorkspaceConfig
-	for k, v := range wsConfig.podLabels {
+	// Add custom pod labels from Agent
+	for k, v := range cfg.podLabels {
 		podLabels[k] = v
 	}
 
 	// Build PodSpec with scheduling configuration
 	podSpec := corev1.PodSpec{
-		ServiceAccountName: wsConfig.serviceAccountName,
+		ServiceAccountName: cfg.serviceAccountName,
 		InitContainers:     initContainers,
 		Containers: []corev1.Container{
 			{
 				Name:            "agent",
-				Image:           wsConfig.agentImage,
+				Image:           cfg.agentImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Env:             envVars,
 				VolumeMounts:    volumeMounts,
@@ -556,15 +556,15 @@ func (r *TaskReconciler) buildJob(task *kubetaskv1alpha1.Task, jobName string, w
 	}
 
 	// Apply scheduling configuration if specified
-	if wsConfig.scheduling != nil {
-		if wsConfig.scheduling.NodeSelector != nil {
-			podSpec.NodeSelector = wsConfig.scheduling.NodeSelector
+	if cfg.scheduling != nil {
+		if cfg.scheduling.NodeSelector != nil {
+			podSpec.NodeSelector = cfg.scheduling.NodeSelector
 		}
-		if wsConfig.scheduling.Tolerations != nil {
-			podSpec.Tolerations = wsConfig.scheduling.Tolerations
+		if cfg.scheduling.Tolerations != nil {
+			podSpec.Tolerations = cfg.scheduling.Tolerations
 		}
-		if wsConfig.scheduling.Affinity != nil {
-			podSpec.Affinity = wsConfig.scheduling.Affinity
+		if cfg.scheduling.Affinity != nil {
+			podSpec.Affinity = cfg.scheduling.Affinity
 		}
 	}
 

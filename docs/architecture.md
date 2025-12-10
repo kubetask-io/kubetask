@@ -44,7 +44,7 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks across mul
 | **Batch** | Task batch template (WHAT + WHERE) | Stable - semantic name |
 | **BatchRun** | Batch execution instance | Stable - follows Batch |
 | **Task** | Single task execution (simplified API) | Stable - semantic name |
-| **WorkspaceConfig** | Workspace environment config (HOW) | **Stable - independent of project name** |
+| **Agent** | Workspace environment config (HOW) | **Stable - independent of project name** |
 
 ### Key Design Decisions
 
@@ -57,7 +57,7 @@ apiVersion: kubetask.io/v1alpha1
 kind: Batch
 ```
 
-#### 2. WorkspaceConfig (not KubeTaskConfig)
+#### 2. Agent (not KubeTaskConfig)
 
 **Rationale**:
 - ✅ **Stable**: Independent of project name - won't change even if project renames
@@ -66,7 +66,7 @@ kind: Batch
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 ```
 
 #### 3. AgentImage (simplified from AgentTemplateRef)
@@ -95,12 +95,12 @@ Batch (template)
 ├── BatchSpec
 │   ├── commonContext: []Context
 │   ├── variableContexts: [][]Context
-│   └── workspaceConfigRef: string
+│   └── agentRef: string
 │
 BatchRun (execution)
 ├── BatchRunSpec
 │   ├── batchRef: string
-│   └── batchSpec: *BatchSpec (inline, includes workspaceConfigRef)
+│   └── batchSpec: *BatchSpec (inline, includes agentRef)
 └── BatchRunStatus
     ├── phase: BatchRunPhase
     ├── progress: ProgressStatus
@@ -109,15 +109,15 @@ BatchRun (execution)
 Task (single task)
 ├── TaskSpec
 │   ├── contexts: []Context
-│   └── workspaceConfigRef: string
+│   └── agentRef: string
 └── TaskExecutionStatus
     ├── phase: TaskPhase
     ├── jobName: string
     ├── startTime: Time
     └── completionTime: Time
 
-WorkspaceConfig (environment)
-└── WorkspaceConfigSpec
+Agent (environment)
+└── AgentSpec
     └── agentImage: string
 ```
 
@@ -132,7 +132,7 @@ type Batch struct {
 type BatchSpec struct {
     CommonContext      []Context
     VariableContexts   [][]Context
-    WorkspaceConfigRef string  // Reference to WorkspaceConfig
+    AgentRef string  // Reference to Agent
 }
 
 type BatchRun struct {
@@ -142,7 +142,7 @@ type BatchRun struct {
 
 type BatchRunSpec struct {
     BatchRef  string
-    BatchSpec *BatchSpec  // Inline batch (includes WorkspaceConfigRef)
+    BatchSpec *BatchSpec  // Inline batch (includes AgentRef)
 }
 
 type Task struct {
@@ -152,7 +152,7 @@ type Task struct {
 
 type TaskSpec struct {
     Contexts           []Context
-    WorkspaceConfigRef string  // Reference to WorkspaceConfig
+    AgentRef string  // Reference to Agent
 }
 
 type TaskExecutionStatus struct {
@@ -162,11 +162,11 @@ type TaskExecutionStatus struct {
     CompletionTime *metav1.Time
 }
 
-type WorkspaceConfig struct {
-    Spec WorkspaceConfigSpec
+type Agent struct {
+    Spec AgentSpec
 }
 
-type WorkspaceConfigSpec struct {
+type AgentSpec struct {
     AgentImage string  // Container image for the agent
 }
 
@@ -244,14 +244,14 @@ const (
 KubeTask follows **separation of concerns**:
 
 - **Batch**: Defines task content (WHAT) and repository scope (WHERE)
-- **WorkspaceConfig**: Defines execution config (HOW) - Agent template reference
-- **BatchRun**: Execution instance, can override WorkspaceConfig settings
+- **Agent**: Defines execution config (HOW) - Agent template reference
+- **BatchRun**: Execution instance, can override Agent settings
 
 **Benefits**:
 1. **Simple Batch**: Only focuses on task definition, easy to create and maintain
-2. **Centralized Config**: All execution config managed in WorkspaceConfig
+2. **Centralized Config**: All execution config managed in Agent
 3. **Flexible Override**: BatchRun can override default config as needed
-4. **Stability**: WorkspaceConfig name independent of project name, won't change if project renames
+4. **Stability**: Agent name independent of project name, won't change if project renames
 
 ### Batch (Task Definition)
 
@@ -344,7 +344,7 @@ spec:
 |-------|------|----------|-------------|
 | `spec.commonContext` | []Context | Yes | Common context, shared by all tasks |
 | `spec.variableContexts` | [][]Context | Yes | Variable context, each element generates one task |
-| `spec.workspaceConfigRef` | String | No | Reference to WorkspaceConfig (default: "default") |
+| `spec.agentRef` | String | No | Reference to Agent (default: "default") |
 
 **Task Generation Formula:**
 
@@ -582,15 +582,15 @@ spec:
     - [{type: Repository, repository: {org: myorg, repo: service-c, branch: main}}]
 ```
 
-### WorkspaceConfig (Execution Configuration)
+### Agent (Execution Configuration)
 
-WorkspaceConfig defines the agent container image for task execution. The controller generates Jobs using this image.
+Agent defines the agent container image for task execution. The controller generates Jobs using this image.
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
-  name: default  # Convention: "default" is used when no workspaceConfigRef is specified
+  name: default  # Convention: "default" is used when no agentRef is specified
   namespace: kubetask-system
 spec:
   # Agent container image
@@ -608,7 +608,7 @@ spec:
 - Simplified API: Only specify the agent image, controller handles Job creation
 - Controller generates Jobs with consistent structure (env vars, labels, owner references)
 - Name independent of project name, won't change if project renames
-- Tasks and BatchRuns reference WorkspaceConfig via `workspaceConfigRef` field
+- Tasks and BatchRuns reference Agent via `agentRef` field
 
 ---
 
@@ -624,15 +624,15 @@ spec:
 
 Controller determines the agent image in this priority order:
 
-1. **WorkspaceConfig.spec.agentImage** (from referenced WorkspaceConfig)
+1. **Agent.spec.agentImage** (from referenced Agent)
 2. **Built-in default** (fallback) - `quay.io/zhaoxue/kubetask-agent:latest`
 
 ### How It Works
 
 The controller:
-1. Looks up the WorkspaceConfig referenced by `workspaceConfigRef` (defaults to "default")
-2. Uses the `agentImage` from WorkspaceConfig if specified
-3. Falls back to built-in default image if no WorkspaceConfig or agentImage found
+1. Looks up the Agent referenced by `agentRef` (defaults to "default")
+2. Uses the `agentImage` from Agent if specified
+3. Falls back to built-in default image if no Agent or agentImage found
 4. Generates a Job with consistent structure including:
    - Labels for tracking (`kubetask.io/task`)
    - Environment variables (`TASK_NAME`, `TASK_NAMESPACE`)
@@ -649,10 +649,10 @@ The controller:
 kubectl create namespace team-platform
 kubectl apply -f workspace-setup.yaml  # PVC, Secrets, ServiceAccount
 
-# 2. Create default WorkspaceConfig (optional - uses built-in default if not created)
+# 2. Create default Agent (optional - uses built-in default if not created)
 kubectl apply -f - <<EOF
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: default
   namespace: team-platform
@@ -660,7 +660,7 @@ spec:
   agentImage: quay.io/myorg/claude-agent:v1.0
 EOF
 
-# 3. Create and run Task (uses "default" WorkspaceConfig automatically)
+# 3. Create and run Task (uses "default" Agent automatically)
 kubectl apply -f - <<EOF
 apiVersion: kubetask.io/v1alpha1
 kind: Task
@@ -686,10 +686,10 @@ EOF
 
 **User Operations**:
 ```bash
-# 1. Create different WorkspaceConfigs for different AI agents
+# 1. Create different Agents for different AI agents
 kubectl apply -f - <<EOF
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: claude-workspace
   namespace: team-platform
@@ -697,7 +697,7 @@ spec:
   agentImage: quay.io/myorg/claude-agent:v1.0
 ---
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: gemini-workspace
   namespace: team-platform
@@ -713,7 +713,7 @@ metadata:
   name: task-with-claude
   namespace: team-platform
 spec:
-  workspaceConfigRef: claude-workspace
+  agentRef: claude-workspace
   contexts:
     - type: Repository
       repository: {org: myorg, repo: service-a, branch: main}
@@ -727,7 +727,7 @@ metadata:
   name: task-with-gemini
   namespace: team-platform
 spec:
-  workspaceConfigRef: gemini-workspace
+  agentRef: gemini-workspace
   contexts:
     - type: Repository
       repository: {org: myorg, repo: service-b, branch: main}
@@ -737,7 +737,7 @@ EOF
 #### Scenario 3: Batch with Custom Workspace
 
 ```bash
-# Create Batch with specific WorkspaceConfig
+# Create Batch with specific Agent
 kubectl apply -f - <<EOF
 apiVersion: kubetask.io/v1alpha1
 kind: Batch
@@ -745,7 +745,7 @@ metadata:
   name: update-with-gemini
   namespace: team-platform
 spec:
-  workspaceConfigRef: gemini-workspace  # Use Gemini for this batch
+  agentRef: gemini-workspace  # Use Gemini for this batch
   commonContext:
     - type: File
       file:
@@ -769,10 +769,10 @@ EOF
 
 ✅ **Simple**: Users only specify an image, no need to understand Job template structure
 ✅ **Consistent**: Controller generates Jobs with consistent labels, env vars, and owner references
-✅ **Flexible**: Different WorkspaceConfigs for different AI agents
-✅ **Good Performance**: Direct Get() call for WorkspaceConfig lookup
-✅ **Clear**: Simple error messages when WorkspaceConfig not found
-✅ **Stability**: WorkspaceConfig name independent of project name
+✅ **Flexible**: Different Agents for different AI agents
+✅ **Good Performance**: Direct Get() call for Agent lookup
+✅ **Clear**: Simple error messages when Agent not found
+✅ **Stability**: Agent name independent of project name
 
 ---
 
@@ -782,9 +782,9 @@ EOF
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
-  name: default  # Convention: "default" is used when no workspaceConfigRef is specified
+  name: default  # Convention: "default" is used when no agentRef is specified
   namespace: kubetask-system
 spec:
   agentImage: quay.io/myorg/claude-agent:v1.0
@@ -870,7 +870,7 @@ metadata:
     team: platform
     jira: PROJ-1234
 spec:
-  # Reference Batch (inherits workspaceConfigRef from Batch)
+  # Reference Batch (inherits agentRef from Batch)
   batchRef: update-dependencies
 ```
 
@@ -955,13 +955,13 @@ kubectl get batchruns -n kubetask-system
 
 ```bash
 # List workspace configs
-kubectl get workspaceconfigs -n kubetask-system
+kubectl get agents -n kubetask-system
 
 # Create workspace config
 kubectl apply -f workspace-config.yaml
 
 # View workspace config details
-kubectl get workspaceconfig default-workspace -o yaml
+kubectl get agent default-workspace -o yaml
 ```
 
 ---
@@ -972,7 +972,7 @@ kubectl get workspaceconfig default-workspace -o yaml
 
 | Name | Reason |
 |------|--------|
-| **WorkspaceConfig** | Independent of project name; semantic concept |
+| **Agent** | Independent of project name; semantic concept |
 | **AgentTemplateRef** | Semantic concept; describes what it is |
 | **commonContext** | Programming concept; universal |
 | **variableContexts** | Programming concept; universal |
@@ -986,7 +986,7 @@ kubectl get workspaceconfig default-workspace -o yaml
 | ConfigMap | `kubetask-agent` | Would change |
 | Labels | `kubetask.io/*` | Would change |
 
-**Mitigation**: Use convention-based discovery. WorkspaceConfig doesn't hardcode names.
+**Mitigation**: Use convention-based discovery. Agent doesn't hardcode names.
 
 ---
 
@@ -1000,10 +1000,10 @@ kubectl get workspaceconfig default-workspace -o yaml
 |----------------|----------------|
 | `Bundle` | `Batch` |
 | `BundleRun` | `BatchRun` |
-| `CodeSweepConfig` | `WorkspaceConfig` |
+| `CodeSweepConfig` | `Agent` |
 | `bundles.codesweep.io` | `batches.kubetask.io` |
 | `bundleruns.codesweep.io` | `batchruns.kubetask.io` |
-| `codesweepconfigs.codesweep.io` | `workspaceconfigs.kubetask.io` |
+| `codesweepconfigs.codesweep.io` | `agents.kubetask.io` |
 
 #### Field Mapping
 
@@ -1012,7 +1012,7 @@ kubectl get workspaceconfig default-workspace -o yaml
 | `spec.repositories` | `spec.variableContexts` (with type: Repository) |
 | `spec.context.files` | `spec.commonContext` (with type: File) |
 | `spec.bundleRef` | `spec.batchRef` |
-| `spec.jobTemplateRef` | `spec.workspaceConfigRef` |
+| `spec.jobTemplateRef` | `spec.agentRef` |
 
 ---
 
@@ -1020,17 +1020,17 @@ kubectl get workspaceconfig default-workspace -o yaml
 
 **Agent image discovery order:**
 
-1. **WorkspaceConfig.spec.agentImage** (from referenced WorkspaceConfig)
+1. **Agent.spec.agentImage** (from referenced Agent)
 2. **Built-in default** (fallback: `quay.io/zhaoxue/kubetask-agent:latest`)
 
-**WorkspaceConfig lookup:**
-- Task/Batch uses `workspaceConfigRef` field to reference a WorkspaceConfig
-- If not specified, uses WorkspaceConfig named "default" in the same namespace
+**Agent lookup:**
+- Task/Batch uses `agentRef` field to reference a Agent
+- If not specified, uses Agent named "default" in the same namespace
 - If "default" doesn't exist, uses built-in default image
 
 This allows:
-- ✅ Explicit WorkspaceConfig per Batch/Task
-- ✅ Convention-based default ("default" WorkspaceConfig)
+- ✅ Explicit Agent per Batch/Task
+- ✅ Convention-based default ("default" Agent)
 - ✅ Fallback for new users (built-in default image)
 
 ---
@@ -1040,13 +1040,13 @@ This allows:
 ### 1. Semantic Clarity
 
 - **Batch**: Clearly batch processing
-- **WorkspaceConfig**: Clearly environment config
+- **Agent**: Clearly environment config
 - **AgentImage**: Simple container image reference
 - **commonContext/variableContexts**: Clearly constant/variable
 
 ### 2. Stability
 
-- **WorkspaceConfig**: Won't change even if project renames
+- **Agent**: Won't change even if project renames
 - **AgentImage**: Simple, semantic field
 - **Core concepts**: Independent of project name
 
@@ -1059,7 +1059,7 @@ This allows:
 ### 4. K8s Alignment
 
 - **Batch**: Aligns with `batch/v1`
-- **WorkspaceConfig**: Follows K8s Config pattern
+- **Agent**: Follows K8s Config pattern
 - Convention-based discovery: K8s standard practice
 
 ---
@@ -1069,10 +1069,10 @@ This allows:
 **Final API**:
 - ✅ **Batch** + **BatchRun** - semantic batch processing
 - ✅ **Task** - simplified single task execution
-- ✅ **WorkspaceConfig** - stable, project-independent
+- ✅ **Agent** - stable, project-independent
 - ✅ **AgentImage** - simple container image configuration
 - ✅ **commonContext** + **variableContexts** - clear constant/variable model
-- ✅ **workspaceConfigRef** - reference to WorkspaceConfig from Batch/Task
+- ✅ **agentRef** - reference to Agent from Batch/Task
 - ✅ **Context** abstraction - flexible, extensible
 
 **Philosophy**:

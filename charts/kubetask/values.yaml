@@ -54,9 +54,9 @@ controller:
 # Agent configuration
 # NOTE: Agent ServiceAccount is NOT created by this chart.
 # Users must create their own ServiceAccount and RBAC in each namespace where tasks run,
-# and reference it in WorkspaceConfig.spec.serviceAccountName (required field).
+# and reference it in Agent.spec.serviceAccountName (required field).
 agent:
-  # Default container image for the agent (used when WorkspaceConfig.agentImage is not set)
+  # Default container image for the agent (used when Agent.agentImage is not set)
   image:
     repository: quay.io/zhaoxue/kubetask-agent-gemini
     pullPolicy: IfNotPresent

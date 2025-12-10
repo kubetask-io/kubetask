@@ -16,7 +16,7 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks across mul
 - No external dependencies (no PostgreSQL, Redis)
 - Kubernetes-native (uses etcd for state, Jobs for execution)
 - Declarative and GitOps-friendly
-- Separation of concerns: WHAT (Batch) + WHERE (Repository) + HOW (WorkspaceConfig)
+- Separation of concerns: WHAT (Batch) + WHERE (Repository) + HOW (Agent)
 
 ## Core Concepts
 
@@ -25,14 +25,14 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks across mul
 1. **Batch** - Task batch template (WHAT to do + WHERE to do it)
 2. **BatchRun** - Execution instance of a Batch
 3. **Task** - Single task execution (simplified API)
-4. **WorkspaceConfig** - Workspace environment configuration (HOW to execute)
+4. **Agent** - Workspace environment configuration (HOW to execute)
 
 ### Important Design Decisions
 
 - **Batch** (not Bundle) - Aligns with Kubernetes `batch/v1`
-- **WorkspaceConfig** (not KubeTaskConfig) - Stable, project-independent naming
+- **Agent** (not KubeTaskConfig) - Stable, project-independent naming
 - **AgentImage** (not AgentTemplateRef) - Simple container image, controller generates Jobs
-- **workspaceConfigRef** - Reference from Batch/Task to WorkspaceConfig
+- **agentRef** - Reference from Batch/Task to Agent
 - **variableContexts** - Highlights constant/variable dichotomy
 
 ### Context System
@@ -55,7 +55,7 @@ All Go files must include the copyright header:
 ### Naming Conventions
 
 1. **API Resources**: Use semantic names independent of project name
-   - Good: `WorkspaceConfig`, `AgentTemplateRef`
+   - Good: `Agent`, `AgentTemplateRef`
    - Avoid: `KubeTaskConfig`, `JobTemplateRef`
 
 2. **Go Code**: Follow standard Go conventions
@@ -66,7 +66,7 @@ All Go files must include the copyright header:
 3. **Kubernetes Resources**:
    - CRD Group: `kubetask.io`
    - API Version: `v1alpha1`
-   - Kinds: `Batch`, `BatchRun`, `Task`, `WorkspaceConfig`
+   - Kinds: `Batch`, `BatchRun`, `Task`, `Agent`
 
 ### Code Comments
 
@@ -285,12 +285,12 @@ internal/controller/
 ### Agent Image Discovery
 
 The agent image is discovered via:
-1. `WorkspaceConfig.spec.agentImage` (from referenced WorkspaceConfig)
+1. `Agent.spec.agentImage` (from referenced Agent)
 2. Built-in default image (fallback: `quay.io/zhaoxue/kubetask-agent:latest`)
 
-WorkspaceConfig lookup:
-- Batch/Task uses `workspaceConfigRef` to reference a WorkspaceConfig
-- If not specified, looks for WorkspaceConfig named "default" in the same namespace
+Agent lookup:
+- Batch/Task uses `agentRef` to reference a Agent
+- If not specified, looks for Agent named "default" in the same namespace
 - If not found, uses built-in default image
 
 The controller generates Jobs with:
@@ -306,7 +306,7 @@ The controller generates Jobs with:
 The controller requires permissions for:
 - Creating/updating/deleting Jobs
 - Reading/writing CR status
-- Reading WorkspaceConfigs
+- Reading Agents
 - Reading Secrets (for future use)
 - Creating Events
 

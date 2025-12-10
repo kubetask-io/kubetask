@@ -102,34 +102,34 @@ var _ = Describe("TaskController", func() {
 		})
 	})
 
-	Context("When creating a Task with WorkspaceConfig reference", func() {
-		It("Should use agent image from WorkspaceConfig", func() {
-			taskName := "test-task-wsconfig"
-			wsConfigName := "test-workspace-config"
+	Context("When creating a Task with Agent reference", func() {
+		It("Should use agent image from Agent", func() {
+			taskName := "test-task-agent"
+			agentConfigName := "test-agent-config"
 			customAgentImage := "custom-agent:v1.0.0"
-			inlineContent := "# Test with WorkspaceConfig"
+			inlineContent := "# Test with Agent"
 
-			By("Creating WorkspaceConfig")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentConfigName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         customAgentImage,
 					ServiceAccountName: "test-agent",
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
-			By("Creating Task with WorkspaceConfig reference")
+			By("Creating Task with Agent reference")
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentConfigName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -161,29 +161,29 @@ var _ = Describe("TaskController", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
 
-	Context("When creating a Task with WorkspaceConfig that has toolsImage", func() {
+	Context("When creating a Task with Agent that has toolsImage", func() {
 		It("Should create Job with init container for tools", func() {
 			taskName := "test-task-tools"
-			wsConfigName := "test-workspace-tools"
+			agentConfigName := "test-agent-tools"
 			toolsImage := "tools-image:v1.0.0"
 			inlineContent := "# Test with tools"
 
-			By("Creating WorkspaceConfig with toolsImage")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with toolsImage")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentConfigName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					ToolsImage:         toolsImage,
 					ServiceAccountName: "test-agent",
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
 			task := &kubetaskv1alpha1.Task{
@@ -192,7 +192,7 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentConfigName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -235,14 +235,14 @@ var _ = Describe("TaskController", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
 
-	Context("When creating a Task with WorkspaceConfig that has credentials", func() {
+	Context("When creating a Task with Agent that has credentials", func() {
 		It("Should mount credentials as env vars and files", func() {
 			taskName := "test-task-creds"
-			wsConfigName := "test-workspace-creds"
+			agentName := "test-workspace-creds"
 			secretName := "test-secret"
 			envName := "API_TOKEN"
 			mountPath := "/home/agent/.ssh/id_rsa"
@@ -261,13 +261,13 @@ var _ = Describe("TaskController", func() {
 			}
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
-			By("Creating WorkspaceConfig with credentials")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with credentials")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					Credentials: []kubetaskv1alpha1.Credential{
 						{
@@ -289,7 +289,7 @@ var _ = Describe("TaskController", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
 			task := &kubetaskv1alpha1.Task{
@@ -298,7 +298,7 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -349,24 +349,24 @@ var _ = Describe("TaskController", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 		})
 	})
 
-	Context("When creating a Task with WorkspaceConfig that has podLabels", func() {
+	Context("When creating a Task with Agent that has podLabels", func() {
 		It("Should apply podLabels to the Job's pod template", func() {
 			taskName := "test-task-labels"
-			wsConfigName := "test-workspace-labels"
+			agentName := "test-workspace-labels"
 			inlineContent := "# Test with podLabels"
 
-			By("Creating WorkspaceConfig with podLabels")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with podLabels")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					PodLabels: map[string]string{
 						"network-policy": "agent-restricted",
@@ -374,7 +374,7 @@ var _ = Describe("TaskController", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
 			task := &kubetaskv1alpha1.Task{
@@ -383,7 +383,7 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -417,23 +417,23 @@ var _ = Describe("TaskController", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
 
-	Context("When creating a Task with WorkspaceConfig that has scheduling", func() {
+	Context("When creating a Task with Agent that has scheduling", func() {
 		It("Should apply scheduling configuration to the Job", func() {
 			taskName := "test-task-scheduling"
-			wsConfigName := "test-workspace-scheduling"
+			agentName := "test-workspace-scheduling"
 			inlineContent := "# Test with scheduling"
 
-			By("Creating WorkspaceConfig with scheduling")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with scheduling")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					Scheduling: &kubetaskv1alpha1.PodScheduling{
 						NodeSelector: map[string]string{
@@ -451,7 +451,7 @@ var _ = Describe("TaskController", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
 			task := &kubetaskv1alpha1.Task{
@@ -460,7 +460,7 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -497,7 +497,7 @@ var _ = Describe("TaskController", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
 
@@ -624,20 +624,20 @@ var _ = Describe("TaskController", func() {
 		})
 	})
 
-	Context("When creating a Task with WorkspaceConfig that has defaultContexts", func() {
+	Context("When creating a Task with Agent that has defaultContexts", func() {
 		It("Should merge defaultContexts with task contexts", func() {
 			taskName := "test-task-default-contexts"
-			wsConfigName := "test-workspace-default-ctx"
+			agentName := "test-workspace-default-ctx"
 			defaultContent := "# Default Guidelines\n\nThese are default guidelines."
 			taskContent := "# Specific Task\n\nThis is the specific task content."
 
-			By("Creating WorkspaceConfig with defaultContexts")
-			wsConfig := &kubetaskv1alpha1.WorkspaceConfig{
+			By("Creating Agent with defaultContexts")
+			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      wsConfigName,
+					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.WorkspaceConfigSpec{
+				Spec: kubetaskv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					DefaultContexts: []kubetaskv1alpha1.Context{
 						{
@@ -652,7 +652,7 @@ var _ = Describe("TaskController", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
 			task := &kubetaskv1alpha1.Task{
@@ -661,7 +661,7 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					WorkspaceConfigRef: wsConfigName,
+					AgentRef: agentName,
 					Contexts: []kubetaskv1alpha1.Context{
 						{
 							Type: kubetaskv1alpha1.ContextTypeFile,
@@ -693,7 +693,7 @@ var _ = Describe("TaskController", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, wsConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
 

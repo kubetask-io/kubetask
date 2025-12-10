@@ -13,7 +13,7 @@ Context items provide information to AI agents during task execution. KubeTask s
 
 Contexts are processed in the following priority order (lowest to highest):
 
-1. `WorkspaceConfig.defaultContexts` - Base layer (organization-wide defaults)
+1. `Agent.defaultContexts` - Base layer (organization-wide defaults)
 2. `Batch.commonContext` - Shared across all tasks in the batch
 3. `Batch.variableContexts[i]` - Task-specific contexts
 
@@ -32,11 +32,11 @@ When a `FileContext` does not specify a `mountPath`, its content is aggregated i
 Multiple contexts are concatenated with markdown horizontal rules (`---`) as separators:
 
 ```markdown
-[Content from WorkspaceConfig.defaultContexts[0]]
+[Content from Agent.defaultContexts[0]]
 
 ---
 
-[Content from WorkspaceConfig.defaultContexts[1]]
+[Content from Agent.defaultContexts[1]]
 
 ---
 
@@ -163,13 +163,13 @@ spec:
         mountPath: /etc/deploy/config.yaml
 ```
 
-### Example 3: Batch with WorkspaceConfig Defaults
+### Example 3: Batch with Agent Defaults
 
-WorkspaceConfig provides organization-wide defaults:
+Agent provides organization-wide defaults:
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: default
 spec:
@@ -219,12 +219,12 @@ spec:
 
 Result for each task:
 - `/workspace/task.md`: Contains coding-standards.md + task.md (aggregated)
-- `/home/agent/.claude/CLAUDE.md`: Claude configuration (from WorkspaceConfig)
+- `/home/agent/.claude/CLAUDE.md`: Claude configuration (from Agent)
 - `/workspace/repo-config.json`: Repository-specific config (from variableContexts)
 
 ## Credentials
 
-WorkspaceConfig supports credentials for providing secrets to agents. Credentials can be exposed as:
+Agent supports credentials for providing secrets to agents. Credentials can be exposed as:
 - **Environment Variables**: For API tokens, passwords, etc.
 - **File Mounts**: For SSH keys, service account files, etc.
 
@@ -232,7 +232,7 @@ WorkspaceConfig supports credentials for providing secrets to agents. Credential
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
-kind: WorkspaceConfig
+kind: Agent
 metadata:
   name: default
 spec:
@@ -308,7 +308,7 @@ The controller provides these environment variables to the agent:
 | `TASK_NAMESPACE` | Namespace of the Task CR |
 | `GITHUB_TOKEN` | (if configured) GitHub API token |
 | `ANTHROPIC_API_KEY` | (if configured) Anthropic API key |
-| ... | Other credentials as configured in WorkspaceConfig |
+| ... | Other credentials as configured in Agent |
 
 ### Recommended Agent Behavior
 
@@ -328,6 +328,6 @@ The controller provides these environment variables to the agent:
 
 | Priority | Context Source | Description |
 |----------|---------------|-------------|
-| Lowest | `WorkspaceConfig.defaultContexts` | Organization defaults |
+| Lowest | `Agent.defaultContexts` | Organization defaults |
 | Medium | `Batch.commonContext` | Batch-wide shared context |
 | Highest | `Batch.variableContexts[i]` | Task-specific context |
