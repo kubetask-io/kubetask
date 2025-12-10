@@ -99,6 +99,16 @@ jobs:
             ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/${{ env.IMG_NAME }}:latest
             ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/${{ env.IMG_NAME }}:${{ github.sha }}
 
+      - name: Build and push base agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./agents/base
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-base:latest
+            ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-base:${{ github.sha }}
+
       - name: Build and push gemini agent
         uses: docker/build-push-action@v6
         with:
