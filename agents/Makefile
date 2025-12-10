@@ -1,7 +1,7 @@
 # Copyright Contributors to the KubeTask project
 SHELL := /bin/bash
 
-# Agent to build (gemini, claude, codex, kimi, etc.)
+# Agent to build (gemini, goose, echo, etc.)
 AGENT ?= gemini
 
 # Image URL configuration
@@ -11,45 +11,105 @@ IMG_NAME ?= kubetask-agent-$(AGENT)
 VERSION ?= latest
 IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME):$(VERSION)
 
+# Base image configuration
+BASE_IMG_NAME ?= kubetask-agent-base
+BASE_IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(BASE_IMG_NAME):$(VERSION)
+
 # PLATFORMS defines the target platforms for multi-arch build
 PLATFORMS ?= linux/arm64,linux/amd64
 
 .PHONY: all
 all: build
 
-##@ Build
+##@ Base Image
+
+.PHONY: base-build
+base-build: ## Build the universal base image
+	docker build -t $(BASE_IMG) base/
+
+.PHONY: base-push
+base-push: ## Push the base image to registry
+	docker push $(BASE_IMG)
+
+.PHONY: base-buildx
+base-buildx: ## Build and push base image for multiple architectures
+	docker buildx create --use --name=kubetask-base-builder || true
+	docker buildx build \
+		--platform=$(PLATFORMS) \
+		--tag $(BASE_IMG) \
+		--push \
+		base/
+
+##@ Agent Images
 
 .PHONY: build
-build: ## Build agent docker image (AGENT=gemini|claude|codex|kimi)
+build: ## Build agent docker image (AGENT=gemini|goose|echo)
 	@if [ ! -d "$(AGENT)" ]; then \
 		echo "Error: Agent '$(AGENT)' not found. Available agents:"; \
-		ls -d */ 2>/dev/null | sed 's/\///g'; \
+		ls -d */ 2>/dev/null | sed 's/\///g' | grep -v '^base$$'; \
 		exit 1; \
 	fi
-	docker build -t $(IMG) $(AGENT)/
+	@if [ "$(AGENT)" = "base" ]; then \
+		echo "Use 'make base-build' to build the base image"; \
+		exit 1; \
+	fi
+	docker build --build-arg BASE_IMAGE=$(BASE_IMG) -t $(IMG) $(AGENT)/
 
 .PHONY: push
-push: ## Push the docker image
+push: ## Push the agent docker image
 	docker push $(IMG)
 
 .PHONY: buildx
-buildx: ## Build and push docker image for multiple architectures
+buildx: ## Build and push agent image for multiple architectures
 	@if [ ! -d "$(AGENT)" ]; then \
 		echo "Error: Agent '$(AGENT)' not found. Available agents:"; \
-		ls -d */ 2>/dev/null | sed 's/\///g'; \
+		ls -d */ 2>/dev/null | sed 's/\///g' | grep -v '^base$$'; \
+		exit 1; \
+	fi
+	@if [ "$(AGENT)" = "base" ]; then \
+		echo "Use 'make base-buildx' to build the base image"; \
 		exit 1; \
 	fi
 	docker buildx create --use --name=kubetask-agent-builder || true
 	docker buildx build \
+		--build-arg BASE_IMAGE=$(BASE_IMG) \
 		--platform=$(PLATFORMS) \
 		--tag $(IMG) \
 		--push \
 		$(AGENT)/
 
+##@ Build All
+
+.PHONY: build-all
+build-all: base-build ## Build base and all agent images
+	@for agent in $$(ls -d */ 2>/dev/null | sed 's/\///g' | grep -v '^base$$'); do \
+		echo "Building agent: $$agent"; \
+		$(MAKE) AGENT=$$agent build; \
+	done
+
+.PHONY: push-all
+push-all: base-push ## Push base and all agent images
+	@for agent in $$(ls -d */ 2>/dev/null | sed 's/\///g' | grep -v '^base$$'); do \
+		echo "Pushing agent: $$agent"; \
+		$(MAKE) AGENT=$$agent push; \
+	done
+
+.PHONY: buildx-all
+buildx-all: base-buildx ## Build and push base and all agent images (multi-arch)
+	@for agent in $$(ls -d */ 2>/dev/null | sed 's/\///g' | grep -v '^base$$'); do \
+		echo "Building agent (multi-arch): $$agent"; \
+		$(MAKE) AGENT=$$agent buildx; \
+	done
+
+##@ Utilities
+
 .PHONY: list
 list: ## List available agents
-	@echo "Available agents:"
-	@ls -d */ 2>/dev/null | sed 's/\///g'
+	@echo "Base image:"
+	@echo "  base"
+	@echo ""
+	@echo "Agent images:"
+	@ls -d */ 2>/dev/null | sed 's/\///g' | grep -v '^base$$' | sed 's/^/  /'
 
 ##@ Help
 
@@ -58,7 +118,9 @@ help: ## Display this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 	@echo ""
 	@echo "Examples:"
-	@echo "  make build                    # Build gemini (default)"
-	@echo "  make AGENT=claude build       # Build claude"
-	@echo "  make AGENT=codex buildx       # Multi-arch build codex"
+	@echo "  make base-build               # Build the universal base image"
+	@echo "  make build                    # Build gemini (default) using base"
+	@echo "  make AGENT=goose build        # Build goose using base"
+	@echo "  make build-all                # Build base + all agents"
+	@echo "  make buildx-all               # Multi-arch build base + all agents"
 	@echo "  make list                     # List available agents"

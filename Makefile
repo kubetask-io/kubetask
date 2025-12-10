@@ -314,7 +314,16 @@ e2e: e2e-setup e2e-test ## Run full e2e test workflow
 
 ##@ Agent
 
-agent-build: ## Build agent image
+agent-base-build: ## Build universal base image
+	$(MAKE) -C agents base-build
+
+agent-base-push: ## Push universal base image
+	$(MAKE) -C agents base-push
+
+agent-base-buildx: ## Multi-arch build and push base image
+	$(MAKE) -C agents base-buildx
+
+agent-build: ## Build agent image (requires base image)
 	$(MAKE) -C agents build
 
 agent-push: ## Push agent image
@@ -322,6 +331,15 @@ agent-push: ## Push agent image
 
 agent-buildx: ## Multi-arch build and push agent image
 	$(MAKE) -C agents buildx
+
+agent-build-all: ## Build base and all agent images
+	$(MAKE) -C agents build-all
+
+agent-push-all: ## Push base and all agent images
+	$(MAKE) -C agents push-all
+
+agent-buildx-all: ## Multi-arch build and push all images
+	$(MAKE) -C agents buildx-all
 
 ##@ Help
 
