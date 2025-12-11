@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kubetaskv1alpha1 "github.com/xuezhaojun/kubetask/api/v1alpha1"
+	kubetaskv1alpha1 "github.com/kubetask-io/kubetask/api/v1alpha1"
 )
 
 const (

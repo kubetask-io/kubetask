@@ -16,7 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	kubetaskv1alpha1 "github.com/xuezhaojun/kubetask/api/v1alpha1"
+	kubetaskv1alpha1 "github.com/kubetask-io/kubetask/api/v1alpha1"
 )
 
 var _ = Describe("TaskController", func() {

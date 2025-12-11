@@ -16,8 +16,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	kubetaskv1alpha1 "github.com/xuezhaojun/kubetask/api/v1alpha1"
-	"github.com/xuezhaojun/kubetask/internal/controller"
+	kubetaskv1alpha1 "github.com/kubetask-io/kubetask/api/v1alpha1"
+	"github.com/kubetask-io/kubetask/internal/controller"
 )
 
 var (

@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kubetaskv1alpha1 "github.com/xuezhaojun/kubetask/api/v1alpha1"
+	kubetaskv1alpha1 "github.com/kubetask-io/kubetask/api/v1alpha1"
 )
 
 var _ = Describe("CronTask Controller", func() {

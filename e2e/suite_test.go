@@ -22,7 +22,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	kubetaskv1alpha1 "github.com/xuezhaojun/kubetask/api/v1alpha1"
+	kubetaskv1alpha1 "github.com/kubetask-io/kubetask/api/v1alpha1"
 )
 
 var (
