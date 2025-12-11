@@ -28,6 +28,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     unzip \
     zip \
+    bzip2 \
+    xz-utils \
     tree \
     htop \
     vim \
