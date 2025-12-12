@@ -582,13 +582,8 @@ spec:
   # Optional: Working directory (default: "/workspace")
   workspaceDir: /workspace
 
-  # Optional: Custom entrypoint command (required for humanInTheLoop)
+  # Optional: Custom entrypoint command (required when Task has humanInTheLoop enabled)
   command: ["sh", "-c", "gemini --yolo -p \"$(cat /workspace/task.md)\""]
-
-  # Optional: Keep container alive after task completion for debugging
-  humanInTheLoop:
-    enabled: true
-    keepAliveSeconds: 3600  # Default: 3600 (1 hour)
 
   # Optional: Reference reusable Context CRDs (applied to all tasks using this agent)
   contexts:
@@ -640,8 +635,7 @@ spec:
 |-------|------|----------|-------------|
 | `spec.agentImage` | String | No | Agent container image |
 | `spec.workspaceDir` | String | No | Working directory (default: "/workspace") |
-| `spec.command` | []String | No | Custom entrypoint command (required for humanInTheLoop) |
-| `spec.humanInTheLoop` | *HumanInTheLoop | No | Keep container alive after completion |
+| `spec.command` | []String | No | Custom entrypoint command (required when Task has humanInTheLoop enabled) |
 | `spec.contexts` | []ContextMount | No | References to reusable Context CRDs (applied to all tasks) |
 | `spec.credentials` | []Credential | No | Secrets as env vars or file mounts |
 | `spec.podSpec` | *AgentPodSpec | No | Advanced Pod configuration (labels, scheduling, runtimeClass) |
@@ -670,15 +664,17 @@ This provides an additional layer of security beyond standard container isolatio
 
 **Human-in-the-Loop:**
 
-When `humanInTheLoop.enabled` is true, the controller wraps the `command` with a sleep to keep the container running after task completion. This allows users to `kubectl exec` into the container for debugging or review.
+When `Task.spec.humanInTheLoop.enabled` is true, the controller wraps the Agent's `command` with a sleep to keep the container running after task completion. This allows users to `kubectl exec` into the container for debugging or review.
 
 ```yaml
-humanInTheLoop:
-  enabled: true
-  keepAliveSeconds: 3600  # Keep alive for 1 hour (default)
+# In Task spec:
+spec:
+  humanInTheLoop:
+    enabled: true
+    keepAliveSeconds: 3600  # Keep alive for 1 hour (default)
 ```
 
-**Important:** When `humanInTheLoop` is enabled, you MUST also specify `command`. The controller wraps the command to add the sleep behavior.
+**Important:** When `humanInTheLoop` is enabled on a Task, the Agent MUST specify `command`. The controller wraps the command to add the sleep behavior.
 
 ---
 
