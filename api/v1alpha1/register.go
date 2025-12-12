@@ -45,6 +45,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&KubeTaskConfigList{},
 		&CronTask{},
 		&CronTaskList{},
+		&Context{},
+		&ContextList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

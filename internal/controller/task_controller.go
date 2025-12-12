@@ -51,6 +51,7 @@ type TaskReconciler struct {
 // +kubebuilder:rbac:groups=kubetask.io,resources=tasks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kubetask.io,resources=tasks/finalizers,verbs=update
 // +kubebuilder:rbac:groups=kubetask.io,resources=agents,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kubetask.io,resources=contexts,verbs=get;list;watch
 // +kubebuilder:rbac:groups=kubetask.io,resources=kubetaskconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
@@ -129,13 +130,12 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		return ctrl.Result{}, r.Status().Update(ctx, task)
 	}
 
-	// Merge contexts: defaultContexts + task.Spec.Contexts
-	allContexts := make([]kubetaskv1alpha1.Context, 0, len(agentConfig.defaultContexts)+len(task.Spec.Contexts))
-	allContexts = append(allContexts, agentConfig.defaultContexts...)
-	allContexts = append(allContexts, task.Spec.Contexts...)
-
-	// Process contexts and create ConfigMap for aggregated content
-	contextConfigMap, fileMounts, dirMounts, err := r.processContexts(ctx, task, allContexts)
+	// Process all contexts using priority-based resolution
+	// Priority (lowest to highest):
+	//   1. Agent.contexts (Agent-level Context CRD references)
+	//   2. Task.contexts (Task-specific Context CRD references)
+	//   3. Task.description (highest, becomes start of /workspace/task.md)
+	contextConfigMap, fileMounts, dirMounts, err := r.processAllContexts(ctx, task, agentConfig)
 	if err != nil {
 		log.Error(err, "unable to process contexts")
 		return ctrl.Result{}, err
@@ -291,7 +291,7 @@ func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 type agentConfig struct {
 	agentImage         string
 	command            []string
-	defaultContexts    []kubetaskv1alpha1.Context
+	contexts           []kubetaskv1alpha1.ContextMount
 	credentials        []kubetaskv1alpha1.Credential
 	podSpec            *kubetaskv1alpha1.AgentPodSpec
 	serviceAccountName string
@@ -335,7 +335,7 @@ func (r *TaskReconciler) getAgentConfig(ctx context.Context, task *kubetaskv1alp
 	return agentConfig{
 		agentImage:         agentImage,
 		command:            agent.Spec.Command,
-		defaultContexts:    agent.Spec.DefaultContexts,
+		contexts:           agent.Spec.Contexts,
 		credentials:        agent.Spec.Credentials,
 		podSpec:            agent.Spec.PodSpec,
 		serviceAccountName: agent.Spec.ServiceAccountName,
@@ -355,83 +355,89 @@ type dirMount struct {
 	optional      bool
 }
 
-// processContexts processes all contexts and returns:
-// - ConfigMap for aggregated content (grouped by FilePath)
-// - List of file mounts for the job
-// - List of directory mounts (for ConfigMapRef)
+// resolvedContext holds a resolved context with its content and metadata
+type resolvedContext struct {
+	name      string // Context name (for XML tag)
+	namespace string // Context namespace (for XML tag)
+	ctxType   string // Context type (for XML tag)
+	content   string // Resolved content
+	mountPath string // Mount path (empty = append to task.md)
+}
+
+// processAllContexts processes all contexts from Agent and Task, resolving Context CRs
+// and returning the ConfigMap, file mounts, and directory mounts for the Job.
 //
-// All context types (inline, configMap) are resolved and aggregated by FilePath.
-// Multiple contexts with the same FilePath will have their contents merged.
-// Directory mounts (DirPath + ConfigMapRef) are passed through directly.
-func (r *TaskReconciler) processContexts(ctx context.Context, task *kubetaskv1alpha1.Task, contexts []kubetaskv1alpha1.Context) (*corev1.ConfigMap, []fileMount, []dirMount, error) {
-	// Group resolved contents by FilePath
-	// Key: filePath, Value: list of resolved contents to aggregate
-	contentsByPath := make(map[string][]string)
+// Priority (lowest to highest):
+//  1. Agent.contexts (Agent-level Context CRD references)
+//  2. Task.contexts (Task-specific Context CRD references)
+//  3. Task.description (highest, becomes start of /workspace/task.md)
+func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubetaskv1alpha1.Task, cfg agentConfig) (*corev1.ConfigMap, []fileMount, []dirMount, error) {
+	var resolved []resolvedContext
 	var dirMounts []dirMount
 
-	for _, c := range contexts {
-		if c.Type != kubetaskv1alpha1.ContextTypeFile || c.File == nil {
-			continue
-		}
-
-		file := c.File
-
-		// Handle directory mount (DirPath + ConfigMapRef)
-		if file.DirPath != "" && file.Source.ConfigMapRef != nil {
-			optional := false
-			if file.Source.ConfigMapRef.Optional != nil {
-				optional = *file.Source.ConfigMapRef.Optional
-			}
-			dirMounts = append(dirMounts, dirMount{
-				dirPath:       file.DirPath,
-				configMapName: file.Source.ConfigMapRef.Name,
-				optional:      optional,
-			})
-			continue
-		}
-
-		// Handle file mount (FilePath + Inline/ConfigMapKeyRef)
-		filePath := file.FilePath
-		if filePath == "" {
-			continue
-		}
-
-		// Resolve content from any source type
-		content, err := r.resolveFileContent(ctx, task.Namespace, file)
+	// 1. Resolve Agent.contexts (lowest priority)
+	for _, ref := range cfg.contexts {
+		rc, dm, err := r.resolveContextRef(ctx, ref, task.Namespace)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, fmt.Errorf("failed to resolve Agent context %q: %w", ref.Name, err)
 		}
-		if content != "" {
-			contentsByPath[filePath] = append(contentsByPath[filePath], content)
+		if dm != nil {
+			dirMounts = append(dirMounts, *dm)
+		} else if rc != nil {
+			resolved = append(resolved, *rc)
 		}
 	}
 
-	// Build file mounts and ConfigMap data
-	var fileMounts []fileMount
-	configMapData := make(map[string]string)
-
-	for filePath, contents := range contentsByPath {
-		var aggregated string
-		if len(contents) == 1 {
-			// Single content - use as is
-			aggregated = contents[0]
-		} else {
-			// Multiple contents - wrap each in XML tags
-			var wrappedContents []string
-			for i, content := range contents {
-				wrapped := fmt.Sprintf("<context index=\"%d\">\n%s\n</context>", i, content)
-				wrappedContents = append(wrappedContents, wrapped)
-			}
-			aggregated = strings.Join(wrappedContents, "\n\n")
+	// 2. Resolve Task.contexts (higher priority)
+	for _, ref := range task.Spec.Contexts {
+		rc, dm, err := r.resolveContextRef(ctx, ref, task.Namespace)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to resolve Task context %q: %w", ref.Name, err)
 		}
+		if dm != nil {
+			dirMounts = append(dirMounts, *dm)
+		} else if rc != nil {
+			resolved = append(resolved, *rc)
+		}
+	}
 
-		// Use a sanitized key for ConfigMap (replace / with -)
-		configMapKey := sanitizeConfigMapKey(filePath)
-		configMapData[configMapKey] = aggregated
+	// 3. Handle Task.description (highest priority, becomes /workspace/task.md)
+	var taskDescription string
+	if task.Spec.Description != nil && *task.Spec.Description != "" {
+		taskDescription = *task.Spec.Description
+	}
 
-		fileMounts = append(fileMounts, fileMount{
-			filePath: filePath,
-		})
+	// Build the final content
+	// - Separate contexts with mountPath (independent files)
+	// - Contexts without mountPath are appended to task.md with XML tags
+	configMapData := make(map[string]string)
+	var fileMounts []fileMount
+
+	// Build task.md content: description + contexts without mountPath
+	var taskMdParts []string
+	if taskDescription != "" {
+		taskMdParts = append(taskMdParts, taskDescription)
+	}
+
+	for _, rc := range resolved {
+		if rc.mountPath != "" {
+			// Context has explicit mountPath - create separate file
+			configMapKey := sanitizeConfigMapKey(rc.mountPath)
+			configMapData[configMapKey] = rc.content
+			fileMounts = append(fileMounts, fileMount{filePath: rc.mountPath})
+		} else {
+			// No mountPath - append to task.md with XML tags
+			xmlTag := fmt.Sprintf("<context name=%q namespace=%q type=%q>\n%s\n</context>",
+				rc.name, rc.namespace, rc.ctxType, rc.content)
+			taskMdParts = append(taskMdParts, xmlTag)
+		}
+	}
+
+	// Create task.md if there's any content
+	if len(taskMdParts) > 0 {
+		taskMdContent := strings.Join(taskMdParts, "\n\n")
+		configMapData["workspace-task.md"] = taskMdContent
+		fileMounts = append(fileMounts, fileMount{filePath: "/workspace/task.md"})
 	}
 
 	// Create ConfigMap if there's any content
@@ -463,6 +469,103 @@ func (r *TaskReconciler) processContexts(ctx context.Context, task *kubetaskv1al
 	return configMap, fileMounts, dirMounts, nil
 }
 
+// resolveContextRef resolves a ContextMount reference to a Context CR
+func (r *TaskReconciler) resolveContextRef(ctx context.Context, ref kubetaskv1alpha1.ContextMount, defaultNS string) (*resolvedContext, *dirMount, error) {
+	namespace := ref.Namespace
+	if namespace == "" {
+		namespace = defaultNS
+	}
+
+	// Fetch the Context CR
+	contextCR := &kubetaskv1alpha1.Context{}
+	if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, contextCR); err != nil {
+		return nil, nil, fmt.Errorf("Context %q not found in namespace %q: %w", ref.Name, namespace, err)
+	}
+
+	// Resolve content based on context type
+	content, dm, err := r.resolveContextSpec(ctx, namespace, ref.Name, &contextCR.Spec, ref.MountPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if dm != nil {
+		return nil, dm, nil
+	}
+
+	return &resolvedContext{
+		name:      ref.Name,
+		namespace: namespace,
+		ctxType:   string(contextCR.Spec.Type),
+		content:   content,
+		mountPath: ref.MountPath,
+	}, nil, nil
+}
+
+// resolveContextSpec resolves content from a ContextSpec (used by Context CRD)
+func (r *TaskReconciler) resolveContextSpec(ctx context.Context, namespace, name string, spec *kubetaskv1alpha1.ContextSpec, mountPath string) (string, *dirMount, error) {
+	switch spec.Type {
+	case kubetaskv1alpha1.ContextTypeInline:
+		if spec.Inline == nil {
+			return "", nil, nil
+		}
+		return spec.Inline.Content, nil, nil
+
+	case kubetaskv1alpha1.ContextTypeConfigMap:
+		if spec.ConfigMap == nil {
+			return "", nil, nil
+		}
+		cm := spec.ConfigMap
+
+		// If Key is specified, return the content
+		if cm.Key != "" {
+			content, err := r.getConfigMapKey(ctx, namespace, cm.Name, cm.Key, cm.Optional)
+			return content, nil, err
+		}
+
+		// If Key is not specified, return a directory mount
+		optional := false
+		if cm.Optional != nil {
+			optional = *cm.Optional
+		}
+		return "", &dirMount{
+			dirPath:       mountPath,
+			configMapName: cm.Name,
+			optional:      optional,
+		}, nil
+
+	case kubetaskv1alpha1.ContextTypeGit:
+		// TODO: Implement Git context support
+		// This would require:
+		// 1. Adding an init container with git-sync or git-init to clone the repository
+		// 2. Handling authentication for private repositories (SSH keys or tokens)
+		// 3. Mounting the cloned content at the specified mountPath
+		// 4. Supporting spec.Git.Path to select specific files/directories from the repo
+		// 5. Supporting spec.Git.Ref to checkout specific branch/tag/commit
+		return "", nil, fmt.Errorf("Git context type is not yet implemented")
+
+	default:
+		return "", nil, fmt.Errorf("unknown context type: %s", spec.Type)
+	}
+}
+
+// getConfigMapKey retrieves a specific key from a ConfigMap
+func (r *TaskReconciler) getConfigMapKey(ctx context.Context, namespace, name, key string, optional *bool) (string, error) {
+	cm := &corev1.ConfigMap{}
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cm); err != nil {
+		if optional != nil && *optional {
+			return "", nil
+		}
+		return "", err
+	}
+	if content, ok := cm.Data[key]; ok {
+		return content, nil
+	}
+	if optional != nil && *optional {
+		return "", nil
+	}
+	return "", fmt.Errorf("key %s not found in ConfigMap %s", key, name)
+}
+
 // sanitizeConfigMapKey converts a file path to a valid ConfigMap key
 // ConfigMap keys must be alphanumeric, '-', '_', or '.'
 func sanitizeConfigMapKey(filePath string) string {
@@ -470,34 +573,6 @@ func sanitizeConfigMapKey(filePath string) string {
 	key := strings.TrimPrefix(filePath, "/")
 	key = strings.ReplaceAll(key, "/", "-")
 	return key
-}
-
-// resolveFileContent resolves the content of a file from its source
-func (r *TaskReconciler) resolveFileContent(ctx context.Context, namespace string, file *kubetaskv1alpha1.FileContext) (string, error) {
-	if file.Source.Inline != nil {
-		return *file.Source.Inline, nil
-	}
-
-	if file.Source.ConfigMapKeyRef != nil {
-		ref := file.Source.ConfigMapKeyRef
-		cm := &corev1.ConfigMap{}
-		if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, cm); err != nil {
-			if ref.Optional != nil && *ref.Optional {
-				return "", nil
-			}
-			return "", err
-		}
-		if content, ok := cm.Data[ref.Key]; ok {
-			return content, nil
-		}
-		if ref.Optional != nil && *ref.Optional {
-			return "", nil
-		}
-		return "", fmt.Errorf("key %s not found in ConfigMap %s", ref.Key, ref.Name)
-	}
-
-	// ConfigMapRef is handled separately in processContexts as a directory mount
-	return "", nil
 }
 
 // buildJob creates a Job object for the task with context mounts

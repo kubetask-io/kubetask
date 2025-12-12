@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR 0004: Context as Standalone CRD](0004-context-as-standalone-crd.md)
 
 ## Context
 

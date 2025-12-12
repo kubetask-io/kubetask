@@ -52,6 +52,7 @@ var _ = Describe("CronTask E2E Tests", func() {
 	Context("CronTask basic functionality", func() {
 		It("should create Tasks on schedule", func() {
 			cronTaskName := uniqueName("crontask-basic")
+			description := "# Scheduled Task\nThis is a test from CronTask."
 
 			By("Creating a CronTask with every-minute schedule")
 			cronTask := &kubetaskv1alpha1.CronTask{
@@ -64,18 +65,8 @@ var _ = Describe("CronTask E2E Tests", func() {
 					ConcurrencyPolicy: kubetaskv1alpha1.ForbidConcurrent,
 					TaskTemplate: kubetaskv1alpha1.TaskTemplateSpec{
 						Spec: kubetaskv1alpha1.TaskSpec{
-							AgentRef: agentName,
-							Contexts: []kubetaskv1alpha1.Context{
-								{
-									Type: kubetaskv1alpha1.ContextTypeFile,
-									File: &kubetaskv1alpha1.FileContext{
-										FilePath: "/workspace/task.md",
-										Source: kubetaskv1alpha1.FileSource{
-											Inline: strPtr("# Scheduled Task\nThis is a test from CronTask."),
-										},
-									},
-								},
-							},
+							AgentRef:    agentName,
+							Description: &description,
 						},
 					},
 				},
@@ -127,6 +118,7 @@ var _ = Describe("CronTask E2E Tests", func() {
 	Context("CronTask suspend functionality", func() {
 		It("should not create Tasks when suspended", func() {
 			cronTaskName := uniqueName("crontask-suspend")
+			description := "This should not run"
 
 			By("Creating a suspended CronTask")
 			suspended := true
@@ -141,18 +133,8 @@ var _ = Describe("CronTask E2E Tests", func() {
 					ConcurrencyPolicy: kubetaskv1alpha1.ForbidConcurrent,
 					TaskTemplate: kubetaskv1alpha1.TaskTemplateSpec{
 						Spec: kubetaskv1alpha1.TaskSpec{
-							AgentRef: agentName,
-							Contexts: []kubetaskv1alpha1.Context{
-								{
-									Type: kubetaskv1alpha1.ContextTypeFile,
-									File: &kubetaskv1alpha1.FileContext{
-										FilePath: "/workspace/task.md",
-										Source: kubetaskv1alpha1.FileSource{
-											Inline: strPtr("This should not run"),
-										},
-									},
-								},
-							},
+							AgentRef:    agentName,
+							Description: &description,
 						},
 					},
 				},
@@ -194,6 +176,7 @@ var _ = Describe("CronTask E2E Tests", func() {
 	Context("CronTask history limits", func() {
 		It("should respect history limits and clean up old Tasks", func() {
 			cronTaskName := uniqueName("crontask-history")
+			description := "History limit test"
 
 			By("Creating a CronTask with low history limits")
 			successLimit := int32(2)
@@ -210,18 +193,8 @@ var _ = Describe("CronTask E2E Tests", func() {
 					FailedTasksHistoryLimit:     &failedLimit,
 					TaskTemplate: kubetaskv1alpha1.TaskTemplateSpec{
 						Spec: kubetaskv1alpha1.TaskSpec{
-							AgentRef: agentName,
-							Contexts: []kubetaskv1alpha1.Context{
-								{
-									Type: kubetaskv1alpha1.ContextTypeFile,
-									File: &kubetaskv1alpha1.FileContext{
-										FilePath: "/workspace/task.md",
-										Source: kubetaskv1alpha1.FileSource{
-											Inline: strPtr("History limit test"),
-										},
-									},
-								},
-							},
+							AgentRef:    agentName,
+							Description: &description,
 						},
 					},
 				},

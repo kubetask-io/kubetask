@@ -44,6 +44,7 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks using Cust
 |----------|---------|-----------|
 | **Task** | Single task execution (primary API) | Stable - semantic name |
 | **CronTask** | Scheduled/recurring task execution | Stable - follows K8s CronJob pattern |
+| **Context** | Reusable context for AI agents (KNOW) | Stable - Context Engineering support |
 | **Agent** | AI agent configuration (HOW to execute) | Stable - independent of project name |
 | **KubeTaskConfig** | System-level configuration (TTL, lifecycle) | Stable - system settings |
 
@@ -82,13 +83,21 @@ kind: Agent
 ```
 Task (single task execution)
 ├── TaskSpec
-│   ├── contexts: []Context
+│   ├── description: *string         (syntactic sugar for /workspace/task.md)
+│   ├── contexts: []ContextMount     (references to Context CRDs)
 │   └── agentRef: string
 └── TaskExecutionStatus
     ├── phase: TaskPhase
     ├── jobName: string
     ├── startTime: Time
     └── completionTime: Time
+
+Context (reusable context resource)
+└── ContextSpec
+    ├── type: ContextType (Inline, ConfigMap, Git)
+    ├── inline: *InlineContext
+    ├── configMap: *ConfigMapContext
+    └── git: *GitContext
 
 CronTask (scheduled task execution)
 ├── CronTaskSpec
@@ -109,10 +118,9 @@ Agent (execution configuration)
     ├── agentImage: string
     ├── command: []string
     ├── humanInTheLoop: *HumanInTheLoop
-    ├── defaultContexts: []Context
+    ├── contexts: []ContextMount     (references to Context CRDs)
     ├── credentials: []Credential
-    ├── podLabels: map[string]string
-    ├── scheduling: *PodScheduling
+    ├── podSpec: *AgentPodSpec
     └── serviceAccountName: string
 
 KubeTaskConfig (system configuration)
@@ -131,8 +139,16 @@ type Task struct {
 }
 
 type TaskSpec struct {
-    Contexts []Context
-    AgentRef string  // Reference to Agent
+    Description *string        // Syntactic sugar for /workspace/task.md
+    Contexts    []ContextMount // References to Context CRDs
+    AgentRef    string         // Reference to Agent
+}
+
+// ContextMount references a Context and specifies how to mount it
+type ContextMount struct {
+    Name      string // Name of the Context
+    Namespace string // Optional, defaults to Task's namespace
+    MountPath string // Empty = append to /workspace/task.md with XML tags
 }
 
 type TaskExecutionStatus struct {
@@ -177,6 +193,41 @@ type CronTaskStatus struct {
     Conditions         []metav1.Condition
 }
 
+// Context represents a reusable context resource
+type Context struct {
+    Spec ContextSpec
+}
+
+type ContextSpec struct {
+    Type      ContextType       // Inline, ConfigMap, or Git
+    Inline    *InlineContext    // Inline content
+    ConfigMap *ConfigMapContext // Reference to ConfigMap
+    Git       *GitContext       // Content from Git repository
+}
+
+type ContextType string
+const (
+    ContextTypeInline    ContextType = "Inline"
+    ContextTypeConfigMap ContextType = "ConfigMap"
+    ContextTypeGit       ContextType = "Git"
+)
+
+type InlineContext struct {
+    Content string // Content to mount as a file
+}
+
+type ConfigMapContext struct {
+    Name     string // Name of the ConfigMap
+    Key      string // Optional: specific key to mount
+    Optional *bool  // Whether the ConfigMap must exist
+}
+
+type GitContext struct {
+    Repository string // Git repository URL
+    Path       string // Path within the repository
+    Ref        string // Branch, tag, or commit SHA
+}
+
 // Agent defines the AI agent configuration
 type Agent struct {
     Spec AgentSpec
@@ -184,12 +235,11 @@ type Agent struct {
 
 type AgentSpec struct {
     AgentImage         string
-    Command            []string          // Custom entrypoint command
-    HumanInTheLoop     *HumanInTheLoop   // Keep container alive after task completion
-    DefaultContexts    []Context
+    Command            []string        // Custom entrypoint command
+    HumanInTheLoop     *HumanInTheLoop // Keep container alive after task completion
+    Contexts           []ContextMount  // References to Context CRDs
     Credentials        []Credential
-    PodLabels          map[string]string
-    Scheduling         *PodScheduling
+    PodSpec            *AgentPodSpec   // Pod configuration (labels, scheduling, runtime)
     ServiceAccountName string
 }
 
@@ -210,29 +260,6 @@ type KubeTaskConfigSpec struct {
 
 type TaskLifecycleConfig struct {
     TTLSecondsAfterFinished *int32  // TTL for completed/failed tasks (default: 604800 = 7 days)
-}
-
-// Context system
-type Context struct {
-    Type ContextType
-    File *FileContext
-}
-
-type ContextType string
-const (
-    ContextTypeFile ContextType = "File"
-)
-
-type FileContext struct {
-    FilePath string  // For single file
-    DirPath  string  // For directory (with ConfigMapRef)
-    Source   FileSource
-}
-
-type FileSource struct {
-    Inline          *string
-    ConfigMapKeyRef *ConfigMapKeySelector
-    ConfigMapRef    *ConfigMapReference  // For directory mount
 }
 ```
 
@@ -301,33 +328,17 @@ metadata:
   name: update-service-a
   namespace: kubetask-system
 spec:
-  # Contexts defines what this task operates on
+  # Simple task description (syntactic sugar for /workspace/task.md)
+  description: |
+    Update dependencies to latest versions.
+    Run tests and create PR.
+
+  # Reference reusable Context CRDs
   contexts:
-    # File context - task description (inline)
-    - type: File
-      file:
-        filePath: /workspace/task.md
-        source:
-          inline: |
-            Update dependencies to latest versions.
-            Run tests and create PR.
-
-    # File context - from ConfigMap key
-    - type: File
-      file:
-        filePath: /workspace/guide.md
-        source:
-          configMapKeyRef:
-            name: workflow-guides
-            key: standard-pr-workflow.md
-
-    # Directory context - mount entire ConfigMap as directory
-    - type: File
-      file:
-        dirPath: /workspace/configs
-        source:
-          configMapRef:
-            name: my-configs  # All keys become files
+    - name: coding-standards
+      mountPath: /workspace/guides/standards.md
+    - name: security-policy
+      # Empty mountPath = append to task.md with XML tags
 
   # Optional: Reference to Agent (defaults to "default")
   agentRef: my-agent
@@ -348,7 +359,8 @@ status:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `spec.contexts` | []Context | Yes | List of contexts (files) |
+| `spec.description` | String | No | Task instruction (creates /workspace/task.md) |
+| `spec.contexts` | []ContextMount | No | References to reusable Context CRDs |
 | `spec.agentRef` | String | No | Reference to Agent (default: "default") |
 
 **Status Field Description:**
@@ -418,12 +430,7 @@ spec:
       labels:
         app: daily-report
     spec:
-      contexts:
-        - type: File
-          file:
-            filePath: /workspace/task.md
-            source:
-              inline: "Generate daily status report"
+      description: "Generate daily status report"
       agentRef: claude
 
 status:
@@ -469,6 +476,73 @@ status:
 
 Created Tasks are named `{crontask-name}-{unix-timestamp}` (e.g., `daily-report-1733846400`).
 
+### Context (Reusable Context)
+
+Context represents a reusable context resource for AI agent tasks. Context CRDs enable:
+- **Reusability**: Share the same context across multiple Tasks
+- **Independent lifecycle**: Update context without modifying Tasks
+- **Version control**: Track context changes in Git
+- **Separation of concerns**: Context content vs. mount location
+
+Context supports three source types:
+- **Inline**: Content directly in YAML
+- **ConfigMap**: Reference to a ConfigMap (key or entire ConfigMap)
+- **Git**: Content from a Git repository (future)
+
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: coding-standards
+  namespace: kubetask-system
+spec:
+  # Type of context: Inline, ConfigMap, or Git
+  type: Inline
+
+  # Inline content
+  inline:
+    content: |
+      # Coding Standards
+      - Use descriptive variable names
+      - Write unit tests for all functions
+      - Follow Go conventions
+```
+
+**Context from ConfigMap:**
+
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: security-policy
+spec:
+  type: ConfigMap
+  configMap:
+    name: org-policies
+    key: security.md
+```
+
+**Field Description:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.type` | ContextType | Yes | Type of context: Inline, ConfigMap, or Git |
+| `spec.inline` | InlineContext | When type=Inline | Inline content |
+| `spec.configMap` | ConfigMapContext | When type=ConfigMap | Reference to ConfigMap |
+| `spec.git` | GitContext | When type=Git | Content from Git repository (future) |
+
+**Important Notes:**
+
+- **No mount path in Context**: The mount path is defined by the referencing Task/Agent via `ContextMount.mountPath`
+- **No Status**: Context is a pure data resource (like ConfigMap) with no controller reconciliation
+- **Empty MountPath behavior**: When `ContextMount.mountPath` is empty, content is appended to `/workspace/task.md` with XML tags
+
+**Context Priority (lowest to highest):**
+
+1. Agent.contexts (referenced Context CRDs)
+2. Task.contexts (referenced Context CRDs)
+3. Task.description (becomes start of /workspace/task.md)
+
 ### Agent (Execution Configuration)
 
 Agent defines the AI agent configuration for task execution.
@@ -491,15 +565,11 @@ spec:
     enabled: true
     keepAliveSeconds: 3600  # Default: 3600 (1 hour)
 
-  # Optional: Default contexts for all tasks using this agent
-  defaultContexts:
-    - type: File
-      file:
-        filePath: /workspace/org-guidelines.md
-        source:
-          configMapKeyRef:
-            name: org-configs
-            key: guidelines.md
+  # Optional: Reference reusable Context CRDs (applied to all tasks using this agent)
+  contexts:
+    - name: org-coding-standards
+      # Empty mountPath = append to task.md with XML tags
+    - name: org-security-policy
 
   # Optional: Credentials (secrets as env vars or file mounts)
   credentials:
@@ -546,7 +616,7 @@ spec:
 | `spec.agentImage` | String | No | Agent container image |
 | `spec.command` | []String | No | Custom entrypoint command (required for humanInTheLoop) |
 | `spec.humanInTheLoop` | *HumanInTheLoop | No | Keep container alive after completion |
-| `spec.defaultContexts` | []Context | No | Default contexts for all tasks |
+| `spec.contexts` | []ContextMount | No | References to reusable Context CRDs (applied to all tasks) |
 | `spec.credentials` | []Credential | No | Secrets as env vars or file mounts |
 | `spec.podSpec` | *AgentPodSpec | No | Advanced Pod configuration (labels, scheduling, runtimeClass) |
 | `spec.serviceAccountName` | String | Yes | ServiceAccount for agent pods |
@@ -609,10 +679,23 @@ The controller:
 
 ### Context Priority
 
-When a Task references an Agent with `defaultContexts`, contexts are merged:
+When a Task references an Agent, contexts are merged with the following priority (lowest to highest):
 
-1. **Agent.defaultContexts** (base layer, lowest priority)
-2. **Task.contexts** (task-specific, highest priority)
+1. **Agent.contexts** (referenced Context CRDs, lowest priority)
+2. **Task.contexts** (referenced Context CRDs)
+3. **Task.description** (highest priority, becomes start of /workspace/task.md)
+
+**Empty MountPath Behavior:**
+
+When `ContextMount.mountPath` is empty, the context content is appended to `/workspace/task.md` with XML tags:
+
+```xml
+<context name="coding-standards" namespace="default" type="Inline">
+... content ...
+</context>
+```
+
+This enables multiple contexts to be aggregated into a single file that the agent reads.
 
 ---
 

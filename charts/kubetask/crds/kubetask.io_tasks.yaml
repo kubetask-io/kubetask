@@ -58,86 +58,53 @@ spec:
                 type: string
               contexts:
                 description: |-
-                  Contexts defines what this task operates on
-                  This includes files, repositories, and other context types
-                  Example: [task.md file, guide.md file, repository context]
+                  Contexts references Context CRDs to include in this task.
+                  Each ContextMount specifies which Context to use and where to mount it.
+
+                  Context priority (lowest to highest):
+                    1. Agent.contexts (Agent-level defaults)
+                    2. Task.contexts (Task-specific contexts)
+                    3. Task.description (highest, becomes /workspace/task.md)
                 items:
                   description: |-
-                    Context represents different types of task inputs
-                    This is a polymorphic type that can represent File, MCP, etc.
+                    ContextMount references a Context resource and specifies how to mount it.
+                    This allows the same Context to be mounted at different paths by different Tasks.
                   properties:
-                    file:
-                      description: File context (required when Type == "File")
-                      properties:
-                        dirPath:
-                          description: |-
-                            DirPath is the directory path where files will be mounted in the agent pod.
-                            Use this with ConfigMapRef to mount all keys in a ConfigMap as files.
-                            Example: "/workspace/docs" - each key in the ConfigMap becomes a file.
-                            Either FilePath or DirPath must be specified, but not both.
-                          type: string
-                        filePath:
-                          description: |-
-                            FilePath is the full path where this file will be mounted in the agent pod.
-                            Use this for single file content (with Inline or ConfigMapKeyRef source).
-                            Multiple contexts with the same FilePath will be aggregated into a single file.
-                            Example: "/workspace/task.md", "/workspace/config/settings.json"
-                            Either FilePath or DirPath must be specified, but not both.
-                          type: string
-                        source:
-                          description: File content source (exactly one must be specified)
-                          properties:
-                            configMapKeyRef:
-                              description: Reference to a key in a ConfigMap (use
-                                with FilePath)
-                              properties:
-                                key:
-                                  description: Key of the ConfigMap to select from
-                                  type: string
-                                name:
-                                  description: Name of the ConfigMap
-                                  type: string
-                                optional:
-                                  description: Specify whether the ConfigMap must
-                                    be defined
-                                  type: boolean
-                              required:
-                              - key
-                              - name
-                              type: object
-                            configMapRef:
-                              description: |-
-                                Reference to an entire ConfigMap (use with DirPath)
-                                All keys in the ConfigMap will be mounted as files in the directory.
-                              properties:
-                                name:
-                                  description: Name of the ConfigMap
-                                  type: string
-                                optional:
-                                  description: Specify whether the ConfigMap must
-                                    be defined
-                                  type: boolean
-                              required:
-                              - name
-                              type: object
-                            inline:
-                              description: Inline content (use with FilePath)
-                              type: string
-                          type: object
-                      required:
-                      - source
-                      type: object
-                    type:
-                      description: 'Type of context: File, MCP, etc.'
-                      enum:
-                      - File
+                    mountPath:
+                      description: |-
+                        MountPath specifies where this context should be mounted in the agent pod.
+                        If specified, the context content is written to this file path.
+                        Example: "/workspace/guides/coding-standards.md"
+
+                        If NOT specified (empty), the context content is appended to /workspace/task.md
+                        in a structured XML format:
+                          <context name="coding-standards" namespace="default" type="File">
+                          ... content ...
+                          </context>
+
+                        This allows multiple contexts to be aggregated into a single task.md file,
+                        which the agent can parse and understand.
+                      type: string
+                    name:
+                      description: Name of the Context resource
+                      type: string
+                    namespace:
+                      description: Namespace of the Context (optional, defaults to
+                        the referencing resource's namespace)
                       type: string
                   required:
-                  - type
+                  - name
                   type: object
                 type: array
-            required:
-            - contexts
+              description:
+                description: |-
+                  Description is the task instruction/prompt.
+                  The controller creates /workspace/task.md with this content.
+                  This is the primary way to tell the agent what to do.
+
+                  Example:
+                    description: "Update all dependencies and create a PR"
+                type: string
             type: object
           status:
             description: Status represents the current status of the Task

@@ -1,0 +1,124 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.5
+  name: contexts.kubetask.io
+spec:
+  group: kubetask.io
+  names:
+    kind: Context
+    listKind: ContextList
+    plural: contexts
+    singular: context
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Context represents a reusable context resource for AI agent tasks.
+          Context is the top-level API for managing reusable context content that can be
+          shared across multiple Tasks and Agents.
+
+          Unlike inline contexts (ContextItem), Context CRs enable:
+            - Reusability: Share the same context across multiple Tasks
+            - Independent lifecycle: Update context without modifying Tasks
+            - Version control: Track context changes in Git
+            - Separation of concerns: Context content vs. mount location
+
+          The mount path is NOT defined in Context - it's specified by the referencing
+          Task or Agent via ContextMount.mountPath. This allows the same Context to be
+          mounted at different paths by different consumers.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the context configuration
+            properties:
+              configMap:
+                description: ConfigMap context (required when Type == "ConfigMap")
+                properties:
+                  key:
+                    description: |-
+                      Key specifies a single key to mount as a file.
+                      If not specified, all keys are mounted as files in the directory.
+                    type: string
+                  name:
+                    description: Name of the ConfigMap
+                    type: string
+                  optional:
+                    description: Optional specifies whether the ConfigMap must exist.
+                    type: boolean
+                required:
+                - name
+                type: object
+              git:
+                description: Git context (required when Type == "Git")
+                properties:
+                  path:
+                    description: |-
+                      Path is the path within the repository to mount.
+                      Can be a file or directory.
+                      Example: ".claude/", "docs/guide.md"
+                    type: string
+                  ref:
+                    description: |-
+                      Ref is the Git reference (branch, tag, or commit SHA).
+                      Defaults to "main" if not specified.
+                    type: string
+                  repository:
+                    description: |-
+                      Repository is the Git repository URL.
+                      Example: "https://github.com/org/contexts"
+                    type: string
+                required:
+                - repository
+                type: object
+              inline:
+                description: Inline context (required when Type == "Inline")
+                properties:
+                  content:
+                    description: Content is the inline content to mount as a file.
+                    type: string
+                required:
+                - content
+                type: object
+              type:
+                description: 'Type of context source: Inline, ConfigMap, or Git'
+                enum:
+                - Inline
+                - ConfigMap
+                - Git
+                - Ref
+                type: string
+            required:
+            - type
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

@@ -68,6 +68,49 @@ spec:
                 items:
                   type: string
                 type: array
+              contexts:
+                description: |-
+                  Contexts references Context CRDs as defaults for all tasks using this Agent.
+                  These have the lowest priority in context merging.
+
+                  Context priority (lowest to highest):
+                    1. Agent.contexts (Agent-level defaults)
+                    2. Task.contexts (Task-specific contexts)
+                    3. Task.description/descriptionRef (highest, becomes /workspace/task.md)
+
+                  Use this for organization-wide defaults like coding standards, security policies,
+                  or common tool configurations that should apply to all tasks.
+                items:
+                  description: |-
+                    ContextMount references a Context resource and specifies how to mount it.
+                    This allows the same Context to be mounted at different paths by different Tasks.
+                  properties:
+                    mountPath:
+                      description: |-
+                        MountPath specifies where this context should be mounted in the agent pod.
+                        If specified, the context content is written to this file path.
+                        Example: "/workspace/guides/coding-standards.md"
+
+                        If NOT specified (empty), the context content is appended to /workspace/task.md
+                        in a structured XML format:
+                          <context name="coding-standards" namespace="default" type="File">
+                          ... content ...
+                          </context>
+
+                        This allows multiple contexts to be aggregated into a single task.md file,
+                        which the agent can parse and understand.
+                      type: string
+                    name:
+                      description: Name of the Context resource
+                      type: string
+                    namespace:
+                      description: Namespace of the Context (optional, defaults to
+                        the referencing resource's namespace)
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
               credentials:
                 description: |-
                   Credentials defines secrets that should be available to the agent.
@@ -125,93 +168,6 @@ spec:
                   required:
                   - name
                   - secretRef
-                  type: object
-                type: array
-              defaultContexts:
-                description: |-
-                  DefaultContexts defines the base-level contexts that are included in all tasks
-                  using this Agent. These contexts are applied at the lowest priority,
-                  meaning task-specific contexts take precedence.
-
-                  Context priority (lowest to highest):
-                    1. Agent.defaultContexts (base layer)
-                    2. Task.contexts (task-specific contexts)
-
-                  Use this for organization-wide defaults like coding standards, security policies,
-                  or common tool configurations that should apply to all tasks.
-                items:
-                  description: |-
-                    Context represents different types of task inputs
-                    This is a polymorphic type that can represent File, MCP, etc.
-                  properties:
-                    file:
-                      description: File context (required when Type == "File")
-                      properties:
-                        dirPath:
-                          description: |-
-                            DirPath is the directory path where files will be mounted in the agent pod.
-                            Use this with ConfigMapRef to mount all keys in a ConfigMap as files.
-                            Example: "/workspace/docs" - each key in the ConfigMap becomes a file.
-                            Either FilePath or DirPath must be specified, but not both.
-                          type: string
-                        filePath:
-                          description: |-
-                            FilePath is the full path where this file will be mounted in the agent pod.
-                            Use this for single file content (with Inline or ConfigMapKeyRef source).
-                            Multiple contexts with the same FilePath will be aggregated into a single file.
-                            Example: "/workspace/task.md", "/workspace/config/settings.json"
-                            Either FilePath or DirPath must be specified, but not both.
-                          type: string
-                        source:
-                          description: File content source (exactly one must be specified)
-                          properties:
-                            configMapKeyRef:
-                              description: Reference to a key in a ConfigMap (use
-                                with FilePath)
-                              properties:
-                                key:
-                                  description: Key of the ConfigMap to select from
-                                  type: string
-                                name:
-                                  description: Name of the ConfigMap
-                                  type: string
-                                optional:
-                                  description: Specify whether the ConfigMap must
-                                    be defined
-                                  type: boolean
-                              required:
-                              - key
-                              - name
-                              type: object
-                            configMapRef:
-                              description: |-
-                                Reference to an entire ConfigMap (use with DirPath)
-                                All keys in the ConfigMap will be mounted as files in the directory.
-                              properties:
-                                name:
-                                  description: Name of the ConfigMap
-                                  type: string
-                                optional:
-                                  description: Specify whether the ConfigMap must
-                                    be defined
-                                  type: boolean
-                              required:
-                              - name
-                              type: object
-                            inline:
-                              description: Inline content (use with FilePath)
-                              type: string
-                          type: object
-                      required:
-                      - source
-                      type: object
-                    type:
-                      description: 'Type of context: File, MCP, etc.'
-                      enum:
-                      - File
-                      type: string
-                  required:
-                  - type
                   type: object
                 type: array
               humanInTheLoop:

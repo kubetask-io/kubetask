@@ -49,30 +49,20 @@ var _ = Describe("Task E2E Tests", func() {
 		}
 	})
 
-	Context("Task with inline context using echo agent", func() {
+	Context("Task with description using echo agent", func() {
 		It("should create a Job that echoes task content and complete successfully", func() {
 			taskName := uniqueName("task-echo")
 			taskContent := "# Hello E2E Test\n\nThis is a test task for the echo agent.\n\n## Expected Output\nThe echo agent should display this content."
 
-			By("Creating a Task with inline content")
+			By("Creating a Task with description")
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &taskContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &taskContent,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -127,48 +117,81 @@ var _ = Describe("Task E2E Tests", func() {
 		})
 	})
 
-	Context("Task with multiple file contexts", func() {
-		It("should mount multiple files and complete successfully", func() {
+	Context("Task with multiple Context CRD references", func() {
+		It("should mount multiple contexts and complete successfully", func() {
 			taskName := uniqueName("task-multi")
+			contextName1 := uniqueName("intro-context")
+			contextName2 := uniqueName("details-context")
+			contextName3 := uniqueName("conclusion-context")
 			content1 := "# Part 1: Introduction\n\nThis is the introduction."
 			content2 := "# Part 2: Details\n\nThese are the details."
 			content3 := "# Part 3: Conclusion\n\nThis is the conclusion."
+			description := "Review these documents"
 
-			By("Creating a Task with multiple contexts")
+			By("Creating Context CRDs")
+			ctx1 := &kubetaskv1alpha1.Context{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      contextName1,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeInline,
+					Inline: &kubetaskv1alpha1.InlineContext{
+						Content: content1,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ctx1)).Should(Succeed())
+
+			ctx2 := &kubetaskv1alpha1.Context{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      contextName2,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeInline,
+					Inline: &kubetaskv1alpha1.InlineContext{
+						Content: content2,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ctx2)).Should(Succeed())
+
+			ctx3 := &kubetaskv1alpha1.Context{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      contextName3,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeInline,
+					Inline: &kubetaskv1alpha1.InlineContext{
+						Content: content3,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ctx3)).Should(Succeed())
+
+			By("Creating a Task with multiple Context references")
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
+					AgentRef:    agentName,
+					Description: &description,
+					Contexts: []kubetaskv1alpha1.ContextMount{
 						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/intro.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &content1,
-								},
-							},
+							Name:      contextName1,
+							MountPath: "/workspace/intro.md",
 						},
 						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/details.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &content2,
-								},
-							},
+							Name:      contextName2,
+							MountPath: "/workspace/details.md",
 						},
 						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/conclusion.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &content3,
-								},
-							},
+							Name:      contextName3,
+							MountPath: "/workspace/conclusion.md",
 						},
 					},
 				},
@@ -194,14 +217,19 @@ var _ = Describe("Task E2E Tests", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, ctx1)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, ctx2)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, ctx3)).Should(Succeed())
 		})
 	})
 
-	Context("Task with context from ConfigMap", func() {
+	Context("Task with Context from ConfigMap", func() {
 		It("should resolve content from ConfigMap and pass to agent", func() {
 			taskName := uniqueName("task-cm")
 			configMapName := uniqueName("task-content-cm")
+			contextName := uniqueName("cm-context")
 			configMapContent := "# ConfigMap Content\n\nThis content comes from a ConfigMap.\n\n## Verification\nIf you see this, ConfigMap resolution works!"
+			description := "Test ConfigMap context"
 
 			By("Creating ConfigMap with task content")
 			cm := &corev1.ConfigMap{
@@ -210,31 +238,40 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Data: map[string]string{
-					"task.md": configMapContent,
+					"content.md": configMapContent,
 				},
 			}
 			Expect(k8sClient.Create(ctx, cm)).Should(Succeed())
 
-			By("Creating Task referencing ConfigMap")
+			By("Creating Context CRD referencing ConfigMap")
+			context := &kubetaskv1alpha1.Context{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      contextName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeConfigMap,
+					ConfigMap: &kubetaskv1alpha1.ConfigMapContext{
+						Name: configMapName,
+						Key:  "content.md",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, context)).Should(Succeed())
+
+			By("Creating Task referencing Context")
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
+					AgentRef:    agentName,
+					Description: &description,
+					Contexts: []kubetaskv1alpha1.ContextMount{
 						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									ConfigMapKeyRef: &kubetaskv1alpha1.ConfigMapKeySelector{
-										Name: configMapName,
-										Key:  "task.md",
-									},
-								},
-							},
+							Name:      contextName,
+							MountPath: "/workspace/guides/content.md",
 						},
 					},
 				},
@@ -259,18 +296,52 @@ var _ = Describe("Task E2E Tests", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, context)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, cm)).Should(Succeed())
 		})
 	})
 
-	Context("Task with Agent defaultContexts", func() {
-		It("should merge defaultContexts with task contexts", func() {
+	Context("Task with Agent contexts", func() {
+		It("should merge agent contexts with task contexts", func() {
 			taskName := uniqueName("task-default-ctx")
 			customWSConfigName := uniqueName("ws-default-ctx")
+			agentContextName := uniqueName("agent-ctx")
+			taskContextName := uniqueName("task-ctx")
 			defaultContent := "# Default Guidelines\n\nThese are organization-wide default guidelines."
-			taskContent := "# Specific Task\n\nThis is the specific task to execute."
+			taskContextContent := "# Additional Context\n\nThis is additional context from the task."
+			taskDescription := "# Specific Task\n\nThis is the specific task to execute."
 
-			By("Creating Agent with defaultContexts")
+			By("Creating Agent Context CRD")
+			agentContext := &kubetaskv1alpha1.Context{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentContextName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeInline,
+					Inline: &kubetaskv1alpha1.InlineContext{
+						Content: defaultContent,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agentContext)).Should(Succeed())
+
+			By("Creating Task Context CRD")
+			taskContext := &kubetaskv1alpha1.Context{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskContextName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeInline,
+					Inline: &kubetaskv1alpha1.InlineContext{
+						Content: taskContextContent,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, taskContext)).Should(Succeed())
+
+			By("Creating Agent with contexts")
 			customWSConfig := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      customWSConfigName,
@@ -279,15 +350,10 @@ var _ = Describe("Task E2E Tests", func() {
 				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
-					DefaultContexts: []kubetaskv1alpha1.Context{
+					Contexts: []kubetaskv1alpha1.ContextMount{
 						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/guidelines.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &defaultContent,
-								},
-							},
+							Name: agentContextName,
+							// No mountPath - should be appended to task.md
 						},
 					},
 				},
@@ -301,16 +367,12 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: customWSConfigName,
-					Contexts: []kubetaskv1alpha1.Context{
+					AgentRef:    customWSConfigName,
+					Description: &taskDescription,
+					Contexts: []kubetaskv1alpha1.ContextMount{
 						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &taskContent,
-								},
-							},
+							Name: taskContextName,
+							// No mountPath - should be appended to task.md
 						},
 					},
 				},
@@ -332,10 +394,13 @@ var _ = Describe("Task E2E Tests", func() {
 			logs := getPodLogs(ctx, testNS, jobName)
 			Expect(logs).Should(ContainSubstring("Default Guidelines"))
 			Expect(logs).Should(ContainSubstring("Specific Task"))
+			Expect(logs).Should(ContainSubstring("Additional Context"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, customWSConfig)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agentContext)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, taskContext)).Should(Succeed())
 		})
 	})
 
@@ -351,18 +416,8 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &taskContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &taskContent,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -415,18 +470,8 @@ var _ = Describe("Task E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &taskContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &taskContent,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())

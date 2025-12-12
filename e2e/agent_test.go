@@ -50,18 +50,8 @@ var _ = Describe("Agent E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &content,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &content,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -137,18 +127,8 @@ var _ = Describe("Agent E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &content,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &content,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -224,18 +204,8 @@ var _ = Describe("Agent E2E Tests", func() {
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &content,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &content,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -284,17 +254,7 @@ var _ = Describe("Agent E2E Tests", func() {
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
 					// AgentRef is NOT specified
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &content,
-								},
-							},
-						},
-					},
+					Description: &content,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())

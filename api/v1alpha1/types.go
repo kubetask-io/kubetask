@@ -8,71 +8,104 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ContextType defines the type of context
-// +kubebuilder:validation:Enum=File
+// ContextType defines the type of context source
+// +kubebuilder:validation:Enum=Inline;ConfigMap;Git;Ref
 type ContextType string
 
 const (
-	// ContextTypeFile represents a file context (task.md, guide.md, etc.)
-	ContextTypeFile ContextType = "File"
+	// ContextTypeInline represents inline content
+	ContextTypeInline ContextType = "Inline"
 
-	// Future context types:
-	// ContextTypeMCP ContextType = "MCP"
+	// ContextTypeConfigMap represents content from a ConfigMap
+	ContextTypeConfigMap ContextType = "ConfigMap"
+
+	// ContextTypeGit represents content from a Git repository
+	ContextTypeGit ContextType = "Git"
 )
 
-// Context represents different types of task inputs
-// This is a polymorphic type that can represent File, MCP, etc.
-type Context struct {
-	// Type of context: File, MCP, etc.
+// InlineContext provides content directly in the YAML.
+type InlineContext struct {
+	// Content is the inline content to mount as a file.
 	// +required
-	Type ContextType `json:"type"`
-
-	// File context (required when Type == "File")
-	// +optional
-	File *FileContext `json:"file,omitempty"`
-
-	// Future context types can be added here:
-	// MCP *MCPContext `json:"mcp,omitempty"`
+	Content string `json:"content"`
 }
 
-// FileContext represents a file or directory with content from various sources.
-// Use FilePath for single files (with Inline or ConfigMapKeyRef source).
-// Use DirPath for directories (with ConfigMapRef source - all keys become files).
-type FileContext struct {
-	// FilePath is the full path where this file will be mounted in the agent pod.
-	// Use this for single file content (with Inline or ConfigMapKeyRef source).
-	// Multiple contexts with the same FilePath will be aggregated into a single file.
-	// Example: "/workspace/task.md", "/workspace/config/settings.json"
-	// Either FilePath or DirPath must be specified, but not both.
-	// +optional
-	FilePath string `json:"filePath,omitempty"`
-
-	// DirPath is the directory path where files will be mounted in the agent pod.
-	// Use this with ConfigMapRef to mount all keys in a ConfigMap as files.
-	// Example: "/workspace/docs" - each key in the ConfigMap becomes a file.
-	// Either FilePath or DirPath must be specified, but not both.
-	// +optional
-	DirPath string `json:"dirPath,omitempty"`
-
-	// File content source (exactly one must be specified)
+// ConfigMapContext references a ConfigMap for context content.
+type ConfigMapContext struct {
+	// Name of the ConfigMap
 	// +required
-	Source FileSource `json:"source"`
+	Name string `json:"name"`
+
+	// Key specifies a single key to mount as a file.
+	// If not specified, all keys are mounted as files in the directory.
+	// +optional
+	Key string `json:"key,omitempty"`
+
+	// Optional specifies whether the ConfigMap must exist.
+	// +optional
+	Optional *bool `json:"optional,omitempty"`
 }
 
-// FileSource represents a source for file content
+// GitContext references content from a Git repository.
+type GitContext struct {
+	// Repository is the Git repository URL.
+	// Example: "https://github.com/org/contexts"
+	// +required
+	Repository string `json:"repository"`
+
+	// Path is the path within the repository to mount.
+	// Can be a file or directory.
+	// Example: ".claude/", "docs/guide.md"
+	// +optional
+	Path string `json:"path,omitempty"`
+
+	// Ref is the Git reference (branch, tag, or commit SHA).
+	// Defaults to "main" if not specified.
+	// +optional
+	Ref string `json:"ref,omitempty"`
+}
+
+// FileSource represents a source for file content (used in Context CRD)
 type FileSource struct {
-	// Inline content (use with FilePath)
+	// Inline content
 	// +optional
 	Inline *string `json:"inline,omitempty"`
 
-	// Reference to a key in a ConfigMap (use with FilePath)
+	// Reference to a key in a ConfigMap
 	// +optional
 	ConfigMapKeyRef *ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 
-	// Reference to an entire ConfigMap (use with DirPath)
+	// Reference to an entire ConfigMap
 	// All keys in the ConfigMap will be mounted as files in the directory.
 	// +optional
 	ConfigMapRef *ConfigMapReference `json:"configMapRef,omitempty"`
+}
+
+// ContextMount references a Context resource and specifies how to mount it.
+// This allows the same Context to be mounted at different paths by different Tasks.
+type ContextMount struct {
+	// Name of the Context resource
+	// +required
+	Name string `json:"name"`
+
+	// Namespace of the Context (optional, defaults to the referencing resource's namespace)
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// MountPath specifies where this context should be mounted in the agent pod.
+	// If specified, the context content is written to this file path.
+	// Example: "/workspace/guides/coding-standards.md"
+	//
+	// If NOT specified (empty), the context content is appended to /workspace/task.md
+	// in a structured XML format:
+	//   <context name="coding-standards" namespace="default" type="File">
+	//   ... content ...
+	//   </context>
+	//
+	// This allows multiple contexts to be aggregated into a single task.md file,
+	// which the agent can parse and understand.
+	// +optional
+	MountPath string `json:"mountPath,omitempty"`
 }
 
 // TaskPhase represents the current phase of a task
@@ -117,11 +150,24 @@ type Task struct {
 
 // TaskSpec defines the Task configuration
 type TaskSpec struct {
-	// Contexts defines what this task operates on
-	// This includes files, repositories, and other context types
-	// Example: [task.md file, guide.md file, repository context]
-	// +required
-	Contexts []Context `json:"contexts"`
+	// Description is the task instruction/prompt.
+	// The controller creates /workspace/task.md with this content.
+	// This is the primary way to tell the agent what to do.
+	//
+	// Example:
+	//   description: "Update all dependencies and create a PR"
+	// +optional
+	Description *string `json:"description,omitempty"`
+
+	// Contexts references Context CRDs to include in this task.
+	// Each ContextMount specifies which Context to use and where to mount it.
+	//
+	// Context priority (lowest to highest):
+	//   1. Agent.contexts (Agent-level defaults)
+	//   2. Task.contexts (Task-specific contexts)
+	//   3. Task.description (highest, becomes /workspace/task.md)
+	// +optional
+	Contexts []ContextMount `json:"contexts,omitempty"`
 
 	// AgentRef references an Agent for this task.
 	// If not specified, uses the "default" Agent in the same namespace.
@@ -209,18 +255,18 @@ type AgentSpec struct {
 	// +optional
 	Command []string `json:"command,omitempty"`
 
-	// DefaultContexts defines the base-level contexts that are included in all tasks
-	// using this Agent. These contexts are applied at the lowest priority,
-	// meaning task-specific contexts take precedence.
+	// Contexts references Context CRDs as defaults for all tasks using this Agent.
+	// These have the lowest priority in context merging.
 	//
 	// Context priority (lowest to highest):
-	//   1. Agent.defaultContexts (base layer)
-	//   2. Task.contexts (task-specific contexts)
+	//   1. Agent.contexts (Agent-level defaults)
+	//   2. Task.contexts (Task-specific contexts)
+	//   3. Task.description/descriptionRef (highest, becomes /workspace/task.md)
 	//
 	// Use this for organization-wide defaults like coding standards, security policies,
 	// or common tool configurations that should apply to all tasks.
 	// +optional
-	DefaultContexts []Context `json:"defaultContexts,omitempty"`
+	Contexts []ContextMount `json:"contexts,omitempty"`
 
 	// Credentials defines secrets that should be available to the agent.
 	// Similar to GitHub Actions secrets, these can be mounted as files or
@@ -591,4 +637,61 @@ type CronTaskList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []CronTask `json:"items"`
+}
+
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:resource:scope="Namespaced"
+// +kubebuilder:printcolumn:JSONPath=`.spec.type`,name="Type",type=string
+// +kubebuilder:printcolumn:JSONPath=`.metadata.creationTimestamp`,name="Age",type=date
+
+// Context represents a reusable context resource for AI agent tasks.
+// Context is the top-level API for managing reusable context content that can be
+// shared across multiple Tasks and Agents.
+//
+// Unlike inline contexts (ContextItem), Context CRs enable:
+//   - Reusability: Share the same context across multiple Tasks
+//   - Independent lifecycle: Update context without modifying Tasks
+//   - Version control: Track context changes in Git
+//   - Separation of concerns: Context content vs. mount location
+//
+// The mount path is NOT defined in Context - it's specified by the referencing
+// Task or Agent via ContextMount.mountPath. This allows the same Context to be
+// mounted at different paths by different consumers.
+type Context struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// Spec defines the context configuration
+	Spec ContextSpec `json:"spec"`
+}
+
+// ContextSpec defines the Context configuration.
+// Context uses the same simplified structure as ContextItem but without mountPath,
+// since the mount path is specified by the referencing Task/Agent via ContextMount.
+type ContextSpec struct {
+	// Type of context source: Inline, ConfigMap, or Git
+	// +required
+	Type ContextType `json:"type"`
+
+	// Inline context (required when Type == "Inline")
+	// +optional
+	Inline *InlineContext `json:"inline,omitempty"`
+
+	// ConfigMap context (required when Type == "ConfigMap")
+	// +optional
+	ConfigMap *ConfigMapContext `json:"configMap,omitempty"`
+
+	// Git context (required when Type == "Git")
+	// +optional
+	Git *GitContext `json:"git,omitempty"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// ContextList contains a list of Context
+type ContextList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Context `json:"items"`
 }

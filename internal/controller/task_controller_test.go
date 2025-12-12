@@ -24,10 +24,10 @@ var _ = Describe("TaskController", func() {
 		taskNamespace = "default"
 	)
 
-	Context("When creating a Task with inline context", func() {
+	Context("When creating a Task with description", func() {
 		It("Should create a Job and update Task status", func() {
-			taskName := "test-task-inline"
-			inlineContent := "# Test Task\n\nThis is a test task."
+			taskName := "test-task-description"
+			description := "# Test Task\n\nThis is a test task."
 
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
@@ -35,17 +35,7 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					Description: &description,
 				},
 			}
 
@@ -93,9 +83,8 @@ var _ = Describe("TaskController", func() {
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, configMapLookupKey, createdConfigMap) == nil
 			}, timeout, interval).Should(BeTrue())
-			// Key is sanitized from FilePath: /workspace/task.md -> workspace-task.md
 			Expect(createdConfigMap.Data).Should(HaveKey("workspace-task.md"))
-			Expect(createdConfigMap.Data["workspace-task.md"]).Should(ContainSubstring(inlineContent))
+			Expect(createdConfigMap.Data["workspace-task.md"]).Should(ContainSubstring(description))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -107,7 +96,7 @@ var _ = Describe("TaskController", func() {
 			taskName := "test-task-agent"
 			agentConfigName := "test-agent-config"
 			customAgentImage := "custom-agent:v1.0.0"
-			inlineContent := "# Test with Agent"
+			description := "# Test with Agent"
 
 			By("Creating Agent")
 			agent := &kubetaskv1alpha1.Agent{
@@ -129,18 +118,8 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentConfigName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentConfigName,
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -172,7 +151,7 @@ var _ = Describe("TaskController", func() {
 			secretName := "test-secret"
 			envName := "API_TOKEN"
 			mountPath := "/home/agent/.ssh/id_rsa"
-			inlineContent := "# Test with credentials"
+			description := "# Test with credentials"
 
 			By("Creating Secret")
 			secret := &corev1.Secret{
@@ -224,18 +203,8 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -284,7 +253,7 @@ var _ = Describe("TaskController", func() {
 		It("Should apply labels to the Job's pod template", func() {
 			taskName := "test-task-labels"
 			agentName := "test-workspace-labels"
-			inlineContent := "# Test with podSpec.labels"
+			description := "# Test with podSpec.labels"
 
 			By("Creating Agent with podSpec.labels")
 			agent := &kubetaskv1alpha1.Agent{
@@ -311,18 +280,8 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -353,7 +312,7 @@ var _ = Describe("TaskController", func() {
 		It("Should apply scheduling configuration to the Job", func() {
 			taskName := "test-task-scheduling"
 			agentName := "test-workspace-scheduling"
-			inlineContent := "# Test with podSpec.scheduling"
+			description := "# Test with podSpec.scheduling"
 
 			By("Creating Agent with podSpec.scheduling")
 			agent := &kubetaskv1alpha1.Agent{
@@ -390,18 +349,8 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -436,7 +385,7 @@ var _ = Describe("TaskController", func() {
 			taskName := "test-task-runtime"
 			agentName := "test-agent-runtime"
 			runtimeClassName := "gvisor"
-			inlineContent := "# Test with podSpec.runtimeClassName"
+			description := "# Test with podSpec.runtimeClassName"
 
 			By("Creating Agent with podSpec.runtimeClassName")
 			agent := &kubetaskv1alpha1.Agent{
@@ -460,18 +409,8 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -495,107 +434,40 @@ var _ = Describe("TaskController", func() {
 		})
 	})
 
-	Context("When creating a Task with multiple file paths", func() {
-		It("Should mount files at specified paths", func() {
-			taskName := "test-task-multi-path"
-			configPath := "/workspace/config/settings.json"
-			configContent := `{"debug": true}`
-			inlineContent := "# Main task content"
+	Context("When creating a Task with Context CRD reference", func() {
+		It("Should resolve and mount Context content", func() {
+			taskName := "test-task-context-ref"
+			contextName := "test-context-inline"
+			contextContent := "# Coding Standards\n\nFollow these guidelines."
+			description := "Review the code"
 
-			By("Creating Task with multiple file paths")
-			task := &kubetaskv1alpha1.Task{
+			By("Creating Context CRD")
+			context := &kubetaskv1alpha1.Context{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      taskName,
+					Name:      contextName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: configPath,
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &configContent,
-								},
-							},
-						},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeInline,
+					Inline: &kubetaskv1alpha1.InlineContext{
+						Content: contextContent,
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, context)).Should(Succeed())
 
-			By("Checking Job has both file mounts")
-			jobName := fmt.Sprintf("%s-job", taskName)
-			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
-			createdJob := &batchv1.Job{}
-			Eventually(func() bool {
-				if err := k8sClient.Get(ctx, jobLookupKey, createdJob); err != nil {
-					return false
-				}
-				return len(createdJob.Spec.Template.Spec.Containers) > 0
-			}, timeout, interval).Should(BeTrue())
-
-			var configMount *corev1.VolumeMount
-			for _, mount := range createdJob.Spec.Template.Spec.Containers[0].VolumeMounts {
-				if mount.MountPath == configPath {
-					configMount = &mount
-					break
-				}
-			}
-			Expect(configMount).ShouldNot(BeNil())
-
-			By("Cleaning up")
-			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-		})
-	})
-
-	Context("When creating a Task with ConfigMap reference", func() {
-		It("Should resolve content from ConfigMap", func() {
-			taskName := "test-task-configmap"
-			configMapName := "test-task-content"
-			configMapKey := "task-content"
-			configMapContent := "# Task from ConfigMap\n\nThis content comes from a ConfigMap."
-
-			By("Creating ConfigMap")
-			cm := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      configMapName,
-					Namespace: taskNamespace,
-				},
-				Data: map[string]string{
-					configMapKey: configMapContent,
-				},
-			}
-			Expect(k8sClient.Create(ctx, cm)).Should(Succeed())
-
-			By("Creating Task with ConfigMap reference")
+			By("Creating Task with Context reference")
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					Contexts: []kubetaskv1alpha1.Context{
+					Description: &description,
+					Contexts: []kubetaskv1alpha1.ContextMount{
 						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									ConfigMapKeyRef: &kubetaskv1alpha1.ConfigMapKeySelector{
-										Name: configMapName,
-										Key:  configMapKey,
-									},
-								},
-							},
+							Name:      contextName,
+							MountPath: "/workspace/guides/standards.md",
 						},
 					},
 				},
@@ -609,23 +481,119 @@ var _ = Describe("TaskController", func() {
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, contextConfigMapLookupKey, createdContextConfigMap) == nil
 			}, timeout, interval).Should(BeTrue())
-			// Key is sanitized from FilePath: /workspace/task.md -> workspace-task.md
-			Expect(createdContextConfigMap.Data["workspace-task.md"]).Should(ContainSubstring(configMapContent))
+
+			// Task.md should contain description
+			Expect(createdContextConfigMap.Data["workspace-task.md"]).Should(ContainSubstring(description))
+			// Mounted context should be at its own key
+			Expect(createdContextConfigMap.Data["workspace-guides-standards.md"]).Should(ContainSubstring(contextContent))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, cm)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, context)).Should(Succeed())
 		})
 	})
 
-	Context("When creating a Task with Agent that has defaultContexts", func() {
-		It("Should merge defaultContexts with task contexts", func() {
-			taskName := "test-task-default-contexts"
-			agentName := "test-workspace-default-ctx"
-			defaultContent := "# Default Guidelines\n\nThese are default guidelines."
-			taskContent := "# Specific Task\n\nThis is the specific task content."
+	Context("When creating a Task with Context without mountPath", func() {
+		It("Should append context to task.md with XML tags", func() {
+			taskName := "test-task-context-aggregate"
+			contextName := "test-context-aggregate"
+			contextContent := "# Security Guidelines\n\nFollow security best practices."
+			description := "Review security compliance"
 
-			By("Creating Agent with defaultContexts")
+			By("Creating Context CRD")
+			context := &kubetaskv1alpha1.Context{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      contextName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeInline,
+					Inline: &kubetaskv1alpha1.InlineContext{
+						Content: contextContent,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, context)).Should(Succeed())
+
+			By("Creating Task with Context reference (no mountPath)")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					Description: &description,
+					Contexts: []kubetaskv1alpha1.ContextMount{
+						{
+							Name: contextName,
+							// No MountPath - should be appended to task.md
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking context is appended to task.md with XML tags")
+			contextConfigMapName := taskName + ContextConfigMapSuffix
+			contextConfigMapLookupKey := types.NamespacedName{Name: contextConfigMapName, Namespace: taskNamespace}
+			createdContextConfigMap := &corev1.ConfigMap{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, contextConfigMapLookupKey, createdContextConfigMap) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			taskMdContent := createdContextConfigMap.Data["workspace-task.md"]
+			Expect(taskMdContent).Should(ContainSubstring(description))
+			Expect(taskMdContent).Should(ContainSubstring("<context"))
+			Expect(taskMdContent).Should(ContainSubstring(contextContent))
+			Expect(taskMdContent).Should(ContainSubstring("</context>"))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, context)).Should(Succeed())
+		})
+	})
+
+	Context("When creating a Task with Agent that has contexts", func() {
+		It("Should merge agent contexts with task contexts", func() {
+			taskName := "test-task-agent-contexts"
+			agentName := "test-agent-with-contexts"
+			agentContextName := "agent-default-context"
+			taskContextName := "task-specific-context"
+			agentContextContent := "# Agent Guidelines\n\nThese are default guidelines."
+			taskContextContent := "# Task Guidelines\n\nThese are task-specific guidelines."
+			description := "Do the task"
+
+			By("Creating Agent Context CRD")
+			agentContext := &kubetaskv1alpha1.Context{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentContextName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeInline,
+					Inline: &kubetaskv1alpha1.InlineContext{
+						Content: agentContextContent,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agentContext)).Should(Succeed())
+
+			By("Creating Task Context CRD")
+			taskContext := &kubetaskv1alpha1.Context{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskContextName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.ContextSpec{
+					Type: kubetaskv1alpha1.ContextTypeInline,
+					Inline: &kubetaskv1alpha1.InlineContext{
+						Content: taskContextContent,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, taskContext)).Should(Succeed())
+
+			By("Creating Agent with context reference")
 			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
@@ -633,38 +601,29 @@ var _ = Describe("TaskController", func() {
 				},
 				Spec: kubetaskv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
-					DefaultContexts: []kubetaskv1alpha1.Context{
+					Contexts: []kubetaskv1alpha1.ContextMount{
 						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/guidelines.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &defaultContent,
-								},
-							},
+							Name: agentContextName,
+							// No mountPath - should be appended to task.md
 						},
 					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
-			By("Creating Task")
+			By("Creating Task with context reference")
 			task := &kubetaskv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
+					AgentRef:    agentName,
+					Description: &description,
+					Contexts: []kubetaskv1alpha1.ContextMount{
 						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &taskContent,
-								},
-							},
+							Name: taskContextName,
+							// No mountPath - should be appended to task.md
 						},
 					},
 				},
@@ -679,22 +638,25 @@ var _ = Describe("TaskController", func() {
 				return k8sClient.Get(ctx, contextConfigMapLookupKey, createdContextConfigMap) == nil
 			}, timeout, interval).Should(BeTrue())
 
-			// Each context has its own key based on FilePath
-			// /workspace/guidelines.md -> workspace-guidelines.md
-			// /workspace/task.md -> workspace-task.md
-			Expect(createdContextConfigMap.Data["workspace-guidelines.md"]).Should(ContainSubstring(defaultContent))
-			Expect(createdContextConfigMap.Data["workspace-task.md"]).Should(ContainSubstring(taskContent))
+			taskMdContent := createdContextConfigMap.Data["workspace-task.md"]
+			// Description should be first (highest priority)
+			Expect(taskMdContent).Should(ContainSubstring(description))
+			// Both contexts should be appended
+			Expect(taskMdContent).Should(ContainSubstring(agentContextContent))
+			Expect(taskMdContent).Should(ContainSubstring(taskContextContent))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agentContext)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, taskContext)).Should(Succeed())
 		})
 	})
 
 	Context("When a Task's Job completes successfully", func() {
-		It("Should update Task status to Succeeded", func() {
+		It("Should update Task status to Completed", func() {
 			taskName := "test-task-success"
-			inlineContent := "# Success test"
+			description := "# Success test"
 
 			By("Creating Task")
 			task := &kubetaskv1alpha1.Task{
@@ -703,17 +665,7 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -730,7 +682,7 @@ var _ = Describe("TaskController", func() {
 			createdJob.Status.Succeeded = 1
 			Expect(k8sClient.Status().Update(ctx, createdJob)).Should(Succeed())
 
-			By("Checking Task status is Succeeded")
+			By("Checking Task status is Completed")
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
 			Eventually(func() kubetaskv1alpha1.TaskPhase {
 				updatedTask := &kubetaskv1alpha1.Task{}
@@ -753,7 +705,7 @@ var _ = Describe("TaskController", func() {
 	Context("When a Task's Job fails", func() {
 		It("Should update Task status to Failed", func() {
 			taskName := "test-task-failure"
-			inlineContent := "# Failure test"
+			description := "# Failure test"
 
 			By("Creating Task")
 			task := &kubetaskv1alpha1.Task{
@@ -762,17 +714,7 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -808,7 +750,7 @@ var _ = Describe("TaskController", func() {
 		It("Should wrap command with sleep for keep-alive", func() {
 			taskName := "test-task-hitl"
 			agentName := "test-agent-hitl"
-			inlineContent := "# Human-in-the-loop test"
+			description := "# Human-in-the-loop test"
 			keepAliveSeconds := int32(1800) // 30 minutes
 
 			By("Creating Agent with humanInTheLoop enabled")
@@ -835,18 +777,8 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -890,7 +822,7 @@ var _ = Describe("TaskController", func() {
 		It("Should use default keep-alive when not specified", func() {
 			taskName := "test-task-hitl-default"
 			agentName := "test-agent-hitl-default"
-			inlineContent := "# Human-in-the-loop default test"
+			description := "# Human-in-the-loop default test"
 
 			By("Creating Agent with humanInTheLoop enabled but no keepAliveSeconds")
 			agent := &kubetaskv1alpha1.Agent{
@@ -915,18 +847,8 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					AgentRef: agentName,
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					AgentRef:    agentName,
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -954,7 +876,7 @@ var _ = Describe("TaskController", func() {
 	Context("When KubeTaskConfig exists", func() {
 		It("Should use TTL from KubeTaskConfig for cleanup", func() {
 			taskName := "test-task-ttl"
-			inlineContent := "# TTL test"
+			description := "# TTL test"
 			ttlSeconds := int32(60) // 1 minute for testing
 
 			By("Creating KubeTaskConfig with custom TTL")
@@ -978,17 +900,7 @@ var _ = Describe("TaskController", func() {
 					Namespace: taskNamespace,
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
-					Contexts: []kubetaskv1alpha1.Context{
-						{
-							Type: kubetaskv1alpha1.ContextTypeFile,
-							File: &kubetaskv1alpha1.FileContext{
-								FilePath: "/workspace/task.md",
-								Source: kubetaskv1alpha1.FileSource{
-									Inline: &inlineContent,
-								},
-							},
-						},
-					},
+					Description: &description,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())

@@ -38,17 +38,7 @@ var _ = Describe("CronTask Controller", func() {
 					ConcurrencyPolicy: kubetaskv1alpha1.ForbidConcurrent,
 					TaskTemplate: kubetaskv1alpha1.TaskTemplateSpec{
 						Spec: kubetaskv1alpha1.TaskSpec{
-							Contexts: []kubetaskv1alpha1.Context{
-								{
-									Type: kubetaskv1alpha1.ContextTypeFile,
-									File: &kubetaskv1alpha1.FileContext{
-										FilePath: "/workspace/task.md",
-										Source: kubetaskv1alpha1.FileSource{
-											Inline: stringPtr("Test task from CronTask"),
-										},
-									},
-								},
-							},
+							Description: stringPtr("Test task from CronTask"),
 						},
 					},
 				},
@@ -128,17 +118,7 @@ var _ = Describe("CronTask Controller", func() {
 					ConcurrencyPolicy: kubetaskv1alpha1.ForbidConcurrent,
 					TaskTemplate: kubetaskv1alpha1.TaskTemplateSpec{
 						Spec: kubetaskv1alpha1.TaskSpec{
-							Contexts: []kubetaskv1alpha1.Context{
-								{
-									Type: kubetaskv1alpha1.ContextTypeFile,
-									File: &kubetaskv1alpha1.FileContext{
-										FilePath: "/workspace/task.md",
-										Source: kubetaskv1alpha1.FileSource{
-											Inline: stringPtr("Suspended task"),
-										},
-									},
-								},
-							},
+							Description: stringPtr("Suspended task"),
 						},
 					},
 				},
@@ -188,17 +168,7 @@ var _ = Describe("CronTask Controller", func() {
 					FailedTasksHistoryLimit:     &failedLimit,
 					TaskTemplate: kubetaskv1alpha1.TaskTemplateSpec{
 						Spec: kubetaskv1alpha1.TaskSpec{
-							Contexts: []kubetaskv1alpha1.Context{
-								{
-									Type: kubetaskv1alpha1.ContextTypeFile,
-									File: &kubetaskv1alpha1.FileContext{
-										FilePath: "/workspace/task.md",
-										Source: kubetaskv1alpha1.FileSource{
-											Inline: stringPtr("History limit test"),
-										},
-									},
-								},
-							},
+							Description: stringPtr("History limit test"),
 						},
 					},
 				},
