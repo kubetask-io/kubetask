@@ -5,6 +5,12 @@ on:
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "**/*.md"
+      - "LICENSE"
+      - ".gitignore"
 
 env:
   GO_VERSION: "1.25"
