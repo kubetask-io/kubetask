@@ -1,9 +1,17 @@
-# KubeTask
+<p align="center">
+  <img src="docs/images/logo.png" alt="KubeTask Logo" width="400">
+</p>
 
-A Kubernetes-native system for executing AI-powered tasks.
+<h1 align="center">KubeTask</h1>
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Go Report Card](https://goreportcard.com/badge/github.com/stolostron/kubetask)](https://goreportcard.com/report/github.com/stolostron/kubetask)
+<p align="center">
+  A Kubernetes-native system for executing AI-powered tasks.
+</p>
+
+<p align="center">
+  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
+  <a href="https://goreportcard.com/report/github.com/stolostron/kubetask"><img src="https://goreportcard.com/badge/github.com/stolostron/kubetask" alt="Go Report Card"></a>
+</p>
 
 ## Overview
 
