@@ -12,11 +12,12 @@ KubeTask enables you to execute AI agent tasks (like Claude, Gemini) using Kuber
 **Key Features:**
 
 - **Kubernetes-Native**: Built on CRDs and the Operator pattern
-- **Simple API**: Only two CRDs - Task and Agent
-- **AI-Agnostic**: Works with any AI agent (Claude, Gemini, etc.)
+- **Simple API**: Core CRDs - Task, CronTask, Agent, and Context
+- **AI-Agnostic**: Works with any AI agent (Claude, Gemini, Goose, etc.)
 - **No External Dependencies**: Uses etcd for state, Jobs for execution
 - **GitOps Ready**: Fully declarative resource definitions
-- **Flexible Context System**: Support for files from inline content or ConfigMaps
+- **Flexible Context System**: Support for inline content, ConfigMaps, and Git repositories
+- **Scheduled Tasks**: CronTask for recurring AI-powered operations
 - **Batch Operations**: Use Helm/Kustomize for multiple Tasks (Kubernetes-native approach)
 
 ## Architecture
@@ -47,7 +48,9 @@ KubeTask enables you to execute AI agent tasks (like Claude, Gemini) using Kuber
 ### Core Concepts
 
 - **Task**: Single task execution (the primary API)
+- **CronTask**: Scheduled/recurring task execution
 - **Agent**: AI agent configuration (HOW to execute)
+- **Context**: Reusable context resources (inline, ConfigMap, or Git)
 
 ## Quick Start
 
@@ -80,7 +83,8 @@ metadata:
   name: default
   namespace: kubetask-system
 spec:
-  agentImage: quay.io/myorg/claude-agent:v1.0
+  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  workspaceDir: /workspace  # Optional, defaults to /workspace
   serviceAccountName: kubetask-agent
   credentials:
     - name: anthropic-api-key
@@ -90,7 +94,22 @@ spec:
       env: ANTHROPIC_API_KEY
 ```
 
-#### 2. Create a Task
+#### 2. Create a Context (Optional)
+
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: workflow-guide
+  namespace: kubetask-system
+spec:
+  type: ConfigMap
+  configMap:
+    name: workflow-guides
+    key: pr-workflow.md
+```
+
+#### 3. Create a Task
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
@@ -99,27 +118,18 @@ metadata:
   name: update-service-a
   namespace: kubetask-system
 spec:
-  contexts:
-    # Task description
-    - type: File
-      file:
-        filePath: /workspace/task.md
-        source:
-          inline: |
-            Update dependencies to latest versions.
-            Run tests and create PR.
+  # Task description (becomes /workspace/task.md)
+  description: |
+    Update dependencies to latest versions.
+    Run tests and create PR.
 
-    # Workflow guide from ConfigMap
-    - type: File
-      file:
-        filePath: /workspace/guide.md
-        source:
-          configMapKeyRef:
-            name: workflow-guides
-            key: pr-workflow.md
+  # Reference reusable Context CRDs
+  contexts:
+    - name: workflow-guide
+      mountPath: /workspace/guide.md
 ```
 
-#### 3. Monitor Progress
+#### 4. Monitor Progress
 
 ```bash
 # Watch Task status
@@ -154,12 +164,7 @@ kind: Task
 metadata:
   name: {{ .name }}
 spec:
-  contexts:
-    - type: File
-      file:
-        filePath: /workspace/task.md
-        source:
-          inline: "Update dependencies for {{ .repo }}"
+  description: "Update dependencies for {{ .repo }}"
 {{- end }}
 ```
 
@@ -172,39 +177,64 @@ helm template my-tasks ./chart | kubectl apply -f -
 
 ### Flexible Context System
 
-KubeTask supports multiple context types:
+KubeTask uses a **Context CRD** to provide reusable context to AI agents:
 
-- **Single File with Inline Content**:
+- **Inline Content**:
   ```yaml
-  type: File
-  file:
-    filePath: /workspace/task.md
-    source:
-      inline: "Task description"
+  apiVersion: kubetask.io/v1alpha1
+  kind: Context
+  metadata:
+    name: coding-standards
+  spec:
+    type: Inline
+    inline:
+      content: |
+        # Coding Standards
+        - Use descriptive names
+        - Write unit tests
   ```
 
-- **Single File from ConfigMap Key**:
+- **ConfigMap Reference**:
   ```yaml
-  type: File
-  file:
-    filePath: /workspace/guide.md
-    source:
-      configMapKeyRef:
-        name: guides
-        key: workflow.md
+  apiVersion: kubetask.io/v1alpha1
+  kind: Context
+  metadata:
+    name: security-policy
+  spec:
+    type: ConfigMap
+    configMap:
+      name: org-policies
+      key: security.md
   ```
 
-- **Directory from ConfigMap** (all keys become files):
+- **Git Repository**:
   ```yaml
-  type: File
-  file:
-    dirPath: /workspace/configs
-    source:
-      configMapRef:
-        name: my-configs
+  apiVersion: kubetask.io/v1alpha1
+  kind: Context
+  metadata:
+    name: repo-context
+  spec:
+    type: Git
+    git:
+      repository: https://github.com/org/contexts
+      path: .claude/
+      ref: main
+      secretRef:
+        name: git-credentials  # Optional, for private repos
   ```
 
-- **Content Aggregation**: Multiple contexts with the same `filePath` are aggregated into a single file
+Tasks reference Contexts using **ContextMount**:
+```yaml
+spec:
+  description: "Review the code"
+  contexts:
+    - name: coding-standards
+      mountPath: /workspace/guides/standards.md
+    - name: security-policy
+      # Empty mountPath = append to task.md with XML tags
+```
+
+- **Content Aggregation**: Contexts without `mountPath` are aggregated into `/workspace/task.md` with XML tags
 
 ### Agent Configuration
 
@@ -216,19 +246,15 @@ kind: Agent
 metadata:
   name: default
 spec:
-  agentImage: quay.io/myorg/claude-agent:v1.0
-  toolsImage: quay.io/myorg/dev-tools:latest
+  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  workspaceDir: /workspace  # Configurable workspace directory
   serviceAccountName: kubetask-agent
 
-  # Default contexts for all tasks
-  defaultContexts:
-    - type: File
-      file:
-        filePath: /workspace/org-standards.md
-        source:
-          configMapKeyRef:
-            name: org-configs
-            key: standards.md
+  # Default contexts for all tasks (references to Context CRDs)
+  contexts:
+    - name: org-coding-standards
+      # Empty mountPath = append to task.md with XML tags
+    - name: org-security-policy
 
   # Credentials (secrets as env vars or file mounts)
   credentials:
@@ -246,9 +272,10 @@ spec:
       fileMode: 0400
 
   # Pod scheduling
-  scheduling:
-    nodeSelector:
-      workload-type: ai-agent
+  podSpec:
+    scheduling:
+      nodeSelector:
+        workload-type: ai-agent
 ```
 
 ### Multi-AI Support
@@ -256,22 +283,22 @@ spec:
 Use different Agents for different AI agents:
 
 ```yaml
-# Claude workspace
+# Claude agent
 apiVersion: kubetask.io/v1alpha1
 kind: Agent
 metadata:
-  name: claude-workspace
+  name: claude
 spec:
-  agentImage: quay.io/myorg/claude-agent:v1.0
+  agentImage: quay.io/kubetask/kubetask-agent-claude:latest
   serviceAccountName: kubetask-agent
 ---
-# Gemini workspace
+# Gemini agent
 apiVersion: kubetask.io/v1alpha1
 kind: Agent
 metadata:
-  name: gemini-workspace
+  name: gemini
 spec:
-  agentImage: quay.io/myorg/gemini-agent:v1.0
+  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
   serviceAccountName: kubetask-agent
 ---
 # Task using specific agent
@@ -280,13 +307,8 @@ kind: Task
 metadata:
   name: task-with-claude
 spec:
-  agentRef: claude-workspace
-  contexts:
-    - type: File
-      file:
-        filePath: /workspace/task.md
-        source:
-          inline: "Update dependencies"
+  agentRef: claude
+  description: "Update dependencies and create a PR"
 ```
 
 ## Agent Images
@@ -305,6 +327,7 @@ KubeTask provides **template agent images** that serve as starting points for bu
 | Template | Description | Use Case |
 |----------|-------------|----------|
 | `gemini` | Google Gemini CLI with Go, git, kubectl | General development tasks |
+| `claude` | Anthropic Claude Code CLI with Go, git, kubectl | Claude-powered tasks |
 | `goose` | Block's Goose agent with Go, git, kubectl | Multi-provider AI tasks |
 | `echo` | Minimal Alpine image | E2E testing and debugging |
 
@@ -477,6 +500,9 @@ See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 
 ## Roadmap
 
+- [x] CronTask for scheduled task execution
+- [x] Context CRD for reusable contexts
+- [x] GitContext for Git repository support
 - [ ] Enhanced status reporting and observability
 - [ ] Support for additional context types (MCP)
 - [ ] Advanced retry and failure handling

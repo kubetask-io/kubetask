@@ -72,7 +72,7 @@ spec:
     name: my-configs  # All keys become files in the directory
 ```
 
-### 4. Git Repository (Future)
+### 4. Git Repository
 
 Content from a Git repository:
 
@@ -85,9 +85,20 @@ spec:
   type: Git
   git:
     repository: https://github.com/org/contexts
-    path: .claude/
-    ref: main
+    path: .claude/           # Optional: specific path within repo
+    ref: main                # Branch, tag, or commit SHA (default: HEAD)
+    depth: 1                 # Shallow clone depth (default: 1)
+    secretRef:               # Optional: for private repositories
+      name: git-credentials  # Secret with username/password or ssh-privatekey
 ```
+
+**Git Authentication:**
+
+The `secretRef` references a Kubernetes Secret containing credentials:
+- **HTTPS auth**: Secret with `username` and `password` (password can be a PAT)
+- **SSH auth**: Secret with `ssh-privatekey`
+
+If `secretRef` is not specified, anonymous clone is attempted.
 
 ## ContextMount - How Tasks Reference Contexts
 
@@ -325,6 +336,7 @@ The controller provides these environment variables to the agent:
 |----------|-------------|
 | `TASK_NAME` | Name of the Task CR |
 | `TASK_NAMESPACE` | Namespace of the Task CR |
+| `WORKSPACE_DIR` | Working directory path (from Agent.spec.workspaceDir, default: "/workspace") |
 | `KUBETASK_KEEP_ALIVE_SECONDS` | (if humanInTheLoop enabled) Keep-alive duration |
 | `GITHUB_TOKEN` | (if configured) GitHub API token |
 | `ANTHROPIC_API_KEY` | (if configured) Anthropic API key |
@@ -347,7 +359,7 @@ The controller provides these environment variables to the agent:
 | `Inline` | `spec.inline.content` | Content directly in YAML |
 | `ConfigMap` | `spec.configMap.name + key` | Single file from ConfigMap key |
 | `ConfigMap` | `spec.configMap.name` (no key) | Directory mount with all ConfigMap keys |
-| `Git` | `spec.git.repository + path` | Content from Git repository (future) |
+| `Git` | `spec.git.repository + path` | Content from Git repository |
 
 | Priority | Context Source | Description |
 |----------|---------------|-------------|

@@ -26,6 +26,7 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks using Cust
 1. **Task** - Single task execution (the primary API)
 2. **CronTask** - Scheduled/recurring task execution (creates Tasks on cron schedule)
 3. **Agent** - AI agent configuration (HOW to execute)
+4. **Context** - Reusable context resources (Inline, ConfigMap, or Git)
 
 ### Important Design Decisions
 
@@ -36,12 +37,16 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks using Cust
 
 ### Context System
 
-Tasks operate on different types of contexts:
-- **File Context**: Task descriptions, configuration files (from inline or ConfigMap)
-  - `FilePath` + `Inline`: Single file with inline content
-  - `FilePath` + `ConfigMapKeyRef`: Single file from ConfigMap key
-  - `DirPath` + `ConfigMapRef`: Directory with all ConfigMap keys as files
-- **Future**: MCP contexts (extensible design)
+Tasks use the **Context CRD** to reference reusable context resources:
+- **Inline**: Content directly in YAML (`spec.inline.content`)
+- **ConfigMap**: Content from ConfigMap (`spec.configMap.name` + optional `key`)
+- **Git**: Content from Git repository (`spec.git.repository`, `path`, `ref`, `secretRef`)
+
+**ContextMount** is used in Task/Agent to reference Context CRDs:
+- `name`: Name of the Context CRD
+- `mountPath`: Where to mount (empty = append to task.md with XML tags)
+
+**Future**: MCP contexts (extensible design)
 
 ## Code Standards
 
@@ -67,7 +72,7 @@ All Go files must include the copyright header:
 3. **Kubernetes Resources**:
    - CRD Group: `kubetask.io`
    - API Version: `v1alpha1`
-   - Kinds: `Task`, `CronTask`, `Agent`
+   - Kinds: `Task`, `CronTask`, `Agent`, `Context`, `KubeTaskConfig`
 
 ### Code Comments
 
@@ -173,7 +178,7 @@ kubetask/
 │   ├── images/          # Agent Dockerfiles (gemini, claude, echo, etc.)
 │   └── tools/           # Tools image for shared CLI tools
 ├── api/v1alpha1/          # CRD type definitions
-│   ├── types.go           # Main API types (Task, CronTask, Agent)
+│   ├── types.go           # Main API types (Task, CronTask, Agent, Context, KubeTaskConfig)
 │   ├── register.go        # Scheme registration
 │   └── zz_generated.deepcopy.go  # Generated deepcopy
 ├── cmd/controller/        # Controller main entry point
@@ -182,7 +187,7 @@ kubetask/
 │   ├── task_controller.go
 │   └── crontask_controller.go
 ├── deploy/               # Kubernetes manifests
-│   └── crds/            # Generated CRD YAMLs (Task, CronTask, Agent)
+│   └── crds/            # Generated CRD YAMLs (Task, CronTask, Agent, Context, KubeTaskConfig)
 ├── charts/kubetask/     # Helm chart
 ├── hack/                # Build and codegen scripts
 ├── docs/                # Documentation
@@ -283,6 +288,16 @@ internal/controller/
 3. Update `Context` struct with new optional field
 4. Update controller to handle new context type
 5. Update documentation
+
+### Agent Configuration
+
+Key Agent spec fields:
+- `agentImage`: Container image for task execution
+- `workspaceDir`: Working directory (default: "/workspace")
+- `command`: Custom entrypoint command
+- `contexts`: References to Context CRDs (applied to all tasks)
+- `credentials`: Secrets as env vars or file mounts
+- `serviceAccountName`: Kubernetes ServiceAccount for RBAC
 
 ### Agent Image Discovery
 
@@ -414,4 +429,4 @@ kubectl logs job/<job-name> -n kubetask-system
 
 ---
 
-**Last Updated**: 2025-12-10
+**Last Updated**: 2025-12-12

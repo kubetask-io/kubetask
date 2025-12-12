@@ -116,6 +116,7 @@ CronTask (scheduled task execution)
 Agent (execution configuration)
 └── AgentSpec
     ├── agentImage: string
+    ├── workspaceDir: string         (default: "/workspace")
     ├── command: []string
     ├── humanInTheLoop: *HumanInTheLoop
     ├── contexts: []ContextMount     (references to Context CRDs)
@@ -223,9 +224,11 @@ type ConfigMapContext struct {
 }
 
 type GitContext struct {
-    Repository string // Git repository URL
-    Path       string // Path within the repository
-    Ref        string // Branch, tag, or commit SHA
+    Repository string              // Git repository URL
+    Path       string              // Path within the repository
+    Ref        string              // Branch, tag, or commit SHA (default: "HEAD")
+    Depth      *int                // Shallow clone depth (default: 1)
+    SecretRef  *GitSecretReference // Optional Git credentials
 }
 
 // Agent defines the AI agent configuration
@@ -235,6 +238,7 @@ type Agent struct {
 
 type AgentSpec struct {
     AgentImage         string
+    WorkspaceDir       string          // Working directory (default: "/workspace")
     Command            []string        // Custom entrypoint command
     HumanInTheLoop     *HumanInTheLoop // Keep container alive after task completion
     Contexts           []ContextMount  // References to Context CRDs
@@ -374,27 +378,45 @@ status:
 
 **Context Types:**
 
-1. **File Context (single file)**:
+Contexts are defined using the Context CRD and referenced via ContextMount:
+
+1. **Inline Context**:
 ```yaml
-type: File
-file:
-  filePath: /workspace/task.md
-  source:
-    inline: "Task description"
-    # OR
-    configMapKeyRef:
-      name: configs
-      key: task.md
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: coding-standards
+spec:
+  type: Inline
+  inline:
+    content: "Task description or guidelines"
 ```
 
-2. **File Context (directory)**:
+2. **ConfigMap Context**:
 ```yaml
-type: File
-file:
-  dirPath: /workspace/configs
-  source:
-    configMapRef:
-      name: my-configs  # All keys become files in directory
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: org-config
+spec:
+  type: ConfigMap
+  configMap:
+    name: my-configs
+    key: config.md  # Optional: specific key
+```
+
+3. **Git Context**:
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: repo-context
+spec:
+  type: Git
+  git:
+    repository: https://github.com/org/contexts
+    path: .claude/
+    ref: main
 ```
 
 ### CronTask (Scheduled Execution)
@@ -529,7 +551,7 @@ spec:
 | `spec.type` | ContextType | Yes | Type of context: Inline, ConfigMap, or Git |
 | `spec.inline` | InlineContext | When type=Inline | Inline content |
 | `spec.configMap` | ConfigMapContext | When type=ConfigMap | Reference to ConfigMap |
-| `spec.git` | GitContext | When type=Git | Content from Git repository (future) |
+| `spec.git` | GitContext | When type=Git | Content from Git repository |
 
 **Important Notes:**
 
@@ -555,7 +577,10 @@ metadata:
   namespace: kubetask-system
 spec:
   # Agent container image
-  agentImage: quay.io/myorg/claude-agent:v1.0
+  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+
+  # Optional: Working directory (default: "/workspace")
+  workspaceDir: /workspace
 
   # Optional: Custom entrypoint command (required for humanInTheLoop)
   command: ["sh", "-c", "gemini --yolo -p \"$(cat /workspace/task.md)\""]
@@ -614,6 +639,7 @@ spec:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `spec.agentImage` | String | No | Agent container image |
+| `spec.workspaceDir` | String | No | Working directory (default: "/workspace") |
 | `spec.command` | []String | No | Custom entrypoint command (required for humanInTheLoop) |
 | `spec.humanInTheLoop` | *HumanInTheLoop | No | Keep container alive after completion |
 | `spec.contexts` | []ContextMount | No | References to reusable Context CRDs (applied to all tasks) |
@@ -768,7 +794,8 @@ metadata:
   name: default
   namespace: kubetask-system
 spec:
-  agentImage: quay.io/myorg/claude-agent:v1.0
+  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  workspaceDir: /workspace
   serviceAccountName: kubetask-agent
 ---
 # Create Task
@@ -778,50 +805,52 @@ metadata:
   name: update-service-a
   namespace: kubetask-system
 spec:
-  contexts:
-    - type: File
-      file:
-        filePath: /workspace/task.md
-        source:
-          inline: |
-            Update dependencies to latest versions.
-            Run tests and create PR.
+  description: |
+    Update dependencies to latest versions.
+    Run tests and create PR.
 ```
 
 ### 2. Task with Multiple Context Sources
 
 ```yaml
+# First, create reusable Context CRDs
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: refactoring-guide
+  namespace: kubetask-system
+spec:
+  type: ConfigMap
+  configMap:
+    name: guides
+    key: refactoring-guide.md
+---
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: project-configs
+  namespace: kubetask-system
+spec:
+  type: ConfigMap
+  configMap:
+    name: project-configs  # All keys become files
+---
+# Then create the Task referencing the Contexts
 apiVersion: kubetask.io/v1alpha1
 kind: Task
 metadata:
   name: complex-task
   namespace: kubetask-system
 spec:
-  agentRef: claude-workspace
+  agentRef: claude
+  description: "Refactor the authentication module"
   contexts:
-    # Inline task description
-    - type: File
-      file:
-        filePath: /workspace/task.md
-        source:
-          inline: "Refactor the authentication module"
-
-    # Guide from ConfigMap
-    - type: File
-      file:
-        filePath: /workspace/guide.md
-        source:
-          configMapKeyRef:
-            name: guides
-            key: refactoring-guide.md
-
-    # Multiple config files as directory
-    - type: File
-      file:
-        dirPath: /workspace/configs
-        source:
-          configMapRef:
-            name: project-configs
+    # Guide from Context CRD
+    - name: refactoring-guide
+      mountPath: /workspace/guide.md
+    # Config directory from Context CRD
+    - name: project-configs
+      mountPath: /workspace/configs
 ```
 
 ### 3. Batch Operations with Helm
@@ -846,12 +875,7 @@ kind: Task
 metadata:
   name: {{ .name }}
 spec:
-  contexts:
-    - type: File
-      file:
-        filePath: /workspace/task.md
-        source:
-          inline: "Update dependencies for {{ .repo }}"
+  description: "Update dependencies for {{ .repo }}"
 {{- end }}
 ```
 
@@ -965,10 +989,10 @@ kubectl get agent default -o yaml
 - **Agent** - stable, project-independent configuration
 - **KubeTaskConfig** - system-level settings (TTL, lifecycle)
 
-**Context Types**:
-- `FilePath` + `Inline` - single file with inline content
-- `FilePath` + `ConfigMapKeyRef` - single file from ConfigMap key
-- `DirPath` + `ConfigMapRef` - directory with all ConfigMap keys as files
+**Context Types** (via Context CRD):
+- `Inline` - Content directly in YAML
+- `ConfigMap` - Content from ConfigMap (single key or all keys as directory)
+- `Git` - Content from Git repository with branch/tag/commit support
 
 **Task Lifecycle**:
 - TTL-based automatic cleanup (default: 7 days)
@@ -989,6 +1013,6 @@ kubectl get agent default -o yaml
 ---
 
 **Status**: FINAL
-**Date**: 2025-12-10
-**Version**: v3.1
+**Date**: 2025-12-12
+**Version**: v3.2
 **Maintainer**: KubeTask Team
