@@ -45,5 +45,5 @@ ENV GOOSE_CONTEXT_STRATEGY=summarize
 # Default entrypoint - run Goose in headless mode
 # The agent reads the task from ${WORKSPACE_DIR}/task.md and executes it
 # Using --no-session for one-off tasks (no session history clutter)
-# Using -t flag to pass the task content as text instruction
-ENTRYPOINT ["sh", "-c", "goose run --no-session -t \"$(cat ${WORKSPACE_DIR}/task.md)\""]
+# Using -i flag to read instructions from file
+ENTRYPOINT ["sh", "-c", "goose run --no-session -i ${WORKSPACE_DIR}/task.md"]
