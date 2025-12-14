@@ -174,15 +174,40 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 	for i, cred := range cfg.credentials {
 		// Check if Key is specified - determines mounting behavior
 		if cred.SecretRef.Key == nil || *cred.SecretRef.Key == "" {
-			// No key specified: mount entire secret as environment variables
-			// When mounting entire secret, Env and MountPath are ignored
-			envFromSources = append(envFromSources, corev1.EnvFromSource{
-				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cred.SecretRef.Name,
+			// No key specified: mount entire secret
+			if cred.MountPath != nil && *cred.MountPath != "" {
+				// Mount entire secret as a directory (each key becomes a file)
+				volumeName := fmt.Sprintf("credential-%d", i)
+
+				// Default file mode is 0600 (read/write for owner only)
+				var fileMode int32 = 0600
+				if cred.FileMode != nil {
+					fileMode = *cred.FileMode
+				}
+
+				volumes = append(volumes, corev1.Volume{
+					Name: volumeName,
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName:  cred.SecretRef.Name,
+							DefaultMode: &fileMode,
+						},
 					},
-				},
-			})
+				})
+				volumeMounts = append(volumeMounts, corev1.VolumeMount{
+					Name:      volumeName,
+					MountPath: *cred.MountPath,
+				})
+			} else {
+				// Mount entire secret as environment variables
+				envFromSources = append(envFromSources, corev1.EnvFromSource{
+					SecretRef: &corev1.SecretEnvSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: cred.SecretRef.Name,
+						},
+					},
+				})
+			}
 			continue
 		}
 

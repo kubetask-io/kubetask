@@ -367,6 +367,92 @@ func TestBuildJob_WithMixedCredentials(t *testing.T) {
 	}
 }
 
+func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
+	task := &kubetaskv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+	}
+	task.APIVersion = "kubetask.io/v1alpha1"
+	task.Kind = "Task"
+
+	mountPath := "/etc/ssl/certs"
+	var fileMode int32 = 0400
+
+	cfg := agentConfig{
+		agentImage:         "test-agent:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		credentials: []kubetaskv1alpha1.Credential{
+			{
+				// No Key specified + MountPath = mount entire secret as directory
+				Name: "tls-certs",
+				SecretRef: kubetaskv1alpha1.SecretReference{
+					Name: "tls-certificates",
+					// Key is nil - entire secret should be mounted as directory
+				},
+				MountPath: &mountPath,
+				FileMode:  &fileMode,
+			},
+		},
+	}
+
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil)
+
+	container := job.Spec.Template.Spec.Containers[0]
+	podSpec := job.Spec.Template.Spec
+
+	// Verify envFrom is NOT set (should not be env vars)
+	if len(container.EnvFrom) != 0 {
+		t.Errorf("Expected 0 envFrom entries, got %d", len(container.EnvFrom))
+	}
+
+	// Verify volume is created
+	var foundVolume bool
+	var volumeName string
+	for _, vol := range podSpec.Volumes {
+		if vol.Secret != nil && vol.Secret.SecretName == "tls-certificates" {
+			foundVolume = true
+			volumeName = vol.Name
+
+			// Verify DefaultMode is set
+			if vol.Secret.DefaultMode == nil {
+				t.Errorf("Expected DefaultMode to be set")
+			} else if *vol.Secret.DefaultMode != fileMode {
+				t.Errorf("DefaultMode = %d, want %d", *vol.Secret.DefaultMode, fileMode)
+			}
+
+			// Verify Items is NOT set (mounting entire secret)
+			if len(vol.Secret.Items) != 0 {
+				t.Errorf("Expected no Items for entire secret mount, got %d", len(vol.Secret.Items))
+			}
+			break
+		}
+	}
+	if !foundVolume {
+		t.Fatalf("Volume for tls-certificates secret not found")
+	}
+
+	// Verify volumeMount is created
+	var foundVolumeMount bool
+	for _, vm := range container.VolumeMounts {
+		if vm.Name == volumeName && vm.MountPath == mountPath {
+			foundVolumeMount = true
+
+			// Verify SubPath is NOT set (mounting entire directory)
+			if vm.SubPath != "" {
+				t.Errorf("SubPath should be empty for directory mount, got %q", vm.SubPath)
+			}
+			break
+		}
+	}
+	if !foundVolumeMount {
+		t.Errorf("VolumeMount for %s not found", mountPath)
+	}
+}
+
 func TestBuildJob_WithHumanInTheLoop(t *testing.T) {
 	keepAlive := int32(1800)
 	task := &kubetaskv1alpha1.Task{

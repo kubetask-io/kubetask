@@ -429,6 +429,13 @@ type PodScheduling struct {
 
 // Credential represents a secret that should be available to the agent.
 // Each credential references a Kubernetes Secret and specifies how to expose it.
+//
+// Mounting behavior depends on whether SecretRef.Key is specified:
+//
+// 1. No Key specified + No MountPath: entire Secret as environment variables
+// 2. No Key specified + MountPath: entire Secret as directory (each key becomes a file)
+// 3. Key specified + Env: single key as environment variable
+// 4. Key specified + MountPath: single key as file
 type Credential struct {
 	// Name is a descriptive name for this credential (for documentation purposes).
 	// +required
@@ -438,13 +445,17 @@ type Credential struct {
 	// +required
 	SecretRef SecretReference `json:"secretRef"`
 
-	// MountPath specifies where to mount the secret as a file.
-	// If specified, the secret key's value is written to this path.
-	// Example: "/home/agent/.ssh/id_rsa" for SSH keys
+	// MountPath specifies where to mount the secret.
+	// - If SecretRef.Key is specified: mounts the single key's value as a file at this path.
+	//   Example: "/home/agent/.ssh/id_rsa" for SSH keys
+	// - If SecretRef.Key is not specified: mounts the entire Secret as a directory,
+	//   where each key in the Secret becomes a file in the directory.
+	//   Example: "/etc/ssl/certs" for a Secret containing ca.crt, client.crt, client.key
 	// +optional
 	MountPath *string `json:"mountPath,omitempty"`
 
 	// Env specifies the environment variable name to expose the secret value.
+	// Only applicable when SecretRef.Key is specified.
 	// If specified, the secret key's value is set as this environment variable.
 	// Example: "GITHUB_TOKEN" for GitHub API access
 	// +optional
@@ -460,16 +471,17 @@ type Credential struct {
 
 // SecretReference references a Kubernetes Secret.
 // When Key is specified, only that specific key is used.
-// When Key is omitted, the entire Secret is mounted (all keys become environment variables).
+// When Key is omitted, the entire Secret is used (behavior depends on Credential.MountPath).
 type SecretReference struct {
 	// Name of the Secret.
 	// +required
 	Name string `json:"name"`
 
 	// Key of the Secret to select.
-	// If not specified, the entire Secret is mounted as environment variables
-	// (each key in the Secret becomes an environment variable with the same name).
-	// When Key is omitted, Env and MountPath fields on the Credential are ignored.
+	// If not specified, the entire Secret is used:
+	// - With MountPath: mounted as a directory (each key becomes a file)
+	// - Without MountPath: all keys become environment variables
+	// When Key is omitted, the Env field on the Credential is ignored.
 	// +optional
 	Key *string `json:"key,omitempty"`
 }
