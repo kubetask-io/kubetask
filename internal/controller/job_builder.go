@@ -358,28 +358,26 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 		VolumeMounts:    volumeMounts,
 	}
 
-	// Apply command if specified
-	if len(cfg.command) > 0 {
-		// If humanInTheLoop is enabled on the Task, wrap the command with sleep
-		if task.Spec.HumanInTheLoop != nil && task.Spec.HumanInTheLoop.Enabled {
-			keepAlive := DefaultKeepAlive
-			if task.Spec.HumanInTheLoop.KeepAlive != nil {
-				keepAlive = task.Spec.HumanInTheLoop.KeepAlive.Duration
-			}
-			keepAliveSeconds := int64(keepAlive.Seconds())
-
-			// Build the wrapped command that runs original command then sleeps
-			// Format: sh -c 'original_command; EXIT_CODE=$?; echo "Human-in-the-loop: keeping container alive..."; sleep N; exit $EXIT_CODE'
-			originalCmd := strings.Join(cfg.command, " ")
-			wrappedScript := fmt.Sprintf(
-				`%s; EXIT_CODE=$?; echo "Human-in-the-loop: keeping container alive for %d seconds. Use 'kubectl exec' to access."; sleep %d; exit $EXIT_CODE`,
-				originalCmd, keepAliveSeconds, keepAliveSeconds,
-			)
-			agentContainer.Command = []string{"sh", "-c", wrappedScript}
-		} else {
-			// No humanInTheLoop on Task, use command as-is
-			agentContainer.Command = cfg.command
+	// Apply command (required field in Agent spec)
+	// If humanInTheLoop is enabled on the Task, wrap the command with sleep
+	if task.Spec.HumanInTheLoop != nil && task.Spec.HumanInTheLoop.Enabled {
+		keepAlive := DefaultKeepAlive
+		if task.Spec.HumanInTheLoop.KeepAlive != nil {
+			keepAlive = task.Spec.HumanInTheLoop.KeepAlive.Duration
 		}
+		keepAliveSeconds := int64(keepAlive.Seconds())
+
+		// Build the wrapped command that runs original command then sleeps
+		// Format: sh -c 'original_command; EXIT_CODE=$?; echo "Human-in-the-loop: keeping container alive..."; sleep N; exit $EXIT_CODE'
+		originalCmd := strings.Join(cfg.command, " ")
+		wrappedScript := fmt.Sprintf(
+			`%s; EXIT_CODE=$?; echo "Human-in-the-loop: keeping container alive for %d seconds. Use 'kubectl exec' to access."; sleep %d; exit $EXIT_CODE`,
+			originalCmd, keepAliveSeconds, keepAliveSeconds,
+		)
+		agentContainer.Command = []string{"sh", "-c", wrappedScript}
+	} else {
+		// No humanInTheLoop on Task, use command as-is
+		agentContainer.Command = cfg.command
 	}
 
 	// Build PodSpec with scheduling configuration

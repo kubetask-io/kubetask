@@ -42,8 +42,12 @@ ENV WORKSPACE_DIR=${WORKSPACE_DIR}
 ENV GOOSE_MODE=auto
 ENV GOOSE_CONTEXT_STRATEGY=summarize
 
-# Default entrypoint - run Goose in headless mode
-# The agent reads the task from ${WORKSPACE_DIR}/task.md and executes it
-# Using --no-session for one-off tasks (no session history clutter)
-# Using -i flag to read instructions from file
-ENTRYPOINT ["sh", "-c", "goose run --no-session -i ${WORKSPACE_DIR}/task.md"]
+# Recommended command for Agent configuration:
+# command: ["sh", "-c", "goose run --no-session -i ${WORKSPACE_DIR}/task.md"]
+#
+# Note: ENTRYPOINT is no longer used. Agent.spec.command is now required.
+# The command defines HOW the agent executes tasks, allowing users to customize
+# execution behavior (e.g., session options, provider settings) without modifying the image.
+#
+# Original ENTRYPOINT (kept as reference):
+# ENTRYPOINT ["sh", "-c", "goose run --no-session -i ${WORKSPACE_DIR}/task.md"]

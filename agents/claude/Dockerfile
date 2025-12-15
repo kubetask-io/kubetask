@@ -22,9 +22,12 @@ ENV PATH="/home/agent/.local/bin:${PATH}"
 ARG WORKSPACE_DIR=/workspace
 ENV WORKSPACE_DIR=${WORKSPACE_DIR}
 
-# Default entrypoint - run Claude Code in headless mode
-# The agent reads the task from ${WORKSPACE_DIR}/task.md and executes it
-# Using -p flag for direct prompt input from the mounted context file
-# Using --dangerously-skip-permissions to auto-approve actions (safe in container environment)
-# Using stream-json output to see all logs
-ENTRYPOINT ["sh", "-c", "claude --output-format stream-json --dangerously-skip-permissions -p \"$(cat ${WORKSPACE_DIR}/task.md)\""]
+# Recommended command for Agent configuration:
+# command: ["sh", "-c", "claude --output-format stream-json --dangerously-skip-permissions -p \"$(cat ${WORKSPACE_DIR}/task.md)\""]
+#
+# Note: ENTRYPOINT is no longer used. Agent.spec.command is now required.
+# The command defines HOW the agent executes tasks, allowing users to customize
+# execution behavior (e.g., output format, flags) without modifying the image.
+#
+# Original ENTRYPOINT (kept as reference):
+# ENTRYPOINT ["sh", "-c", "claude --output-format stream-json --dangerously-skip-permissions -p \"$(cat ${WORKSPACE_DIR}/task.md)\""]

@@ -16,7 +16,12 @@ RUN adduser -D -s /bin/bash agent
 USER agent
 WORKDIR ${WORKSPACE_DIR}
 
-# Default entrypoint - echo the content of all files in the workspace directory
-# This is useful for e2e testing to verify files are correctly mounted
-# It recursively finds all files and prints their path and content
-ENTRYPOINT ["sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"]
+# Recommended command for Agent configuration (for e2e testing):
+# command: ["sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"]
+#
+# Note: ENTRYPOINT is no longer used. Agent.spec.command is now required.
+# The command defines HOW the agent executes tasks, allowing users to customize
+# execution behavior without modifying the image.
+#
+# Original ENTRYPOINT (kept as reference):
+# ENTRYPOINT ["sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"]

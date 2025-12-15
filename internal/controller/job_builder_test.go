@@ -90,6 +90,7 @@ func TestBuildJob_BasicTask(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil)
@@ -183,6 +184,7 @@ func TestBuildJob_WithCredentials(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 		credentials: []kubetaskv1alpha1.Credential{
 			{
 				Name: "api-token",
@@ -266,6 +268,7 @@ func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 		credentials: []kubetaskv1alpha1.Credential{
 			{
 				// No Key specified - mount entire secret as env vars
@@ -314,6 +317,7 @@ func TestBuildJob_WithMixedCredentials(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 		credentials: []kubetaskv1alpha1.Credential{
 			{
 				// Entire secret mount (no key)
@@ -386,6 +390,7 @@ func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 		credentials: []kubetaskv1alpha1.Credential{
 			{
 				// No Key specified + MountPath = mount entire secret as directory
@@ -537,6 +542,7 @@ func TestBuildJob_WithPodScheduling(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 		podSpec: &kubetaskv1alpha1.AgentPodSpec{
 			Labels: map[string]string{
 				"custom-label": "custom-value",
@@ -606,6 +612,7 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	contextConfigMap := &corev1.ConfigMap{
@@ -669,6 +676,7 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	dirMounts := []dirMount{
@@ -728,6 +736,7 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	gitMounts := []gitMount{
@@ -820,6 +829,7 @@ func TestBuildJob_WithGitMountsAndAuth(t *testing.T) {
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	gitMounts := []gitMount{

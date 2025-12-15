@@ -282,18 +282,23 @@ type AgentSpec struct {
 	WorkspaceDir string `json:"workspaceDir,omitempty"`
 
 	// Command specifies the entrypoint command for the agent container.
-	// This overrides the default ENTRYPOINT of the container image.
+	// This is REQUIRED and overrides the default ENTRYPOINT of the container image.
 	//
-	// This field is REQUIRED when Task.spec.humanInTheLoop is enabled, as the controller
-	// needs to wrap the command with a sleep to keep the container running.
+	// The command defines HOW the agent executes tasks. Different users can
+	// customize execution behavior (e.g., output format, flags) without
+	// modifying the agent image. The agent image only provides the tools.
+	//
+	// When Task.spec.humanInTheLoop is enabled, the controller wraps this
+	// command with a sleep to keep the container running after task completion.
 	//
 	// Example:
 	//   command: ["sh", "-c", "gemini --yolo -p \"$(cat /workspace/task.md)\""]
 	//
 	// When humanInTheLoop is enabled on a Task, the command will be wrapped to:
 	//   sh -c 'original-command; sleep $KUBETASK_KEEP_ALIVE_SECONDS'
-	// +optional
-	Command []string `json:"command,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinItems=1
+	Command []string `json:"command"`
 
 	// Contexts references Context CRDs as defaults for all tasks using this Agent.
 	// These have the lowest priority in context merging.

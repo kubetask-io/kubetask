@@ -295,12 +295,33 @@ internal/controller/
 
 Key Agent spec fields:
 - `agentImage`: Container image for task execution
+- `command`: **Required** - Entrypoint command that defines HOW the agent executes tasks
 - `workspaceDir`: Working directory (default: "/workspace")
-- `command`: Custom entrypoint command
 - `contexts`: References to Context CRDs (applied to all tasks)
 - `credentials`: Secrets as env vars or file mounts (supports single key or entire secret)
 - `serviceAccountName`: Kubernetes ServiceAccount for RBAC
 - `maxConcurrentTasks`: Limit concurrent Tasks using this Agent (nil/0 = unlimited)
+
+**Command Field (Required):**
+
+The `command` field is required and defines how the agent executes tasks. This design:
+- Decouples agent images from execution logic (images provide tools, command defines usage)
+- Allows users to customize execution behavior (e.g., output format, flags)
+- Enables `humanInTheLoop` to work by wrapping the command with sleep
+
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: Agent
+metadata:
+  name: gemini-agent
+spec:
+  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  command:
+    - sh
+    - -c
+    - gemini --output-format stream-json --yolo -p "$(cat ${WORKSPACE_DIR}/task.md)"
+  serviceAccountName: kubetask-agent
+```
 
 **Concurrency Control:**
 
@@ -314,6 +335,10 @@ metadata:
   name: claude-agent
 spec:
   agentImage: quay.io/kubetask/kubetask-agent-claude:latest
+  command:
+    - sh
+    - -c
+    - claude --output-format stream-json --dangerously-skip-permissions -p "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubetask-agent
   maxConcurrentTasks: 3  # Only 3 Tasks can run concurrently
 ```

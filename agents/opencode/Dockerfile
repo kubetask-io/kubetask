@@ -26,9 +26,12 @@ USER agent
 ARG WORKSPACE_DIR=/workspace
 ENV WORKSPACE_DIR=${WORKSPACE_DIR}
 
-# Default entrypoint - run OpenCode in non-interactive mode
-# The agent reads the task from ${WORKSPACE_DIR}/task.md and executes it
-# Using 'run' command for non-interactive mode
-# Using --format json for structured output
-# Note: In non-interactive mode, all permissions are auto-approved
-ENTRYPOINT ["sh", "-c", "opencode run --format json \"$(cat ${WORKSPACE_DIR}/task.md)\""]
+# Recommended command for Agent configuration:
+# command: ["sh", "-c", "opencode run --format json \"$(cat ${WORKSPACE_DIR}/task.md)\""]
+#
+# Note: ENTRYPOINT is no longer used. Agent.spec.command is now required.
+# The command defines HOW the agent executes tasks, allowing users to customize
+# execution behavior (e.g., output format, provider settings) without modifying the image.
+#
+# Original ENTRYPOINT (kept as reference):
+# ENTRYPOINT ["sh", "-c", "opencode run --format json \"$(cat ${WORKSPACE_DIR}/task.md)\""]
