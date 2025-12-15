@@ -78,6 +78,31 @@ kind: Agent
 - Leverages existing Kubernetes tooling
 - Follows cloud-native best practices
 
+#### 4. No Retry Mechanism
+
+**Rationale**: AI tasks are fundamentally different from traditional functions:
+
+- **Non-deterministic output**: AI agents may produce different results on each run
+- **Non-idempotent operations**: Tasks may perform actions (create PRs, modify files, send messages) that should not be repeated
+- **Compound failures**: Retrying a partially completed task may cause duplicate operations or inconsistent state
+
+**Implementation**:
+- Jobs are created with `backoffLimit: 0` (no Pod retry on failure)
+- Pods use `restartPolicy: Never` (no container restart on failure)
+- Task fails immediately when the agent container exits with non-zero code
+
+**If retry is needed**, use external Kubernetes ecosystem components:
+- **Argo Workflows**: DAG-based workflow with conditional retry logic
+- **Tekton Pipelines**: CI/CD pipelines with result-based retry
+- **Custom controllers**: Monitor Task status and create new Tasks based on validation results
+- **CronTask**: For periodic re-execution of tasks
+
+This approach:
+- Keeps the Task API simple and focused
+- Delegates retry/orchestration to specialized tools
+- Allows users to implement custom validation before retry
+- Prevents accidental duplicate operations from AI agents
+
 ### Resource Hierarchy
 
 ```
@@ -1049,6 +1074,7 @@ kubectl get agent default -o yaml
 - `Git` - Content from Git repository with branch/tag/commit support
 
 **Task Lifecycle**:
+- No retry on failure (AI tasks are non-idempotent)
 - TTL-based automatic cleanup (default: 7 days)
 - Human-in-the-loop debugging support
 - OwnerReference cascade deletion
@@ -1067,6 +1093,6 @@ kubectl get agent default -o yaml
 ---
 
 **Status**: FINAL
-**Date**: 2025-12-12
-**Version**: v3.2
+**Date**: 2025-12-15
+**Version**: v3.3
 **Maintainer**: KubeTask Team

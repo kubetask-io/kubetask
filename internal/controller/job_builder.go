@@ -72,6 +72,11 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
+// int32Ptr returns a pointer to the given int32 value
+func int32Ptr(i int32) *int32 {
+	return &i
+}
+
 const (
 	// DefaultGitSyncImage is the default git-sync container image
 	DefaultGitSyncImage = "registry.k8s.io/git-sync/git-sync:v4.4.0"
@@ -454,6 +459,7 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 			},
 		},
 		Spec: batchv1.JobSpec{
+			BackoffLimit: int32Ptr(0), // No retries - AI tasks are not idempotent
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: podLabels,

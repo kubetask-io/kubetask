@@ -159,6 +159,11 @@ func TestBuildJob_BasicTask(t *testing.T) {
 	if job.Spec.Template.Spec.RestartPolicy != corev1.RestartPolicyNever {
 		t.Errorf("RestartPolicy = %q, want %q", job.Spec.Template.Spec.RestartPolicy, corev1.RestartPolicyNever)
 	}
+
+	// Verify backoff limit is 0 (no retries - AI tasks are not idempotent)
+	if job.Spec.BackoffLimit == nil || *job.Spec.BackoffLimit != 0 {
+		t.Errorf("BackoffLimit = %v, want 0", job.Spec.BackoffLimit)
+	}
 }
 
 // stringPtr returns a pointer to the given string value
