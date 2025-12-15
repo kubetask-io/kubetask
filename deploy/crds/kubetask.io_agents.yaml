@@ -1276,17 +1276,17 @@ spec:
                   based on what permissions their agent needs.
                 type: string
               workspaceDir:
-                default: /workspace
                 description: |-
                   WorkspaceDir specifies the working directory inside the agent container.
                   This is where task.md and context files are mounted.
                   The agent image must support the WORKSPACE_DIR environment variable.
-                  Defaults to "/workspace" if not specified.
+                minLength: 1
                 pattern: ^/.*
                 type: string
             required:
             - command
             - serviceAccountName
+            - workspaceDir
             type: object
           status:
             description: Status represents the current status of the Agent

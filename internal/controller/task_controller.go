@@ -28,9 +28,6 @@ const (
 	// DefaultAgentImage is the default agent container image
 	DefaultAgentImage = "quay.io/kubetask/kubetask-agent-gemini:latest"
 
-	// DefaultWorkspaceDir is the default workspace directory for agent containers
-	DefaultWorkspaceDir = "/workspace"
-
 	// ContextConfigMapSuffix is the suffix for ConfigMap names created for context
 	ContextConfigMapSuffix = "-context"
 
@@ -388,11 +385,8 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubet
 		agentImage = agent.Spec.AgentImage
 	}
 
-	// Get workspace directory (optional, has default)
-	workspaceDir := DefaultWorkspaceDir
-	if agent.Spec.WorkspaceDir != "" {
-		workspaceDir = agent.Spec.WorkspaceDir
-	}
+	// Get workspace directory (required)
+	workspaceDir := agent.Spec.WorkspaceDir
 
 	// ServiceAccountName is required
 	if agent.Spec.ServiceAccountName == "" {

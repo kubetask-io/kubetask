@@ -296,7 +296,7 @@ internal/controller/
 Key Agent spec fields:
 - `agentImage`: Container image for task execution
 - `command`: **Required** - Entrypoint command that defines HOW the agent executes tasks
-- `workspaceDir`: Working directory (default: "/workspace")
+- `workspaceDir`: **Required** - Working directory where task.md and context files are mounted
 - `contexts`: References to Context CRDs (applied to all tasks)
 - `credentials`: Secrets as env vars or file mounts (supports single key or entire secret)
 - `serviceAccountName`: Kubernetes ServiceAccount for RBAC

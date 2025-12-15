@@ -275,11 +275,10 @@ type AgentSpec struct {
 	// WorkspaceDir specifies the working directory inside the agent container.
 	// This is where task.md and context files are mounted.
 	// The agent image must support the WORKSPACE_DIR environment variable.
-	// Defaults to "/workspace" if not specified.
-	// +optional
-	// +kubebuilder:default="/workspace"
+	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^/.*`
-	WorkspaceDir string `json:"workspaceDir,omitempty"`
+	// +kubebuilder:validation:MinLength=1
+	WorkspaceDir string `json:"workspaceDir"`
 
 	// Command specifies the entrypoint command for the agent container.
 	// This is REQUIRED and overrides the default ENTRYPOINT of the container image.
