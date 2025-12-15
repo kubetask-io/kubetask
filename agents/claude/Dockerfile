@@ -18,10 +18,6 @@ USER agent
 RUN curl -fsSL https://claude.ai/install.sh | bash
 ENV PATH="/home/agent/.local/bin:${PATH}"
 
-# Build argument for workspace directory (inherited from base)
-ARG WORKSPACE_DIR=/workspace
-ENV WORKSPACE_DIR=${WORKSPACE_DIR}
-
 # Recommended command for Agent configuration:
 # command: ["sh", "-c", "claude --output-format stream-json --dangerously-skip-permissions -p \"$(cat ${WORKSPACE_DIR}/task.md)\""]
 #

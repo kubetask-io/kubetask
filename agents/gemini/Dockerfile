@@ -17,10 +17,6 @@ USER root
 RUN npm install -g @google/gemini-cli
 USER agent
 
-# Build argument for workspace directory (inherited from base)
-ARG WORKSPACE_DIR=/workspace
-ENV WORKSPACE_DIR=${WORKSPACE_DIR}
-
 # Recommended command for Agent configuration:
 # command: ["sh", "-c", "gemini --output-format stream-json --yolo -p \"$(cat ${WORKSPACE_DIR}/task.md)\""]
 #

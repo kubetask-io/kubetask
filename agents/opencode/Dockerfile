@@ -22,10 +22,6 @@ USER root
 RUN npm install -g opencode-ai@latest
 USER agent
 
-# Build argument for workspace directory (inherited from base)
-ARG WORKSPACE_DIR=/workspace
-ENV WORKSPACE_DIR=${WORKSPACE_DIR}
-
 # Recommended command for Agent configuration:
 # command: ["sh", "-c", "opencode run --format json \"$(cat ${WORKSPACE_DIR}/task.md)\""]
 #

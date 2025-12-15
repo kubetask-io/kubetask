@@ -31,10 +31,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mv /root/.local/bin/goose /usr/local/bin/goose
 USER agent
 
-# Build argument for workspace directory (inherited from base)
-ARG WORKSPACE_DIR=/workspace
-ENV WORKSPACE_DIR=${WORKSPACE_DIR}
-
 # Goose environment defaults
 # GOOSE_MODE=auto: auto-approve operations (safe in container environment)
 # GOOSE_CONTEXT_STRATEGY=summarize: manage context efficiently
