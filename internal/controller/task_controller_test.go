@@ -1303,4 +1303,97 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
+
+	Context("When terminating a Running Task via annotation", func() {
+		It("Should delete Job and set Task status to Completed with Terminated condition", func() {
+			taskName := "test-task-terminate"
+			agentName := "test-agent-terminate"
+			description := "# Terminate test"
+
+			By("Creating Agent")
+			agent := &kubetaskv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "sleep 3600"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					AgentRef:    agentName,
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Waiting for Task to be Running")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				updatedTask := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
+					return ""
+				}
+				return updatedTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+
+			By("Checking Job is created")
+			jobName := fmt.Sprintf("%s-job", taskName)
+			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
+			createdJob := &batchv1.Job{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, jobLookupKey, createdJob) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Adding terminate annotation to Task")
+			currentTask := &kubetaskv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskLookupKey, currentTask)).Should(Succeed())
+			if currentTask.Annotations == nil {
+				currentTask.Annotations = make(map[string]string)
+			}
+			currentTask.Annotations[AnnotationTerminate] = "true"
+			Expect(k8sClient.Update(ctx, currentTask)).Should(Succeed())
+
+			By("Checking Task status is Completed")
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				updatedTask := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
+					return ""
+				}
+				return updatedTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseCompleted))
+
+			By("Checking Task has Terminated condition")
+			finalTask := &kubetaskv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskLookupKey, finalTask)).Should(Succeed())
+
+			var terminatedCondition *metav1.Condition
+			for i := range finalTask.Status.Conditions {
+				if finalTask.Status.Conditions[i].Type == "Terminated" {
+					terminatedCondition = &finalTask.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(terminatedCondition).ShouldNot(BeNil())
+			Expect(terminatedCondition.Status).Should(Equal(metav1.ConditionTrue))
+			Expect(terminatedCondition.Reason).Should(Equal("UserTerminated"))
+
+			By("Checking CompletionTime is set")
+			Expect(finalTask.Status.CompletionTime).ShouldNot(BeNil())
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+	})
 })

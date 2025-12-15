@@ -45,6 +45,9 @@ const (
 
 	// DefaultQueuedRequeueDelay is the default delay for requeuing queued Tasks
 	DefaultQueuedRequeueDelay = 10 * time.Second
+
+	// AnnotationTerminate is the annotation key for user-initiated task termination
+	AnnotationTerminate = "kubetask.io/terminate"
 )
 
 // TaskReconciler reconciles a Task object
@@ -92,6 +95,13 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if task.Status.Phase == kubetaskv1alpha1.TaskPhaseCompleted ||
 		task.Status.Phase == kubetaskv1alpha1.TaskPhaseFailed {
 		return r.handleTaskCleanup(ctx, task)
+	}
+
+	// Check for user-initiated termination (only for Running tasks)
+	if task.Status.Phase == kubetaskv1alpha1.TaskPhaseRunning {
+		if task.Annotations != nil && task.Annotations[AnnotationTerminate] == "true" {
+			return r.handleTermination(ctx, task)
+		}
 	}
 
 	// Update task status from Job status
@@ -784,4 +794,47 @@ func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubetaskv1a
 
 	// Requeue immediately to trigger initializeTask
 	return ctrl.Result{Requeue: true}, nil
+}
+
+// handleTermination handles user-initiated task termination via annotation
+func (r *TaskReconciler) handleTermination(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+	log.Info("user-initiated termination detected", "task", task.Name)
+
+	// Delete the Job if it exists
+	if task.Status.JobName != "" {
+		job := &batchv1.Job{}
+		jobKey := types.NamespacedName{Name: task.Status.JobName, Namespace: task.Namespace}
+		if err := r.Get(ctx, jobKey, job); err == nil {
+			// Use background deletion to clean up pods
+			propagation := metav1.DeletePropagationBackground
+			if err := r.Delete(ctx, job, &client.DeleteOptions{
+				PropagationPolicy: &propagation,
+			}); err != nil && !errors.IsNotFound(err) {
+				log.Error(err, "failed to delete job")
+				return ctrl.Result{}, err
+			}
+			log.Info("deleted job for terminated task", "job", task.Status.JobName)
+		}
+	}
+
+	// Update Task status to Completed with Terminated condition
+	task.Status.Phase = kubetaskv1alpha1.TaskPhaseCompleted
+	task.Status.ObservedGeneration = task.Generation
+	now := metav1.Now()
+	task.Status.CompletionTime = &now
+
+	meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
+		Type:    "Terminated",
+		Status:  metav1.ConditionTrue,
+		Reason:  "UserTerminated",
+		Message: "Task terminated by user via kubetask.io/terminate annotation",
+	})
+
+	if err := r.Status().Update(ctx, task); err != nil {
+		log.Error(err, "failed to update task status")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }
