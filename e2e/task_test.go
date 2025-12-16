@@ -37,6 +37,8 @@ var _ = Describe("Task E2E Tests", func() {
 			Spec: kubetaskv1alpha1.AgentSpec{
 				AgentImage:         echoImage,
 				ServiceAccountName: testServiceAccount,
+				WorkspaceDir:       "/workspace",
+				Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
 			},
 		}
 		Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -350,6 +352,8 @@ var _ = Describe("Task E2E Tests", func() {
 				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
 					Contexts: []kubetaskv1alpha1.ContextMount{
 						{
 							Name: agentContextName,

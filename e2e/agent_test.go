@@ -37,6 +37,8 @@ var _ = Describe("Agent E2E Tests", func() {
 				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
 					PodSpec: &kubetaskv1alpha1.AgentPodSpec{
 						Labels: map[string]string{
 							"custom-label":   "custom-value",
@@ -114,6 +116,8 @@ var _ = Describe("Agent E2E Tests", func() {
 				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
 					PodSpec: &kubetaskv1alpha1.AgentPodSpec{
 						Scheduling: &kubetaskv1alpha1.PodScheduling{
 							NodeSelector: map[string]string{
@@ -188,6 +192,8 @@ var _ = Describe("Agent E2E Tests", func() {
 				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
 					Credentials: []kubetaskv1alpha1.Credential{
 						{
 							Name: "test-api-key",
@@ -247,6 +253,8 @@ var _ = Describe("Agent E2E Tests", func() {
 				Spec: kubetaskv1alpha1.AgentSpec{
 					AgentImage:         echoImage,
 					ServiceAccountName: testServiceAccount,
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, defaultWSConfig)).Should(Succeed())
