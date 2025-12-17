@@ -193,6 +193,20 @@ helm-template:
 		--set controller.image.tag=$(VERSION)
 .PHONY: helm-template
 
+# Chart registry settings
+CHART_REGISTRY ?= oci://$(IMG_REGISTRY)/$(IMG_ORG)
+CHART_NAME ?= kubetask
+
+# Login to helm registry
+helm-login: ## Login to helm OCI registry
+	helm registry login $(IMG_REGISTRY)
+.PHONY: helm-login
+
+# Push helm chart to OCI registry
+helm-push: helm-package ## Push helm chart to OCI registry
+	helm push dist/$(CHART_NAME)-*.tgz $(CHART_REGISTRY)
+.PHONY: helm-push
+
 ##@ Development
 
 # Run controller locally

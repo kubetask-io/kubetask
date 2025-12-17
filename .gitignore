@@ -8,5 +8,8 @@
 bin/
 cover.out
 
+# Helm
+dist/
+
 # Override global gitignore to track CLAUDE.md
 !CLAUDE.md

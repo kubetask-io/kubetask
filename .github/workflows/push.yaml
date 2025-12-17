@@ -154,3 +154,17 @@ jobs:
           tags: |
             ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-claude:latest
             ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-claude:${{ github.sha }}
+
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Login to Helm registry
+        run: |
+          echo "${{ secrets.QUAY_TOKEN }}" | helm registry login quay.io -u ${{ secrets.QUAY_ROBOT_ACCOUNT }} --password-stdin
+
+      - name: Package and push Helm chart
+        run: |
+          mkdir -p dist
+          helm package charts/kubetask -d dist/
+          helm push dist/kubetask-*.tgz oci://quay.io/kubetask
