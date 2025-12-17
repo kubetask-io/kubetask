@@ -27,25 +27,38 @@ linters:
     - errname       # Check error naming conventions
     - gocritic      # Comprehensive Go linter
 
+  # Per-linter settings (golangci-lint v2 format)
+  settings:
+    errcheck:
+      check-blank: false  # Allow using _ = to ignore errors
+      check-type-assertions: true
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment  # Disable field alignment checks (API types need stability)
+        - shadow          # Disable shadow checks (too noisy for Go patterns)
+
+    staticcheck:
+      checks: ["all"]
+
+    revive:
+      rules:
+        # Allow dot imports for ginkgo/gomega (standard BDD test pattern)
+        - name: dot-imports
+          arguments:
+            - allowedPackages:
+                - "github.com/onsi/ginkgo/v2"
+                - "github.com/onsi/gomega"
+
 # In golangci-lint v2, formatters are separate from linters
 formatters:
   enable:
     - gofmt         # Check code formatting
     - goimports     # Check import formatting
-
-linters-settings:
-  errcheck:
-    check-blank: true
-    check-type-assertions: true
-
-  govet:
-    enable-all: true
-
-  gofmt:
-    simplify: true
-
-  staticcheck:
-    checks: ["all"]
+  settings:
+    gofmt:
+      simplify: true
 
 issues:
   # Maximum issues count per linter
@@ -58,6 +71,12 @@ issues:
   exclude-rules:
     # Exclude some linters from running on tests files
     - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+
+    # Exclude e2e test files from errcheck (cleanup code intentionally ignores errors)
+    - path: "e2e/.*\\.go"
       linters:
         - errcheck
         - gosec

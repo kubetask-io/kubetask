@@ -359,13 +359,6 @@ func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// getAgentConfig retrieves the agent configuration from Agent.
-// Returns an error if Agent is not found or invalid.
-func (r *TaskReconciler) getAgentConfig(ctx context.Context, task *kubetaskv1alpha1.Task) (agentConfig, error) {
-	cfg, _, err := r.getAgentConfigWithName(ctx, task)
-	return cfg, err
-}
-
 // getAgentConfigWithName retrieves the agent configuration and returns the agent name.
 // This is useful when we need to track which agent a task is using.
 func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubetaskv1alpha1.Task) (agentConfig, string, error) {
@@ -386,7 +379,7 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubet
 
 	if err := r.Get(ctx, agentKey, agent); err != nil {
 		log.Error(err, "unable to get Agent", "agent", agentName)
-		return agentConfig{}, "", fmt.Errorf("Agent %q not found in namespace %q: %w", agentName, task.Namespace, err)
+		return agentConfig{}, "", fmt.Errorf("agent %q not found in namespace %q: %w", agentName, task.Namespace, err)
 	}
 
 	// Get agent image (optional, has default)
@@ -400,7 +393,7 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubet
 
 	// ServiceAccountName is required
 	if agent.Spec.ServiceAccountName == "" {
-		return agentConfig{}, "", fmt.Errorf("Agent %q is missing required field serviceAccountName", agentName)
+		return agentConfig{}, "", fmt.Errorf("agent %q is missing required field serviceAccountName", agentName)
 	}
 
 	return agentConfig{
@@ -433,11 +426,12 @@ func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubetaskv
 		if err != nil {
 			return nil, nil, nil, nil, fmt.Errorf("failed to resolve Agent context %q: %w", ref.Name, err)
 		}
-		if dm != nil {
+		switch {
+		case dm != nil:
 			dirMounts = append(dirMounts, *dm)
-		} else if gm != nil {
+		case gm != nil:
 			gitMounts = append(gitMounts, *gm)
-		} else if rc != nil {
+		case rc != nil:
 			resolved = append(resolved, *rc)
 		}
 	}
@@ -448,11 +442,12 @@ func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubetaskv
 		if err != nil {
 			return nil, nil, nil, nil, fmt.Errorf("failed to resolve Task context %q: %w", ref.Name, err)
 		}
-		if dm != nil {
+		switch {
+		case dm != nil:
 			dirMounts = append(dirMounts, *dm)
-		} else if gm != nil {
+		case gm != nil:
 			gitMounts = append(gitMounts, *gm)
-		} else if rc != nil {
+		case rc != nil:
 			resolved = append(resolved, *rc)
 		}
 	}
@@ -537,7 +532,7 @@ func (r *TaskReconciler) resolveContextRef(ctx context.Context, ref kubetaskv1al
 	// Fetch the Context CR
 	contextCR := &kubetaskv1alpha1.Context{}
 	if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, contextCR); err != nil {
-		return nil, nil, nil, fmt.Errorf("Context %q not found in namespace %q: %w", ref.Name, namespace, err)
+		return nil, nil, nil, fmt.Errorf("context %q not found in namespace %q: %w", ref.Name, namespace, err)
 	}
 
 	// Resolve content based on context type

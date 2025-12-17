@@ -258,11 +258,12 @@ func (r *CronWorkflowReconciler) createWorkflowRun(ctx context.Context, cronWork
 
 	// Build WorkflowRunSpec based on CronWorkflow spec
 	runSpec := kubetaskv1alpha1.WorkflowRunSpec{}
-	if cronWorkflow.Spec.WorkflowRef != "" {
+	switch {
+	case cronWorkflow.Spec.WorkflowRef != "":
 		runSpec.WorkflowRef = cronWorkflow.Spec.WorkflowRef
-	} else if cronWorkflow.Spec.Inline != nil {
+	case cronWorkflow.Spec.Inline != nil:
 		runSpec.Inline = cronWorkflow.Spec.Inline.DeepCopy()
-	} else {
+	default:
 		return nil, fmt.Errorf("CronWorkflow must specify either workflowRef or inline")
 	}
 

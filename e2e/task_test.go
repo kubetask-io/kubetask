@@ -544,7 +544,7 @@ func getPodLogs(ctx context.Context, namespace, jobName string) string {
 			if err != nil {
 				continue
 			}
-			defer stream.Close()
+			defer func() { _ = stream.Close() }()
 
 			buf := new(bytes.Buffer)
 			_, err = io.Copy(buf, stream)

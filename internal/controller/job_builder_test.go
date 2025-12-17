@@ -298,10 +298,8 @@ func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
 	envFrom := container.EnvFrom[0]
 	if envFrom.SecretRef == nil {
 		t.Errorf("EnvFrom.SecretRef should not be nil")
-	} else {
-		if envFrom.SecretRef.Name != "api-credentials" {
-			t.Errorf("EnvFrom.SecretRef.Name = %q, want %q", envFrom.SecretRef.Name, "api-credentials")
-		}
+	} else if envFrom.SecretRef.Name != "api-credentials" {
+		t.Errorf("EnvFrom.SecretRef.Name = %q, want %q", envFrom.SecretRef.Name, "api-credentials")
 	}
 }
 
@@ -660,7 +658,7 @@ func TestBuildJob_WithPodScheduling(t *testing.T) {
 	}
 
 	// Verify custom label on pod template
-	podLabels := job.Spec.Template.ObjectMeta.Labels
+	podLabels := job.Spec.Template.Labels
 	if podLabels["custom-label"] != "custom-value" {
 		t.Errorf("PodLabels[custom-label] = %q, want %q", podLabels["custom-label"], "custom-value")
 	}
