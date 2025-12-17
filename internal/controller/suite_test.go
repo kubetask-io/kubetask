@@ -117,11 +117,23 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	// Initialize fake clock for CronTask tests
+	// Initialize fake clock for CronWorkflow tests
 	// Set initial time to a minute boundary to ensure predictable scheduling
 	fakeClock = &FakeClock{now: time.Now().Truncate(time.Minute)}
 
-	err = (&CronTaskReconciler{
+	err = (&WorkflowReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = (&WorkflowRunReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = (&CronWorkflowReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
 		Clock:  fakeClock,
@@ -156,3 +168,8 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
+
+// stringPtr returns a pointer to the given string value
+func stringPtr(s string) *string {
+	return &s
+}

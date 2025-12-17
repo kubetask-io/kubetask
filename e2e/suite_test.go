@@ -26,13 +26,13 @@ import (
 )
 
 var (
-	k8sClient  client.Client
-	clientset  *kubernetes.Clientset
-	ctx        context.Context
-	cancel     context.CancelFunc
-	scheme     *runtime.Scheme
-	testNS     string
-	echoImage  string
+	k8sClient client.Client
+	clientset *kubernetes.Clientset
+	ctx       context.Context
+	cancel    context.CancelFunc
+	scheme    *runtime.Scheme
+	testNS    string
+	echoImage string
 )
 
 const (
@@ -160,19 +160,27 @@ var _ = AfterSuite(func() {
 		}
 	}
 
-	// Delete all CronTasks in test namespace
-	cronTasks := &kubetaskv1alpha1.CronTaskList{}
-	if err := k8sClient.List(ctx, cronTasks, client.InNamespace(testNS)); err == nil {
-		for i := range cronTasks.Items {
-			_ = k8sClient.Delete(ctx, &cronTasks.Items[i])
-		}
-	}
-
 	// Delete all Agents in test namespace
 	agents := &kubetaskv1alpha1.AgentList{}
 	if err := k8sClient.List(ctx, agents, client.InNamespace(testNS)); err == nil {
 		for _, a := range agents.Items {
 			_ = k8sClient.Delete(ctx, &a)
+		}
+	}
+
+	// Delete all WorkflowRuns in test namespace
+	workflowRuns := &kubetaskv1alpha1.WorkflowRunList{}
+	if err := k8sClient.List(ctx, workflowRuns, client.InNamespace(testNS)); err == nil {
+		for i := range workflowRuns.Items {
+			_ = k8sClient.Delete(ctx, &workflowRuns.Items[i])
+		}
+	}
+
+	// Delete all Workflows in test namespace
+	workflows := &kubetaskv1alpha1.WorkflowList{}
+	if err := k8sClient.List(ctx, workflows, client.InNamespace(testNS)); err == nil {
+		for i := range workflows.Items {
+			_ = k8sClient.Delete(ctx, &workflows.Items[i])
 		}
 	}
 

@@ -26,9 +26,11 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks using Cust
 ### Resource Hierarchy
 
 1. **Task** - Single task execution (the primary API)
-2. **CronTask** - Scheduled/recurring task execution (creates Tasks on cron schedule)
-3. **Agent** - AI agent configuration (HOW to execute)
-4. **Context** - Reusable context resources (Inline, ConfigMap, or Git)
+2. **Workflow** - Reusable multi-stage task template
+3. **WorkflowRun** - Workflow execution instance
+4. **CronWorkflow** - Scheduled WorkflowRun triggering
+5. **Agent** - AI agent configuration (HOW to execute)
+6. **Context** - Reusable context resources (Inline, ConfigMap, or Git)
 
 ### Important Design Decisions
 
@@ -74,7 +76,7 @@ All Go files must include the copyright header:
 3. **Kubernetes Resources**:
    - CRD Group: `kubetask.io`
    - API Version: `v1alpha1`
-   - Kinds: `Task`, `CronTask`, `Agent`, `Context`, `KubeTaskConfig`
+   - Kinds: `Task`, `Workflow`, `WorkflowRun`, `CronWorkflow`, `Agent`, `Context`, `KubeTaskConfig`
 
 ### Code Comments
 
@@ -180,16 +182,18 @@ kubetask/
 │   ├── images/          # Agent Dockerfiles (gemini, claude, echo, etc.)
 │   └── tools/           # Tools image for shared CLI tools
 ├── api/v1alpha1/          # CRD type definitions
-│   ├── types.go           # Main API types (Task, CronTask, Agent, Context, KubeTaskConfig)
+│   ├── types.go           # Main API types (Task, Workflow, WorkflowRun, CronWorkflow, Agent, Context, KubeTaskConfig)
 │   ├── register.go        # Scheme registration
 │   └── zz_generated.deepcopy.go  # Generated deepcopy
 ├── cmd/controller/        # Controller main entry point
 │   └── main.go
 ├── internal/controller/   # Controller reconcilers
 │   ├── task_controller.go
-│   └── crontask_controller.go
+│   ├── workflow_controller.go
+│   ├── workflowrun_controller.go
+│   └── cronworkflow_controller.go
 ├── deploy/               # Kubernetes manifests
-│   └── crds/            # Generated CRD YAMLs (Task, CronTask, Agent, Context, KubeTaskConfig)
+│   └── crds/            # Generated CRD YAMLs (Task, Workflow, WorkflowRun, CronWorkflow, Agent, Context, KubeTaskConfig)
 ├── charts/kubetask/     # Helm chart
 ├── hack/                # Build and codegen scripts
 ├── docs/                # Documentation

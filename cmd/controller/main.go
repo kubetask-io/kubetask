@@ -110,11 +110,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.CronTaskReconciler{
+	if err = (&controller.WorkflowReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "CronTask")
+		setupLog.Error(err, "unable to create controller", "controller", "Workflow")
+		os.Exit(1)
+	}
+
+	if err = (&controller.WorkflowRunReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WorkflowRun")
+		os.Exit(1)
+	}
+
+	if err = (&controller.CronWorkflowReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "CronWorkflow")
 		os.Exit(1)
 	}
 

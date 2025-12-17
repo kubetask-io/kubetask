@@ -11,9 +11,11 @@ rules:
   resources:
   - agents
   - contexts
-  - crontasks
+  - cronworkflows
   - kubetaskconfigs
   - tasks
+  - workflows
+  - workflowruns
   verbs:
   - get
   - list
@@ -28,9 +30,11 @@ rules:
   resources:
   - agents/status
   - contexts/status
-  - crontasks/status
+  - cronworkflows/status
   - kubetaskconfigs/status
   - tasks/status
+  - workflows/status
+  - workflowruns/status
   verbs:
   - get
   - update

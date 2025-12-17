@@ -43,7 +43,9 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks using Cust
 | Resource | Purpose | Stability |
 |----------|---------|-----------|
 | **Task** | Single task execution (primary API) | Stable - semantic name |
-| **CronTask** | Scheduled/recurring task execution | Stable - follows K8s CronJob pattern |
+| **Workflow** | Multi-stage task template (no execution) | Stable - reusable template |
+| **WorkflowRun** | Workflow execution instance | Stable - DAG-like execution |
+| **CronWorkflow** | Scheduled WorkflowRun triggering | Stable - follows K8s CronJob pattern |
 | **Context** | Reusable context for AI agents (KNOW) | Stable - Context Engineering support |
 | **Agent** | AI agent configuration (HOW to execute) | Stable - independent of project name |
 | **KubeTaskConfig** | System-level configuration (TTL, lifecycle) | Stable - system settings |
@@ -95,13 +97,18 @@ kind: Agent
 - **Argo Workflows**: DAG-based workflow with conditional retry logic
 - **Tekton Pipelines**: CI/CD pipelines with result-based retry
 - **Custom controllers**: Monitor Task status and create new Tasks based on validation results
-- **CronTask**: For periodic re-execution of tasks
+- **CronWorkflow**: For periodic re-execution of tasks
 
 This approach:
 - Keeps the Task API simple and focused
 - Delegates retry/orchestration to specialized tools
 - Allows users to implement custom validation before retry
 - Prevents accidental duplicate operations from AI agents
+
+**If retry or scheduled execution is needed:**
+- **CronWorkflow**: For periodic re-execution of workflows (single-task or multi-task)
+- **Argo Workflows**: DAG-based workflow with conditional retry logic
+- **Tekton Pipelines**: CI/CD pipelines with result-based retry
 
 ### Resource Hierarchy
 
@@ -125,15 +132,36 @@ Context (reusable context resource)
     ├── configMap: *ConfigMapContext
     └── git: *GitContext
 
-CronTask (scheduled task execution)
-├── CronTaskSpec
+Workflow (template only - no Status)
+└── WorkflowSpec
+    └── stages: []WorkflowStage
+        ├── name: string (optional, auto-generated as "stage-0", "stage-1")
+        └── tasks: []WorkflowTask
+            ├── name: string
+            └── spec: TaskSpec
+
+WorkflowRun (execution instance)
+├── WorkflowRunSpec
+│   ├── workflowRef: string          (mutually exclusive with inline)
+│   └── inline: *WorkflowSpec        (mutually exclusive with workflowRef)
+└── WorkflowRunStatus
+    ├── phase: WorkflowPhase (Pending|Running|Completed|Failed)
+    ├── currentStage: int32
+    ├── totalTasks: int32
+    ├── completedTasks: int32
+    ├── failedTasks: int32
+    ├── startTime: *Time
+    ├── completionTime: *Time
+    ├── stageStatuses: []WorkflowStageStatus
+    └── conditions: []Condition
+
+CronWorkflow (scheduled WorkflowRun triggering)
+├── CronWorkflowSpec
 │   ├── schedule: string (cron expression)
-│   ├── concurrencyPolicy: ConcurrencyPolicy
 │   ├── suspend: *bool
-│   ├── successfulTasksHistoryLimit: *int32
-│   ├── failedTasksHistoryLimit: *int32
-│   └── taskTemplate: TaskTemplateSpec
-└── CronTaskStatus
+│   ├── workflowRef: string          (mutually exclusive with inline)
+│   └── inline: *WorkflowSpec        (mutually exclusive with workflowRef)
+└── CronWorkflowStatus
     ├── active: []ObjectReference
     ├── lastScheduleTime: *Time
     ├── lastSuccessfulTime: *Time
@@ -155,6 +183,33 @@ KubeTaskConfig (system configuration)
     └── taskLifecycle: *TaskLifecycleConfig
         └── ttlSecondsAfterFinished: *int32
 ```
+
+### Workflow Template/Instance Pattern
+
+The Workflow API follows a template/instance pattern similar to Kubernetes Deployment/ReplicaSet:
+
+```
+Workflow (template - no execution)
+    │
+    ├──── WorkflowRun (manual execution)
+    │         spec.workflowRef: my-workflow
+    │         └── Task, Task, Task (child resources)
+    │
+    ├──── WorkflowRun (inline definition)
+    │         spec.inline: { stages: [...] }
+    │         └── Task, Task (child resources)
+    │
+    └──── CronWorkflow (scheduled execution)
+              spec.schedule: "0 9 * * *"
+              spec.workflowRef: my-workflow
+              └── WorkflowRun → Task, Task (created on schedule)
+```
+
+**Benefits:**
+- Workflow templates are reusable across multiple executions
+- WorkflowRun preserves execution history
+- CronWorkflow provides scheduled workflow execution
+- Clear separation of concerns: definition vs execution vs scheduling
 
 ### Complete Type Definitions
 
@@ -187,35 +242,79 @@ type TaskExecutionStatus struct {
     Conditions     []metav1.Condition
 }
 
-// CronTask represents scheduled task execution
-type CronTask struct {
-    Spec   CronTaskSpec
-    Status CronTaskStatus
+// Workflow represents a reusable workflow template (no execution, no Status)
+type Workflow struct {
+    Spec WorkflowSpec  // No Status - Workflow is a template
 }
 
-type CronTaskSpec struct {
-    Schedule                    string            // Cron expression (e.g., "0 9 * * *")
-    ConcurrencyPolicy           ConcurrencyPolicy // Allow|Forbid|Replace
-    Suspend                     *bool             // Suspend scheduling
-    SuccessfulTasksHistoryLimit *int32            // Keep N successful tasks (default: 3)
-    FailedTasksHistoryLimit     *int32            // Keep N failed tasks (default: 1)
-    TaskTemplate                TaskTemplateSpec  // Template for created Tasks
+type WorkflowSpec struct {
+    Stages []WorkflowStage // Sequential stages (stage N+1 starts after stage N completes)
 }
 
-type ConcurrencyPolicy string
+type WorkflowStage struct {
+    Name  string         // Optional, auto-generated as "stage-0", "stage-1" if not specified
+    Tasks []WorkflowTask // Tasks to run in parallel within this stage
+}
+
+type WorkflowTask struct {
+    Name string   // Unique name within workflow (Task CR name = "{workflowrun}-{name}")
+    Spec TaskSpec // TaskSpec for the created Task
+}
+
+// WorkflowRun represents an execution instance of a Workflow
+type WorkflowRun struct {
+    Spec   WorkflowRunSpec
+    Status WorkflowRunStatus
+}
+
+type WorkflowRunSpec struct {
+    WorkflowRef string        // Reference to Workflow template (mutually exclusive with Inline)
+    Inline      *WorkflowSpec // Inline workflow definition (mutually exclusive with WorkflowRef)
+}
+
+type WorkflowRunStatus struct {
+    Phase          WorkflowPhase           // Pending|Running|Completed|Failed
+    CurrentStage   int32                   // Index of current stage (-1 = not started)
+    TotalTasks     int32                   // Total tasks across all stages
+    CompletedTasks int32                   // Number of completed tasks
+    FailedTasks    int32                   // Number of failed tasks
+    StartTime      *metav1.Time            // When workflow run started
+    CompletionTime *metav1.Time            // When workflow run finished
+    StageStatuses  []WorkflowStageStatus   // Status of each stage
+    Conditions     []metav1.Condition
+}
+
+type WorkflowStageStatus struct {
+    Name           string        // Stage name
+    Phase          WorkflowPhase // Stage phase
+    Tasks          []string      // Actual Task CR names created
+    StartTime      *metav1.Time
+    CompletionTime *metav1.Time
+}
+
+type WorkflowPhase string
 const (
-    AllowConcurrent   ConcurrencyPolicy = "Allow"   // Allow concurrent runs
-    ForbidConcurrent  ConcurrencyPolicy = "Forbid"  // Skip if previous running
-    ReplaceConcurrent ConcurrencyPolicy = "Replace" // Cancel previous, start new
+    WorkflowPhasePending   WorkflowPhase = "Pending"
+    WorkflowPhaseRunning   WorkflowPhase = "Running"
+    WorkflowPhaseCompleted WorkflowPhase = "Completed"
+    WorkflowPhaseFailed    WorkflowPhase = "Failed"
 )
 
-type TaskTemplateSpec struct {
-    metav1.ObjectMeta  // Labels and annotations for created Tasks
-    Spec TaskSpec      // TaskSpec to use
+// CronWorkflow represents scheduled WorkflowRun triggering
+type CronWorkflow struct {
+    Spec   CronWorkflowSpec
+    Status CronWorkflowStatus
 }
 
-type CronTaskStatus struct {
-    Active             []corev1.ObjectReference // Currently running Tasks
+type CronWorkflowSpec struct {
+    Schedule    string        // Cron expression (e.g., "0 9 * * *")
+    Suspend     *bool         // Suspend scheduling
+    WorkflowRef string        // Reference to Workflow template (mutually exclusive with Inline)
+    Inline      *WorkflowSpec // Inline workflow definition (mutually exclusive with WorkflowRef)
+}
+
+type CronWorkflowStatus struct {
+    Active             []corev1.ObjectReference // Currently running WorkflowRuns
     LastScheduleTime   *metav1.Time             // Last scheduled time
     LastSuccessfulTime *metav1.Time             // Last successful completion
     Conditions         []metav1.Condition
@@ -445,60 +544,219 @@ spec:
     ref: main
 ```
 
-### CronTask (Scheduled Execution)
+### Workflow (Reusable Template)
 
-CronTask creates Task resources on a schedule, similar to how Kubernetes CronJob creates Jobs.
+Workflow is a template resource that defines a multi-stage task structure. It does NOT execute - to run a workflow, create a WorkflowRun that references it.
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
-kind: CronTask
+kind: Workflow
 metadata:
-  name: daily-report
+  name: ci-pipeline
+  namespace: kubetask-system
+spec:
+  stages:
+    # Stage 0: Lint (name auto-generated as "stage-0")
+    - tasks:
+        - name: lint
+          spec:
+            description: "Run linting checks"
+            agentRef: claude
+
+    # Stage 1: Testing (explicit name)
+    - name: testing
+      tasks:
+        - name: test-unit
+          spec:
+            description: "Run unit tests"
+            agentRef: claude
+        - name: test-e2e
+          spec:
+            description: "Run e2e tests"
+            agentRef: gemini
+
+    # Stage 2: Deploy (name auto-generated as "stage-2")
+    - tasks:
+        - name: deploy
+          spec:
+            description: "Deploy to staging"
+            agentRef: claude
+# Note: No status field - Workflow is a template only
+```
+
+**Field Description:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.stages` | []WorkflowStage | Yes | Sequential stages of the workflow |
+| `spec.stages[].name` | String | No | Stage name (auto-generated as "stage-N" if not specified) |
+| `spec.stages[].tasks` | []WorkflowTask | Yes | Tasks to run in parallel within this stage |
+| `spec.stages[].tasks[].name` | String | Yes | Unique task name within workflow |
+| `spec.stages[].tasks[].spec` | TaskSpec | Yes | TaskSpec for the created Task |
+
+### WorkflowRun (Execution Instance)
+
+WorkflowRun executes a workflow, either by referencing a Workflow template or with an inline definition.
+
+```
+workflowrun = [[task] -> [task, task, task] -> [task]]
+```
+
+This example has 3 stages:
+- Stage 0: 1 task
+- Stage 1: 3 tasks in parallel (starts after stage 0 completes)
+- Stage 2: 1 task (starts after all stage 1 tasks complete)
+
+**WorkflowRun with workflowRef:**
+
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: WorkflowRun
+metadata:
+  name: ci-pipeline-run-001
+  namespace: kubetask-system
+spec:
+  workflowRef: ci-pipeline  # Reference to Workflow template
+status:
+  phase: Running
+  currentStage: 1
+  totalTasks: 4
+  completedTasks: 1
+  failedTasks: 0
+  startTime: "2025-01-18T10:00:00Z"
+  stageStatuses:
+    - name: stage-0
+      phase: Completed
+      tasks: ["ci-pipeline-run-001-lint"]
+      startTime: "2025-01-18T10:00:00Z"
+      completionTime: "2025-01-18T10:02:00Z"
+    - name: testing
+      phase: Running
+      tasks: ["ci-pipeline-run-001-test-unit", "ci-pipeline-run-001-test-e2e"]
+      startTime: "2025-01-18T10:02:00Z"
+    - name: stage-2
+      phase: Pending
+      tasks: []
+```
+
+**WorkflowRun with inline definition:**
+
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: WorkflowRun
+metadata:
+  name: adhoc-run
+  namespace: kubetask-system
+spec:
+  inline:
+    stages:
+      - tasks:
+          - name: quick-task
+            spec:
+              description: "One-off task"
+              agentRef: claude
+```
+
+**Field Description:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.workflowRef` | String | Either this or inline | Reference to Workflow template |
+| `spec.inline` | WorkflowSpec | Either this or workflowRef | Inline workflow definition |
+
+**Status Field Description:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status.phase` | WorkflowPhase | Workflow phase: Pending\|Running\|Completed\|Failed |
+| `status.currentStage` | int32 | Index of currently executing stage (-1 = not started) |
+| `status.totalTasks` | int32 | Total number of tasks across all stages |
+| `status.completedTasks` | int32 | Number of completed tasks |
+| `status.failedTasks` | int32 | Number of failed tasks |
+| `status.stageStatuses` | []WorkflowStageStatus | Status of each stage |
+
+**Task Naming:**
+
+Created Tasks are named `{workflowrun-name}-{task-name}` (e.g., `ci-pipeline-run-001-lint`).
+
+**Dependency Tracking:**
+
+Tasks created by WorkflowRun have labels and annotations for dependency tracking:
+
+```yaml
+# Labels on created Tasks
+labels:
+  kubetask.io/workflow-run: ci-pipeline-run-001
+  kubetask.io/workflow: ci-pipeline  # Only if workflowRef was used
+  kubetask.io/stage: testing
+  kubetask.io/stage-index: "1"
+
+# Annotation for dependencies (comma-separated Task CR names)
+annotations:
+  kubetask.io/depends-on: "ci-pipeline-run-001-lint"
+```
+
+**Failure Handling:**
+
+WorkflowRun uses a **Fail Fast** strategy:
+- If any task fails, the workflow run immediately enters `Failed` phase
+- No further stages are started
+- Tasks already running in the current stage continue to completion
+
+**Key Behaviors:**
+
+1. **Stage Progression**: Stage N+1 starts only after ALL tasks in stage N complete successfully
+2. **Parallel Execution**: All tasks within a stage start simultaneously
+3. **Garbage Collection**: Tasks have OwnerReference to WorkflowRun for cascade deletion
+4. **No Data Passing**: Tasks don't pass data between stages (AI outputs are unstructured)
+
+### CronWorkflow (Scheduled Execution)
+
+CronWorkflow creates WorkflowRun resources on a schedule, similar to how Kubernetes CronJob creates Jobs.
+
+```yaml
+apiVersion: kubetask.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: daily-ci
   namespace: kubetask-system
 spec:
   # Cron schedule (required)
   schedule: "0 9 * * *"  # Every day at 9:00 AM
 
-  # Concurrency policy (optional, default: Forbid)
-  # - Allow: run concurrent Tasks
-  # - Forbid: skip if previous Task still running
-  # - Replace: cancel previous Task and start new one
-  concurrencyPolicy: Forbid
+  # Reference to Workflow template (mutually exclusive with inline)
+  workflowRef: ci-pipeline
+
+  # Or inline definition:
+  # inline:
+  #   stages:
+  #     - tasks:
+  #         - name: daily-task
+  #           spec:
+  #             description: "Daily CI task"
+  #             agentRef: claude
 
   # Suspend scheduling (optional, default: false)
   suspend: false
 
-  # History limits (optional)
-  successfulTasksHistoryLimit: 3  # Keep 3 successful Tasks
-  failedTasksHistoryLimit: 1      # Keep 1 failed Task
-
-  # Task template (required)
-  taskTemplate:
-    metadata:
-      labels:
-        app: daily-report
-    spec:
-      description: "Generate daily status report"
-      agentRef: claude
-
 status:
-  # Currently running Tasks
+  # Currently running WorkflowRuns
   active:
-    - name: daily-report-1733846400
+    - name: daily-ci-1737190800
       namespace: kubetask-system
 
   # Last scheduled time
-  lastScheduleTime: "2025-12-10T09:00:00Z"
+  lastScheduleTime: "2025-01-18T09:00:00Z"
 
   # Last successful completion
-  lastSuccessfulTime: "2025-12-09T09:05:00Z"
+  lastSuccessfulTime: "2025-01-17T09:05:00Z"
 
   # Conditions
   conditions:
     - type: Scheduled
       status: "True"
-      reason: TaskCreated
-      message: "Created Task daily-report-1733846400"
+      reason: WorkflowRunCreated
+      message: "Created WorkflowRun daily-ci-1737190800"
 ```
 
 **Field Description:**
@@ -506,23 +764,17 @@ status:
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `spec.schedule` | String | Yes | - | Cron expression (e.g., "0 9 * * *") |
-| `spec.concurrencyPolicy` | String | No | Forbid | Allow\|Forbid\|Replace |
+| `spec.workflowRef` | String | Either this or inline | - | Reference to Workflow template |
+| `spec.inline` | WorkflowSpec | Either this or workflowRef | - | Inline workflow definition |
 | `spec.suspend` | Bool | No | false | Suspend scheduling |
-| `spec.successfulTasksHistoryLimit` | Int32 | No | 3 | Number of successful Tasks to keep |
-| `spec.failedTasksHistoryLimit` | Int32 | No | 1 | Number of failed Tasks to keep |
-| `spec.taskTemplate` | TaskTemplateSpec | Yes | - | Template for created Tasks |
 
-**Concurrency Policies:**
+**WorkflowRun Naming:**
 
-| Policy | Behavior |
-|--------|----------|
-| `Allow` | Allow multiple Tasks to run concurrently |
-| `Forbid` | Skip this run if previous Task still running (default) |
-| `Replace` | Cancel the currently running Task and start a new one |
+Created WorkflowRuns are named `{cronworkflow-name}-{unix-timestamp}` (e.g., `daily-ci-1737190800`).
 
-**Task Naming:**
+**Concurrency Policy:**
 
-Created Tasks are named `{crontask-name}-{unix-timestamp}` (e.g., `daily-report-1733846400`).
+CronWorkflow uses a **Forbid** policy - if a WorkflowRun is still active when the next schedule triggers, the new run is skipped.
 
 ### Context (Reusable Context)
 
@@ -1002,32 +1254,73 @@ kubectl annotate task update-service-a kubetask.io/terminate=true
 kubectl delete task update-service-a -n kubetask-system
 ```
 
-### CronTask Operations
+### Workflow Operations
 
 ```bash
-# Create a scheduled task
-kubectl apply -f crontask.yaml
+# Create a workflow template
+kubectl apply -f workflow.yaml
 
-# List scheduled tasks
-kubectl get crontasks -n kubetask-system
+# List workflow templates
+kubectl get workflows -n kubetask-system
 
-# Watch scheduled task status
-kubectl get crontask daily-report -n kubetask-system -w
+# Check workflow template details
+kubectl get workflow ci-pipeline -o yaml
 
-# Check scheduled task details
-kubectl get crontask daily-report -o yaml
+# Delete workflow template
+kubectl delete workflow ci-pipeline -n kubetask-system
+```
 
-# Suspend a scheduled task
-kubectl patch crontask daily-report -p '{"spec":{"suspend":true}}' --type=merge
+### WorkflowRun Operations
 
-# Resume a scheduled task
-kubectl patch crontask daily-report -p '{"spec":{"suspend":false}}' --type=merge
+```bash
+# Create a workflow run (referencing a template)
+kubectl apply -f workflowrun.yaml
 
-# View child tasks created by CronTask
-kubectl get tasks -l kubetask.io/crontask=daily-report -n kubetask-system
+# List workflow runs
+kubectl get workflowruns -n kubetask-system
 
-# Delete scheduled task
-kubectl delete crontask daily-report -n kubetask-system
+# Watch workflow run execution
+kubectl get workflowrun ci-pipeline-run-001 -n kubetask-system -w
+
+# Check workflow run status
+kubectl get workflowrun ci-pipeline-run-001 -o yaml
+
+# View tasks created by workflow run
+kubectl get tasks -l kubetask.io/workflow-run=ci-pipeline-run-001 -n kubetask-system
+
+# View tasks in a specific stage
+kubectl get tasks -l kubetask.io/workflow-run=ci-pipeline-run-001,kubetask.io/stage=testing -n kubetask-system
+
+# Delete workflow run (also deletes all child Tasks)
+kubectl delete workflowrun ci-pipeline-run-001 -n kubetask-system
+```
+
+### CronWorkflow Operations
+
+```bash
+# Create a scheduled workflow
+kubectl apply -f cronworkflow.yaml
+
+# List scheduled workflows
+kubectl get cronworkflows -n kubetask-system
+
+# Watch scheduled workflow status
+kubectl get cronworkflow daily-ci -n kubetask-system -w
+
+# Check scheduled workflow details
+kubectl get cronworkflow daily-ci -o yaml
+
+# Suspend a scheduled workflow
+kubectl patch cronworkflow daily-ci -p '{"spec":{"suspend":true}}' --type=merge
+
+# Resume a scheduled workflow
+kubectl patch cronworkflow daily-ci -p '{"spec":{"suspend":false}}' --type=merge
+
+# View workflow runs created by CronWorkflow
+kubectl get workflowruns -l kubetask.io/cronworkflow=daily-ci -n kubetask-system
+
+# Delete scheduled workflow
+kubectl delete cronworkflow daily-ci -n kubetask-system
 ```
 
 ### Agent Operations
@@ -1049,10 +1342,10 @@ kubectl get agent default -o yaml
 
 ### 1. Simplicity
 
-- **Core CRDs**: Task, CronTask, and Agent
-- **Clear separation**: WHAT (Task) vs WHEN (CronTask) vs HOW (Agent)
+- **Core CRDs**: Task, Workflow, WorkflowRun, CronWorkflow, and Agent
+- **Clear separation**: WHAT (Task) vs WHEN (CronWorkflow) vs HOW (Agent)
 - **Kubernetes-native batch**: Use Helm/Kustomize for multiple Tasks
-- **Follows K8s patterns**: CronTask mirrors CronJob behavior
+- **Follows K8s patterns**: CronWorkflow mirrors CronJob behavior
 
 ### 2. Stability
 
@@ -1077,7 +1370,9 @@ kubectl get agent default -o yaml
 
 **API**:
 - **Task** - primary API for single task execution
-- **CronTask** - scheduled/recurring task execution (creates Tasks on cron schedule)
+- **Workflow** - reusable multi-stage task template (no execution)
+- **WorkflowRun** - workflow execution instance (stage-based DAG execution)
+- **CronWorkflow** - scheduled WorkflowRun triggering (creates WorkflowRuns on cron schedule)
 - **Agent** - stable, project-independent configuration
 - **KubeTaskConfig** - system-level settings (TTL, lifecycle)
 
@@ -1107,6 +1402,6 @@ kubectl get agent default -o yaml
 ---
 
 **Status**: FINAL
-**Date**: 2025-12-15
-**Version**: v3.3
+**Date**: 2025-12-17
+**Version**: v4.0 (Workflow API Redesign)
 **Maintainer**: KubeTask Team

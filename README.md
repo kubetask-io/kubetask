@@ -20,12 +20,12 @@ KubeTask enables you to execute AI agent tasks (like Claude, Gemini) using Kuber
 **Key Features:**
 
 - **Kubernetes-Native**: Built on CRDs and the Operator pattern
-- **Simple API**: Core CRDs - Task, CronTask, Agent, and Context
+- **Simple API**: Core CRDs - Task, Workflow, WorkflowRun, CronWorkflow, Agent, and Context
 - **AI-Agnostic**: Works with any AI agent (Claude, Gemini, Goose, etc.)
 - **No External Dependencies**: Uses etcd for state, Jobs for execution
 - **GitOps Ready**: Fully declarative resource definitions
 - **Flexible Context System**: Support for inline content, ConfigMaps, and Git repositories
-- **Scheduled Tasks**: CronTask for recurring AI-powered operations
+- **Scheduled Workflows**: CronWorkflow for recurring AI-powered operations
 - **Batch Operations**: Use Helm/Kustomize for multiple Tasks (Kubernetes-native approach)
 
 ## Architecture
@@ -56,7 +56,9 @@ KubeTask enables you to execute AI agent tasks (like Claude, Gemini) using Kuber
 ### Core Concepts
 
 - **Task**: Single task execution (the primary API)
-- **CronTask**: Scheduled/recurring task execution
+- **Workflow**: Reusable multi-stage task template
+- **WorkflowRun**: Workflow execution instance
+- **CronWorkflow**: Scheduled WorkflowRun triggering
 - **Agent**: AI agent configuration (HOW to execute)
 - **Context**: Reusable context resources (inline, ConfigMap, or Git)
 
@@ -508,7 +510,8 @@ See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 
 ## Roadmap
 
-- [x] CronTask for scheduled task execution
+- [x] Workflow and WorkflowRun for multi-stage task execution
+- [x] CronWorkflow for scheduled workflow execution
 - [x] Context CRD for reusable contexts
 - [x] GitContext for Git repository support
 - [ ] Enhanced status reporting and observability
