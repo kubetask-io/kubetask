@@ -110,13 +110,13 @@ spec:
 apiVersion: kubetask.io/v1alpha1
 kind: Context
 metadata:
-  name: workflow-guide
+  name: process-guide
   namespace: kubetask-system
 spec:
   type: ConfigMap
   configMap:
-    name: workflow-guides
-    key: pr-workflow.md
+    name: process-guides
+    key: pr-process.md
 ```
 
 #### 3. Create a Task
@@ -135,7 +135,7 @@ spec:
 
   # Reference reusable Context CRDs
   contexts:
-    - name: workflow-guide
+    - name: process-guide
       mountPath: /workspace/guide.md
 ```
 
