@@ -1006,6 +1006,328 @@ func TestBuildGitSyncInitContainer(t *testing.T) {
 	}
 }
 
+func TestBuildJob_WithHumanInTheLoop_Ports(t *testing.T) {
+	keepAlive := metav1.Duration{Duration: 30 * time.Minute}
+	task := &kubetaskv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: kubetaskv1alpha1.TaskSpec{
+			HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+				Enabled:   true,
+				KeepAlive: &keepAlive,
+				Ports: []kubetaskv1alpha1.ContainerPort{
+					{
+						Name:          "dev-server",
+						ContainerPort: 3000,
+						Protocol:      corev1.ProtocolTCP,
+					},
+					{
+						Name:          "api",
+						ContainerPort: 8080,
+						// Protocol not specified, should default to TCP
+					},
+				},
+			},
+		},
+	}
+	task.APIVersion = "kubetask.io/v1alpha1"
+	task.Kind = "Task"
+
+	cfg := agentConfig{
+		agentImage:         "test-agent:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "npm run dev"},
+	}
+
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil)
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// Verify container ports are set
+	if len(container.Ports) != 2 {
+		t.Fatalf("len(container.Ports) = %d, want 2", len(container.Ports))
+	}
+
+	// Verify first port
+	if container.Ports[0].Name != "dev-server" {
+		t.Errorf("Ports[0].Name = %q, want %q", container.Ports[0].Name, "dev-server")
+	}
+	if container.Ports[0].ContainerPort != 3000 {
+		t.Errorf("Ports[0].ContainerPort = %d, want %d", container.Ports[0].ContainerPort, 3000)
+	}
+	if container.Ports[0].Protocol != corev1.ProtocolTCP {
+		t.Errorf("Ports[0].Protocol = %q, want %q", container.Ports[0].Protocol, corev1.ProtocolTCP)
+	}
+
+	// Verify second port (with default protocol)
+	if container.Ports[1].Name != "api" {
+		t.Errorf("Ports[1].Name = %q, want %q", container.Ports[1].Name, "api")
+	}
+	if container.Ports[1].ContainerPort != 8080 {
+		t.Errorf("Ports[1].ContainerPort = %d, want %d", container.Ports[1].ContainerPort, 8080)
+	}
+	if container.Ports[1].Protocol != corev1.ProtocolTCP {
+		t.Errorf("Ports[1].Protocol = %q, want %q (default)", container.Ports[1].Protocol, corev1.ProtocolTCP)
+	}
+}
+
+func TestBuildJob_WithHumanInTheLoop_PortsDisabled(t *testing.T) {
+	// Test that ports can be specified even when humanInTheLoop.enabled is false
+	// (ports are still useful for the container, just not the keep-alive behavior)
+	task := &kubetaskv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: kubetaskv1alpha1.TaskSpec{
+			HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+				Enabled: false,
+				Ports: []kubetaskv1alpha1.ContainerPort{
+					{
+						Name:          "http",
+						ContainerPort: 80,
+					},
+				},
+			},
+		},
+	}
+	task.APIVersion = "kubetask.io/v1alpha1"
+	task.Kind = "Task"
+
+	cfg := agentConfig{
+		agentImage:         "test-agent:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
+	}
+
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil)
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// Ports should still be applied even when enabled is false
+	if len(container.Ports) != 1 {
+		t.Fatalf("len(container.Ports) = %d, want 1", len(container.Ports))
+	}
+	if container.Ports[0].ContainerPort != 80 {
+		t.Errorf("Ports[0].ContainerPort = %d, want %d", container.Ports[0].ContainerPort, 80)
+	}
+}
+
+func TestBuildJob_WithHumanInTheLoop_UDPPort(t *testing.T) {
+	task := &kubetaskv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: kubetaskv1alpha1.TaskSpec{
+			HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+				Enabled: true,
+				Ports: []kubetaskv1alpha1.ContainerPort{
+					{
+						Name:          "dns",
+						ContainerPort: 53,
+						Protocol:      corev1.ProtocolUDP,
+					},
+				},
+			},
+		},
+	}
+	task.APIVersion = "kubetask.io/v1alpha1"
+	task.Kind = "Task"
+
+	cfg := agentConfig{
+		agentImage:         "test-agent:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
+	}
+
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil)
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// Verify UDP protocol is respected
+	if len(container.Ports) != 1 {
+		t.Fatalf("len(container.Ports) = %d, want 1", len(container.Ports))
+	}
+	if container.Ports[0].Protocol != corev1.ProtocolUDP {
+		t.Errorf("Ports[0].Protocol = %q, want %q", container.Ports[0].Protocol, corev1.ProtocolUDP)
+	}
+}
+
+func TestBuildJob_WithHumanInTheLoop_FromAgent(t *testing.T) {
+	// Test that humanInTheLoop from Agent is used when Task doesn't specify it
+	task := &kubetaskv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: kubetaskv1alpha1.TaskSpec{
+			// No humanInTheLoop specified in Task
+		},
+	}
+	task.APIVersion = "kubetask.io/v1alpha1"
+	task.Kind = "Task"
+
+	keepAlive := metav1.Duration{Duration: 2 * time.Hour}
+	cfg := agentConfig{
+		agentImage:         "test-agent:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
+		humanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+			Enabled:   true,
+			KeepAlive: &keepAlive,
+			Ports: []kubetaskv1alpha1.ContainerPort{
+				{
+					Name:          "agent-port",
+					ContainerPort: 9000,
+				},
+			},
+		},
+	}
+
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil)
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// Verify command is wrapped with sleep (from Agent's humanInTheLoop)
+	script := container.Command[2]
+	if !contains(script, "sleep 7200") {
+		t.Errorf("Command script should contain 'sleep 7200' (2 hours from Agent), got: %s", script)
+	}
+
+	// Verify ports from Agent's humanInTheLoop are applied
+	if len(container.Ports) != 1 {
+		t.Fatalf("len(container.Ports) = %d, want 1", len(container.Ports))
+	}
+	if container.Ports[0].Name != "agent-port" {
+		t.Errorf("Ports[0].Name = %q, want %q", container.Ports[0].Name, "agent-port")
+	}
+	if container.Ports[0].ContainerPort != 9000 {
+		t.Errorf("Ports[0].ContainerPort = %d, want %d", container.Ports[0].ContainerPort, 9000)
+	}
+}
+
+func TestBuildJob_WithHumanInTheLoop_TaskOverridesAgent(t *testing.T) {
+	// Test that Task's humanInTheLoop overrides Agent's
+	taskKeepAlive := metav1.Duration{Duration: 30 * time.Minute}
+	task := &kubetaskv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: kubetaskv1alpha1.TaskSpec{
+			HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+				Enabled:   true,
+				KeepAlive: &taskKeepAlive,
+				Ports: []kubetaskv1alpha1.ContainerPort{
+					{
+						Name:          "task-port",
+						ContainerPort: 8000,
+					},
+				},
+			},
+		},
+	}
+	task.APIVersion = "kubetask.io/v1alpha1"
+	task.Kind = "Task"
+
+	agentKeepAlive := metav1.Duration{Duration: 2 * time.Hour}
+	cfg := agentConfig{
+		agentImage:         "test-agent:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
+		humanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+			Enabled:   true,
+			KeepAlive: &agentKeepAlive,
+			Ports: []kubetaskv1alpha1.ContainerPort{
+				{
+					Name:          "agent-port",
+					ContainerPort: 9000,
+				},
+			},
+		},
+	}
+
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil)
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// Verify command uses Task's keepAlive (30 minutes = 1800 seconds), not Agent's
+	script := container.Command[2]
+	if !contains(script, "sleep 1800") {
+		t.Errorf("Command script should contain 'sleep 1800' (30m from Task), got: %s", script)
+	}
+	if contains(script, "sleep 7200") {
+		t.Errorf("Command script should NOT contain 'sleep 7200' (Agent's value), got: %s", script)
+	}
+
+	// Verify ports from Task's humanInTheLoop are used, not Agent's
+	if len(container.Ports) != 1 {
+		t.Fatalf("len(container.Ports) = %d, want 1", len(container.Ports))
+	}
+	if container.Ports[0].Name != "task-port" {
+		t.Errorf("Ports[0].Name = %q, want %q (from Task)", container.Ports[0].Name, "task-port")
+	}
+	if container.Ports[0].ContainerPort != 8000 {
+		t.Errorf("Ports[0].ContainerPort = %d, want %d (from Task)", container.Ports[0].ContainerPort, 8000)
+	}
+}
+
+func TestBuildJob_WithHumanInTheLoop_TaskDisablesAgentDefault(t *testing.T) {
+	// Test that Task can disable humanInTheLoop even when Agent has it enabled
+	task := &kubetaskv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: kubetaskv1alpha1.TaskSpec{
+			HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+				Enabled: false, // Task explicitly disables
+			},
+		},
+	}
+	task.APIVersion = "kubetask.io/v1alpha1"
+	task.Kind = "Task"
+
+	agentKeepAlive := metav1.Duration{Duration: 2 * time.Hour}
+	cfg := agentConfig{
+		agentImage:         "test-agent:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
+		humanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+			Enabled:   true, // Agent has it enabled
+			KeepAlive: &agentKeepAlive,
+		},
+	}
+
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil)
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// Verify command is NOT wrapped (Task disabled humanInTheLoop)
+	if len(container.Command) != 3 {
+		t.Fatalf("len(Command) = %d, want 3 (unwrapped command)", len(container.Command))
+	}
+	script := container.Command[2]
+	if contains(script, "sleep") {
+		t.Errorf("Command should NOT contain sleep (Task disabled humanInTheLoop), got: %s", script)
+	}
+}
+
 // contains checks if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))

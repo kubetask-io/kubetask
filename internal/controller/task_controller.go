@@ -228,10 +228,18 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		return ctrl.Result{}, err
 	}
 
+	// Resolve effective humanInTheLoop configuration
+	// Task.spec.humanInTheLoop overrides Agent.spec.humanInTheLoop
+	effectiveHumanInTheLoop := agentConfig.humanInTheLoop
+	if task.Spec.HumanInTheLoop != nil {
+		effectiveHumanInTheLoop = task.Spec.HumanInTheLoop
+	}
+
 	// Update status
 	task.Status.ObservedGeneration = task.Generation
 	task.Status.JobName = jobName
 	task.Status.Phase = kubetaskv1alpha1.TaskPhaseRunning
+	task.Status.EffectiveHumanInTheLoop = effectiveHumanInTheLoop
 	now := metav1.Now()
 	task.Status.StartTime = &now
 
@@ -405,6 +413,7 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubet
 		podSpec:            agent.Spec.PodSpec,
 		serviceAccountName: agent.Spec.ServiceAccountName,
 		maxConcurrentTasks: agent.Spec.MaxConcurrentTasks,
+		humanInTheLoop:     agent.Spec.HumanInTheLoop,
 	}, agentName, nil
 }
 

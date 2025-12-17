@@ -225,6 +225,16 @@ type TaskExecutionStatus struct {
 	// +optional
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
 
+	// EffectiveHumanInTheLoop shows the resolved humanInTheLoop configuration
+	// that is actually being used for this Task. This is the result of merging
+	// Agent.spec.humanInTheLoop and Task.spec.humanInTheLoop, where Task takes
+	// precedence if specified.
+	//
+	// This field helps users understand which humanInTheLoop settings are
+	// actually in effect, especially when the Agent has default settings.
+	// +optional
+	EffectiveHumanInTheLoop *HumanInTheLoop `json:"effectiveHumanInTheLoop,omitempty"`
+
 	// Kubernetes standard conditions
 	// +optional
 	// +listType=map
@@ -374,6 +384,29 @@ type AgentSpec struct {
 	//   maxConcurrentTasks: 3  # Only 3 Tasks can run at once
 	// +optional
 	MaxConcurrentTasks *int32 `json:"maxConcurrentTasks,omitempty"`
+
+	// HumanInTheLoop configures default human-in-the-loop settings for all tasks
+	// using this Agent. Individual Tasks can override these settings.
+	//
+	// When enabled at the Agent level, all Tasks using this Agent will have
+	// humanInTheLoop behavior unless the Task explicitly disables it.
+	//
+	// Override behavior:
+	//   - Task.spec.humanInTheLoop takes precedence over Agent.spec.humanInTheLoop
+	//   - If Task.spec.humanInTheLoop is nil, Agent settings are used
+	//   - If Task.spec.humanInTheLoop is set (even with enabled=false), it overrides Agent
+	//
+	// Example:
+	//   # Agent with default humanInTheLoop settings
+	//   spec:
+	//     humanInTheLoop:
+	//       enabled: true
+	//       keepAlive: "1h"
+	//       ports:
+	//         - name: dev-server
+	//           containerPort: 3000
+	// +optional
+	HumanInTheLoop *HumanInTheLoop `json:"humanInTheLoop,omitempty"`
 }
 
 // AgentStatus defines the observed state of Agent
@@ -582,6 +615,48 @@ type HumanInTheLoop struct {
 	// Defaults to "1h" (1 hour) if not specified when enabled is true.
 	// +optional
 	KeepAlive *metav1.Duration `json:"keepAlive,omitempty"`
+
+	// Ports specifies container ports to expose for port-forwarding.
+	// These ports can be accessed via `kubectl port-forward` during
+	// the human-in-the-loop session, enabling developers to test
+	// development servers, APIs, or other network services.
+	//
+	// Example:
+	//   ports:
+	//     - name: dev-server
+	//       containerPort: 3000
+	//     - name: api
+	//       containerPort: 8080
+	//
+	// After the task runs, access ports with:
+	//   kubectl port-forward pod/<pod-name> 3000:3000 8080:8080
+	// +optional
+	Ports []ContainerPort `json:"ports,omitempty"`
+}
+
+// ContainerPort defines a port to expose on the agent container.
+// This is a simplified version of corev1.ContainerPort that only exposes
+// fields relevant for port-forwarding use cases.
+type ContainerPort struct {
+	// Name is an optional name for this port.
+	// Used for documentation and service discovery purposes.
+	// Must be unique within the ports list.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// ContainerPort is the port number to expose on the container.
+	// This is the port that the application inside the container listens on.
+	// +required
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	ContainerPort int32 `json:"containerPort"`
+
+	// Protocol is the protocol for this port.
+	// Must be UDP or TCP.
+	// Defaults to "TCP".
+	// +optional
+	// +kubebuilder:default="TCP"
+	Protocol corev1.Protocol `json:"protocol,omitempty"`
 }
 
 // +genclient

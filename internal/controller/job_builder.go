@@ -24,6 +24,7 @@ type agentConfig struct {
 	podSpec            *kubetaskv1alpha1.AgentPodSpec
 	serviceAccountName string
 	maxConcurrentTasks *int32
+	humanInTheLoop     *kubetaskv1alpha1.HumanInTheLoop
 }
 
 // fileMount represents a file to be mounted at a specific path
@@ -161,11 +162,18 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 		corev1.EnvVar{Name: "WORKSPACE_DIR", Value: cfg.workspaceDir},
 	)
 
+	// Resolve effective humanInTheLoop configuration
+	// Task.spec.humanInTheLoop overrides Agent.spec.humanInTheLoop
+	effectiveHumanInTheLoop := cfg.humanInTheLoop
+	if task.Spec.HumanInTheLoop != nil {
+		effectiveHumanInTheLoop = task.Spec.HumanInTheLoop
+	}
+
 	// Add human-in-the-loop keep-alive environment variable if enabled
-	if task.Spec.HumanInTheLoop != nil && task.Spec.HumanInTheLoop.Enabled {
+	if effectiveHumanInTheLoop != nil && effectiveHumanInTheLoop.Enabled {
 		keepAlive := DefaultKeepAlive
-		if task.Spec.HumanInTheLoop.KeepAlive != nil {
-			keepAlive = task.Spec.HumanInTheLoop.KeepAlive.Duration
+		if effectiveHumanInTheLoop.KeepAlive != nil {
+			keepAlive = effectiveHumanInTheLoop.KeepAlive.Duration
 		}
 		keepAliveSeconds := int64(keepAlive.Seconds())
 		envVars = append(envVars, corev1.EnvVar{
@@ -363,12 +371,29 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 		VolumeMounts:    volumeMounts,
 	}
 
+	// Apply container ports from effectiveHumanInTheLoop configuration
+	if effectiveHumanInTheLoop != nil && len(effectiveHumanInTheLoop.Ports) > 0 {
+		var containerPorts []corev1.ContainerPort
+		for _, port := range effectiveHumanInTheLoop.Ports {
+			protocol := port.Protocol
+			if protocol == "" {
+				protocol = corev1.ProtocolTCP
+			}
+			containerPorts = append(containerPorts, corev1.ContainerPort{
+				Name:          port.Name,
+				ContainerPort: port.ContainerPort,
+				Protocol:      protocol,
+			})
+		}
+		agentContainer.Ports = containerPorts
+	}
+
 	// Apply command (required field in Agent spec)
-	// If humanInTheLoop is enabled on the Task, wrap the command with sleep
-	if task.Spec.HumanInTheLoop != nil && task.Spec.HumanInTheLoop.Enabled {
+	// If humanInTheLoop is enabled (from Task or Agent), wrap the command with sleep
+	if effectiveHumanInTheLoop != nil && effectiveHumanInTheLoop.Enabled {
 		keepAlive := DefaultKeepAlive
-		if task.Spec.HumanInTheLoop.KeepAlive != nil {
-			keepAlive = task.Spec.HumanInTheLoop.KeepAlive.Duration
+		if effectiveHumanInTheLoop.KeepAlive != nil {
+			keepAlive = effectiveHumanInTheLoop.KeepAlive.Duration
 		}
 		keepAliveSeconds := int64(keepAlive.Seconds())
 
@@ -406,7 +431,7 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 			agentContainer.Command = append([]string{"sh", "-c", wrappedScript, "--"}, cfg.command...)
 		}
 	} else {
-		// No humanInTheLoop on Task, use command as-is
+		// No humanInTheLoop enabled, use command as-is
 		agentContainer.Command = cfg.command
 	}
 

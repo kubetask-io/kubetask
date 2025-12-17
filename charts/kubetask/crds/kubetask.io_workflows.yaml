@@ -178,6 +178,53 @@ spec:
                                       Uses standard Go duration format (e.g., "1h", "30m", "1h30m").
                                       Defaults to "1h" (1 hour) if not specified when enabled is true.
                                     type: string
+                                  ports:
+                                    description: |-
+                                      Ports specifies container ports to expose for port-forwarding.
+                                      These ports can be accessed via `kubectl port-forward` during
+                                      the human-in-the-loop session, enabling developers to test
+                                      development servers, APIs, or other network services.
+
+                                      Example:
+                                        ports:
+                                          - name: dev-server
+                                            containerPort: 3000
+                                          - name: api
+                                            containerPort: 8080
+
+                                      After the task runs, access ports with:
+                                        kubectl port-forward pod/<pod-name> 3000:3000 8080:8080
+                                    items:
+                                      description: |-
+                                        ContainerPort defines a port to expose on the agent container.
+                                        This is a simplified version of corev1.ContainerPort that only exposes
+                                        fields relevant for port-forwarding use cases.
+                                      properties:
+                                        containerPort:
+                                          description: |-
+                                            ContainerPort is the port number to expose on the container.
+                                            This is the port that the application inside the container listens on.
+                                          format: int32
+                                          maximum: 65535
+                                          minimum: 1
+                                          type: integer
+                                        name:
+                                          description: |-
+                                            Name is an optional name for this port.
+                                            Used for documentation and service discovery purposes.
+                                            Must be unique within the ports list.
+                                          type: string
+                                        protocol:
+                                          default: TCP
+                                          description: |-
+                                            Protocol is the protocol for this port.
+                                            Must be UDP or TCP.
+                                            Defaults to "TCP".
+                                          type: string
+                                      required:
+                                      - containerPort
+                                      type: object
+                                    type: array
                                 required:
                                 - enabled
                                 type: object

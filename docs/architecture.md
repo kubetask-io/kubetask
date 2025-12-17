@@ -364,18 +364,27 @@ type Agent struct {
 
 type AgentSpec struct {
     AgentImage         string
-    WorkspaceDir       string          // Working directory (default: "/workspace")
-    Command            []string        // Custom entrypoint command (required for humanInTheLoop)
-    Contexts           []ContextMount  // References to Context CRDs
+    WorkspaceDir       string           // Working directory (default: "/workspace")
+    Command            []string         // Custom entrypoint command (required for humanInTheLoop)
+    Contexts           []ContextMount   // References to Context CRDs
     Credentials        []Credential
-    PodSpec            *AgentPodSpec   // Pod configuration (labels, scheduling, runtime)
+    PodSpec            *AgentPodSpec    // Pod configuration (labels, scheduling, runtime)
     ServiceAccountName string
+    HumanInTheLoop     *HumanInTheLoop  // Default humanInTheLoop for all tasks (Task can override)
 }
 
 // HumanInTheLoop keeps container running after task completion for debugging
 type HumanInTheLoop struct {
     Enabled   bool              // Enable human-in-the-loop mode
     KeepAlive *metav1.Duration  // How long to keep container alive (default: "1h")
+    Ports     []ContainerPort   // Ports to expose for port-forwarding
+}
+
+// ContainerPort defines a port to expose on the agent container
+type ContainerPort struct {
+    Name          string          // Optional name for this port
+    ContainerPort int32           // Port number to expose (1-65535)
+    Protocol      corev1.Protocol // TCP (default) or UDP
 }
 
 // KubeTaskConfig defines system-level configuration
@@ -950,19 +959,81 @@ This provides an additional layer of security beyond standard container isolatio
 
 **Human-in-the-Loop:**
 
-When `Task.spec.humanInTheLoop.enabled` is true, the controller wraps the Agent's `command` with a sleep to keep the container running after task completion. This allows users to `kubectl exec` into the container for debugging or review.
+When `humanInTheLoop.enabled` is true, the controller wraps the Agent's `command` with a sleep to keep the container running after task completion. This allows users to `kubectl exec` into the container for debugging or review.
+
+`humanInTheLoop` can be configured at both the **Agent level** (as a default for all tasks) and the **Task level** (to override Agent defaults):
 
 ```yaml
-# In Task spec:
+# Agent with default humanInTheLoop settings (applies to all tasks using this Agent)
+apiVersion: kubetask.io/v1alpha1
+kind: Agent
+metadata:
+  name: dev-agent
+spec:
+  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  command: ["sh", "-c", "gemini -p \"$(cat /workspace/task.md)\""]
+  workspaceDir: /workspace
+  serviceAccountName: kubetask-agent
+  humanInTheLoop:
+    enabled: true
+    keepAlive: "2h"
+    ports:
+      - name: dev-server
+        containerPort: 3000
+---
+# Task can override Agent's humanInTheLoop settings
+apiVersion: kubetask.io/v1alpha1
+kind: Task
+metadata:
+  name: my-task
+spec:
+  description: "Run development server"
+  agentRef: dev-agent
+  humanInTheLoop:
+    enabled: true
+    keepAlive: "30m"  # Override Agent's 2h with 30m
+    ports:
+      - name: api
+        containerPort: 8080  # Different port than Agent default
+```
+
+**Override Behavior:**
+- If `Task.spec.humanInTheLoop` is set, it **completely overrides** `Agent.spec.humanInTheLoop`
+- If `Task.spec.humanInTheLoop` is nil, `Agent.spec.humanInTheLoop` is used
+- A Task can disable humanInTheLoop even when Agent has it enabled by setting `enabled: false`
+
+**Effective Configuration in Status:**
+
+The resolved `humanInTheLoop` configuration is shown in `Task.status.effectiveHumanInTheLoop`, making it easy to see which settings are actually in effect:
+
+```bash
+kubectl get task my-task -o jsonpath='{.status.effectiveHumanInTheLoop}'
+```
+
+**Important:** When `humanInTheLoop` is enabled (either from Agent or Task), the Agent MUST specify `command`. The controller wraps the command to add the sleep behavior.
+
+**Port Forwarding:**
+
+For development tasks that need to expose network services (e.g., dev servers, APIs), you can configure ports in the `humanInTheLoop` section. These ports can then be accessed via `kubectl port-forward`:
+
+```yaml
 spec:
   humanInTheLoop:
     enabled: true
-    keepAlive: "1h"  # Keep alive for 1 hour (default)
-    # keepAlive: "30m"   # 30 minutes
-    # keepAlive: "2h30m" # 2 hours 30 minutes
+    keepAlive: "2h"
+    ports:
+      - name: dev-server
+        containerPort: 3000
+      - name: api
+        containerPort: 8080
+        protocol: TCP  # TCP (default) or UDP
 ```
 
-**Important:** When `humanInTheLoop` is enabled on a Task, the Agent MUST specify `command`. The controller wraps the command to add the sleep behavior.
+After the task starts, access the ports with:
+
+```bash
+kubectl port-forward pod/<pod-name> 3000:3000 8080:8080
+```
 
 **Early Termination:**
 
