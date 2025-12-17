@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -513,6 +514,243 @@ var _ = Describe("Task E2E Tests", func() {
 				err := k8sClient.Get(ctx, jobKey, job)
 				return err != nil
 			}, timeout, interval).Should(BeTrue())
+		})
+	})
+
+	Context("Task termination via annotation", func() {
+		It("should terminate a running task when terminate annotation is added", func() {
+			taskName := uniqueName("task-term")
+
+			By("Creating an Agent that runs a long-running command")
+			longRunAgentName := uniqueName("long-run-agent")
+			longRunAgent := &kubetaskv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      longRunAgentName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.AgentSpec{
+					AgentImage:         echoImage,
+					ServiceAccountName: testServiceAccount,
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo 'Starting long task' && sleep 300"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, longRunAgent)).Should(Succeed())
+
+			taskContent := "# Long Running Task"
+			By("Creating a Task that will run for a long time")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					AgentRef:    longRunAgentName,
+					Description: &taskContent,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
+
+			By("Waiting for Task to be Running")
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				t := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskKey, t); err != nil {
+					return ""
+				}
+				return t.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+
+			By("Adding terminate annotation to the Task")
+			runningTask := &kubetaskv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskKey, runningTask)).Should(Succeed())
+			if runningTask.Annotations == nil {
+				runningTask.Annotations = make(map[string]string)
+			}
+			runningTask.Annotations["kubetask.io/terminate"] = "true"
+			Expect(k8sClient.Update(ctx, runningTask)).Should(Succeed())
+
+			By("Verifying Task transitions to Completed with Terminated condition")
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				t := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskKey, t); err != nil {
+					return ""
+				}
+				return t.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseCompleted))
+
+			By("Verifying Terminated condition exists")
+			terminatedTask := &kubetaskv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskKey, terminatedTask)).Should(Succeed())
+
+			var hasTerminatedCondition bool
+			for _, cond := range terminatedTask.Status.Conditions {
+				if cond.Type == "Terminated" && cond.Status == "True" {
+					hasTerminatedCondition = true
+					Expect(cond.Reason).Should(Equal("UserTerminated"))
+					break
+				}
+			}
+			Expect(hasTerminatedCondition).Should(BeTrue(), "Task should have Terminated condition")
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, longRunAgent)).Should(Succeed())
+		})
+	})
+
+	Context("Task with failing Job", func() {
+		It("should transition to Failed phase when Job fails", func() {
+			taskName := uniqueName("task-fail")
+
+			By("Creating an Agent that always fails")
+			failAgentName := uniqueName("fail-agent")
+			failAgent := &kubetaskv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      failAgentName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.AgentSpec{
+					AgentImage:         echoImage,
+					ServiceAccountName: testServiceAccount,
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo 'Task will fail' && exit 1"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, failAgent)).Should(Succeed())
+
+			taskContent := "# Failing Task"
+			By("Creating a Task that will fail")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					AgentRef:    failAgentName,
+					Description: &taskContent,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
+
+			By("Waiting for Task to transition to Failed")
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				t := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskKey, t); err != nil {
+					return ""
+				}
+				return t.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseFailed))
+
+			By("Verifying Task status")
+			failedTask := &kubetaskv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskKey, failedTask)).Should(Succeed())
+			Expect(failedTask.Status.CompletionTime).ShouldNot(BeNil())
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, failAgent)).Should(Succeed())
+		})
+	})
+
+	Context("Task with humanInTheLoop enabled", func() {
+		It("should keep the pod running after task completion", func() {
+			taskName := uniqueName("task-hitl")
+
+			By("Creating an Agent for humanInTheLoop")
+			hitlAgentName := uniqueName("hitl-agent")
+			hitlAgent := &kubetaskv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      hitlAgentName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.AgentSpec{
+					AgentImage:         echoImage,
+					ServiceAccountName: testServiceAccount,
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo 'Task executed' && cat ${WORKSPACE_DIR}/task.md"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, hitlAgent)).Should(Succeed())
+
+			taskContent := "# HumanInTheLoop Test"
+			keepAlive := metav1.Duration{Duration: 30 * time.Second} // Short keepAlive for testing
+
+			By("Creating a Task with humanInTheLoop enabled")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					AgentRef:    hitlAgentName,
+					Description: &taskContent,
+					HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+						Enabled:   true,
+						KeepAlive: &keepAlive,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
+			jobName := fmt.Sprintf("%s-job", taskName)
+
+			By("Waiting for Task to start running")
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				t := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskKey, t); err != nil {
+					return ""
+				}
+				return t.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+
+			By("Verifying pod is running and stays running for keepAlive period")
+			// Wait a bit for the task command to complete
+			time.Sleep(10 * time.Second)
+
+			// Check that pod is still running (not terminated immediately after command)
+			pods := &corev1.PodList{}
+			Eventually(func() bool {
+				if err := k8sClient.List(ctx, pods,
+					client.InNamespace(testNS),
+					client.MatchingLabels{"job-name": jobName}); err != nil {
+					// Try alternative label
+					_ = k8sClient.List(ctx, pods,
+						client.InNamespace(testNS),
+						client.MatchingLabels{"batch.kubernetes.io/job-name": jobName})
+				}
+				if len(pods.Items) == 0 {
+					return false
+				}
+				return pods.Items[0].Status.Phase == corev1.PodRunning
+			}, timeout, interval).Should(BeTrue(), "Pod should still be running due to humanInTheLoop")
+
+			By("Verifying task can be terminated early")
+			// Add terminate annotation to exit early
+			runningTask := &kubetaskv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskKey, runningTask)).Should(Succeed())
+			if runningTask.Annotations == nil {
+				runningTask.Annotations = make(map[string]string)
+			}
+			runningTask.Annotations["kubetask.io/terminate"] = "true"
+			Expect(k8sClient.Update(ctx, runningTask)).Should(Succeed())
+
+			By("Waiting for Task to complete after termination")
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				t := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskKey, t); err != nil {
+					return ""
+				}
+				return t.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseCompleted))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, hitlAgent)).Should(Succeed())
 		})
 	})
 })

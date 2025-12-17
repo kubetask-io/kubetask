@@ -184,6 +184,14 @@ var _ = AfterSuite(func() {
 		}
 	}
 
+	// Delete all CronWorkflows in test namespace
+	cronWorkflows := &kubetaskv1alpha1.CronWorkflowList{}
+	if err := k8sClient.List(ctx, cronWorkflows, client.InNamespace(testNS)); err == nil {
+		for i := range cronWorkflows.Items {
+			_ = k8sClient.Delete(ctx, &cronWorkflows.Items[i])
+		}
+	}
+
 	// Wait for resources to be cleaned up
 	time.Sleep(5 * time.Second)
 
