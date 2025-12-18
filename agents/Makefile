@@ -40,8 +40,9 @@ base-push: ## Push the base image to registry
 
 .PHONY: base-buildx
 base-buildx: ## Build and push base image for multiple architectures
-	docker buildx create --use --name=kubetask-base-builder || true
+	@docker buildx use kubetask-builder 2>/dev/null || docker buildx create --use --name=kubetask-builder
 	docker buildx build \
+		$(NO_CACHE_FLAG) \
 		--platform=$(PLATFORMS) \
 		--tag $(BASE_IMG) \
 		--push \
@@ -77,8 +78,9 @@ buildx: ## Build and push agent image for multiple architectures
 		echo "Use 'make base-buildx' to build the base image"; \
 		exit 1; \
 	fi
-	docker buildx create --use --name=kubetask-agent-builder || true
+	@docker buildx use kubetask-builder 2>/dev/null || docker buildx create --use --name=kubetask-builder
 	docker buildx build \
+		$(NO_CACHE_FLAG) \
 		--build-arg BASE_IMAGE=$(BASE_IMG) \
 		--platform=$(PLATFORMS) \
 		--tag $(IMG) \
