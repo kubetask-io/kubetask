@@ -368,16 +368,16 @@ type AgentSpec struct {
     Credentials        []Credential
     PodSpec            *AgentPodSpec    // Pod configuration (labels, scheduling, runtime)
     ServiceAccountName string
-    HumanInTheLoop     *HumanInTheLoop  // Enable keep-alive sidecar for debugging
+    HumanInTheLoop     *HumanInTheLoop  // Enable session sidecar for debugging
 }
 
-// HumanInTheLoop adds a keep-alive sidecar container for debugging
+// HumanInTheLoop adds a session sidecar container for debugging
 type HumanInTheLoop struct {
-    Enabled   bool              // Enable human-in-the-loop mode
-    KeepAlive *metav1.Duration  // How long sidecar runs (default: "1h", mutually exclusive with Command)
-    Command   []string          // Custom sidecar command (mutually exclusive with KeepAlive)
-    Image     string            // Custom sidecar image (default: agentImage)
-    Ports     []ContainerPort   // Ports to expose on sidecar for port-forwarding
+    Enabled  bool              // Enable human-in-the-loop mode
+    Duration *metav1.Duration  // How long sidecar runs (default: "1h", mutually exclusive with Command)
+    Command  []string          // Custom sidecar command (mutually exclusive with Duration)
+    Image    string            // Custom sidecar image (default: agentImage)
+    Ports    []ContainerPort   // Ports to expose on sidecar for port-forwarding
 }
 
 // ContainerPort defines a port to expose on the sidecar container
@@ -959,7 +959,7 @@ This provides an additional layer of security beyond standard container isolatio
 
 **Human-in-the-Loop:**
 
-When `humanInTheLoop.enabled` is true, the controller adds a **keep-alive sidecar container** to the Pod. This sidecar:
+When `humanInTheLoop.enabled` is true, the controller adds a **session sidecar container** to the Pod. This sidecar:
 - Uses the same image as the Agent (or a custom image if specified)
 - Shares the same workspace volume and environment variables
 - Runs a `sleep` command for the specified duration
@@ -982,7 +982,7 @@ spec:
   serviceAccountName: kubetask-agent
   humanInTheLoop:
     enabled: true
-    keepAlive: "2h"
+    duration: "2h"
     image: ""  # Optional: defaults to agentImage
     ports:
       - name: dev-server
@@ -1004,13 +1004,13 @@ This annotation allows users and tools to easily identify Tasks that have human-
 
 When humanInTheLoop is enabled, the Pod will have two containers:
 1. `agent` - Executes the task with the original command (exits when done)
-2. `keep-alive` - Runs `sleep` for the specified duration, allowing user access
+2. `session` - Runs `sleep` for the specified duration, allowing user access
 
 Users can exec into the sidecar container to use the same tools as the agent:
 
 ```bash
-# Access the sidecar container
-kubectl exec -it <pod-name> -c keep-alive -- /bin/bash
+# Access the session sidecar container
+kubectl exec -it <pod-name> -c session -- /bin/bash
 
 # Inside the container, you can use the same tools
 $ ls /workspace          # View agent's output files
@@ -1029,7 +1029,7 @@ humanInTheLoop:
 
 **Custom Sidecar Command:**
 
-For advanced scenarios like running code-server or other services, use the `command` field instead of `keepAlive`:
+For advanced scenarios like running code-server or other services, use the `command` field instead of `duration`:
 
 ```yaml
 humanInTheLoop:
@@ -1044,7 +1044,7 @@ humanInTheLoop:
       containerPort: 8080
 ```
 
-Note: `keepAlive` and `command` are **mutually exclusive**. If both are specified, it is a configuration error.
+Note: `duration` and `command` are **mutually exclusive**. If both are specified, it is a configuration error.
 
 **Port Forwarding:**
 
@@ -1054,7 +1054,7 @@ For development tasks that need to expose network services (e.g., dev servers, A
 spec:
   humanInTheLoop:
     enabled: true
-    keepAlive: "2h"
+    duration: "2h"
     ports:
       - name: dev-server
         containerPort: 3000
@@ -1071,7 +1071,7 @@ kubectl port-forward pod/<pod-name> 3000:3000 8080:8080
 
 **Early Termination:**
 
-To exit a human-in-the-loop Task early (without waiting for the keepAlive timeout), set the terminate annotation:
+To exit a human-in-the-loop Task early (without waiting for the session duration timeout), set the terminate annotation:
 
 ```bash
 kubectl annotate task my-task kubetask.io/terminate=true

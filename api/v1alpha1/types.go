@@ -381,7 +381,7 @@ type AgentSpec struct {
 	//   spec:
 	//     humanInTheLoop:
 	//       enabled: true
-	//       keepAlive: "1h"
+	//       duration: "1h"
 	//       ports:
 	//         - name: dev-server
 	//           containerPort: 3000
@@ -579,7 +579,7 @@ type AgentList struct {
 }
 
 // HumanInTheLoop configures human participation requirements for an agent.
-// When enabled, a keep-alive sidecar container is added to the Pod, allowing
+// When enabled, a session sidecar container is added to the Pod, allowing
 // users to kubectl exec into it for debugging, review, or manual intervention
 // after the main agent container completes.
 //
@@ -591,11 +591,11 @@ type AgentList struct {
 // Tasks inherit the humanInTheLoop settings from their referenced Agent.
 type HumanInTheLoop struct {
 	// Enabled indicates whether human-in-the-loop mode is active.
-	// When true, a keep-alive sidecar container is added to the Pod.
+	// When true, a session sidecar container is added to the Pod.
 	// +required
 	Enabled bool `json:"enabled"`
 
-	// KeepAlive specifies how long the sidecar container should remain running,
+	// Duration specifies how long the session sidecar container should remain running,
 	// allowing time for human interaction.
 	// Users can kubectl exec into the sidecar during this period.
 	// Uses standard Go duration format (e.g., "1h", "30m", "1h30m").
@@ -604,12 +604,12 @@ type HumanInTheLoop struct {
 	// Mutually exclusive with Command - only one can be specified.
 	// If neither is specified, defaults to "1h".
 	// +optional
-	KeepAlive *metav1.Duration `json:"keepAlive,omitempty"`
+	Duration *metav1.Duration `json:"duration,omitempty"`
 
-	// Command specifies a custom command to run in the keep-alive sidecar container.
+	// Command specifies a custom command to run in the session sidecar container.
 	// Use this for advanced scenarios like running code-server or other services.
 	//
-	// Mutually exclusive with KeepAlive - only one can be specified.
+	// Mutually exclusive with Duration - only one can be specified.
 	// If both are specified, it is a configuration error.
 	//
 	// Example:
@@ -618,7 +618,7 @@ type HumanInTheLoop struct {
 	// +optional
 	Command []string `json:"command,omitempty"`
 
-	// Image specifies the container image for the keep-alive sidecar.
+	// Image specifies the container image for the session sidecar.
 	// If not specified, defaults to the Agent's agentImage, which allows
 	// users to use the same tools (e.g., gemini, claude) in the sidecar.
 	//

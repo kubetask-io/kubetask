@@ -237,17 +237,17 @@ spec:
                     spec:
                       humanInTheLoop:
                         enabled: true
-                        keepAlive: "1h"
+                        duration: "1h"
                         ports:
                           - name: dev-server
                             containerPort: 3000
                 properties:
                   command:
                     description: |-
-                      Command specifies a custom command to run in the keep-alive sidecar container.
+                      Command specifies a custom command to run in the session sidecar container.
                       Use this for advanced scenarios like running code-server or other services.
 
-                      Mutually exclusive with KeepAlive - only one can be specified.
+                      Mutually exclusive with Duration - only one can be specified.
                       If both are specified, it is a configuration error.
 
                       Example:
@@ -255,23 +255,9 @@ spec:
                     items:
                       type: string
                     type: array
-                  enabled:
+                  duration:
                     description: |-
-                      Enabled indicates whether human-in-the-loop mode is active.
-                      When true, a keep-alive sidecar container is added to the Pod.
-                    type: boolean
-                  image:
-                    description: |-
-                      Image specifies the container image for the keep-alive sidecar.
-                      If not specified, defaults to the Agent's agentImage, which allows
-                      users to use the same tools (e.g., gemini, claude) in the sidecar.
-
-                      You can specify a lightweight image (e.g., "busybox:stable") to
-                      reduce resource usage, or a custom debug image with additional tools.
-                    type: string
-                  keepAlive:
-                    description: |-
-                      KeepAlive specifies how long the sidecar container should remain running,
+                      Duration specifies how long the session sidecar container should remain running,
                       allowing time for human interaction.
                       Users can kubectl exec into the sidecar during this period.
                       Uses standard Go duration format (e.g., "1h", "30m", "1h30m").
@@ -279,6 +265,20 @@ spec:
 
                       Mutually exclusive with Command - only one can be specified.
                       If neither is specified, defaults to "1h".
+                    type: string
+                  enabled:
+                    description: |-
+                      Enabled indicates whether human-in-the-loop mode is active.
+                      When true, a session sidecar container is added to the Pod.
+                    type: boolean
+                  image:
+                    description: |-
+                      Image specifies the container image for the session sidecar.
+                      If not specified, defaults to the Agent's agentImage, which allows
+                      users to use the same tools (e.g., gemini, claude) in the sidecar.
+
+                      You can specify a lightweight image (e.g., "busybox:stable") to
+                      reduce resource usage, or a custom debug image with additional tools.
                     type: string
                   ports:
                     description: |-

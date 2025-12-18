@@ -463,8 +463,8 @@ func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
 }
 
 func TestBuildJob_WithHumanInTheLoop_Sidecar(t *testing.T) {
-	// Test that humanInTheLoop creates a sidecar container instead of wrapping command
-	keepAlive := metav1.Duration{Duration: 30 * time.Minute}
+	// Test that humanInTheLoop creates a session sidecar container instead of wrapping command
+	duration := metav1.Duration{Duration: 30 * time.Minute}
 	task := &kubetaskv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -482,14 +482,14 @@ func TestBuildJob_WithHumanInTheLoop_Sidecar(t *testing.T) {
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo hello"},
 		humanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
-			Enabled:   true,
-			KeepAlive: &keepAlive,
+			Enabled:  true,
+			Duration: &duration,
 		},
 	}
 
 	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil)
 
-	// Verify there are 2 containers: agent and keep-alive sidecar
+	// Verify there are 2 containers: agent and session sidecar
 	containers := job.Spec.Template.Spec.Containers
 	if len(containers) != 2 {
 		t.Fatalf("len(Containers) = %d, want 2 (agent + sidecar)", len(containers))
@@ -509,8 +509,8 @@ func TestBuildJob_WithHumanInTheLoop_Sidecar(t *testing.T) {
 
 	// Verify sidecar container
 	sidecar := containers[1]
-	if sidecar.Name != "keep-alive" {
-		t.Errorf("Containers[1].Name = %q, want %q", sidecar.Name, "keep-alive")
+	if sidecar.Name != "session" {
+		t.Errorf("Containers[1].Name = %q, want %q", sidecar.Name, "session")
 	}
 	if sidecar.Image != "test-agent:v1.0.0" {
 		t.Errorf("Sidecar image = %q, want %q (same as agent)", sidecar.Image, "test-agent:v1.0.0")
@@ -541,24 +541,24 @@ func TestBuildJob_WithHumanInTheLoop_Sidecar(t *testing.T) {
 		t.Errorf("Sidecar should have same number of volume mounts as agent")
 	}
 
-	// Verify keep-alive env var in agent container
-	var foundKeepAliveEnv bool
+	// Verify session duration env var in agent container
+	var foundDurationEnv bool
 	for _, env := range agentContainer.Env {
-		if env.Name == EnvHumanInTheLoopKeepAlive {
-			foundKeepAliveEnv = true
+		if env.Name == EnvHumanInTheLoopDuration {
+			foundDurationEnv = true
 			if env.Value != "1800" {
-				t.Errorf("KUBETASK_KEEP_ALIVE_SECONDS = %q, want %q", env.Value, "1800")
+				t.Errorf("KUBETASK_SESSION_DURATION_SECONDS = %q, want %q", env.Value, "1800")
 			}
 		}
 	}
-	if !foundKeepAliveEnv {
-		t.Errorf("KUBETASK_KEEP_ALIVE_SECONDS env not found in agent container")
+	if !foundDurationEnv {
+		t.Errorf("KUBETASK_SESSION_DURATION_SECONDS env not found in agent container")
 	}
 }
 
 func TestBuildJob_WithHumanInTheLoop_CustomImage(t *testing.T) {
 	// Test that custom image can be specified for the sidecar
-	keepAlive := metav1.Duration{Duration: 30 * time.Minute}
+	duration := metav1.Duration{Duration: 30 * time.Minute}
 	task := &kubetaskv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -576,9 +576,9 @@ func TestBuildJob_WithHumanInTheLoop_CustomImage(t *testing.T) {
 		serviceAccountName: "test-sa",
 		command:            []string{"python", "-c", "print('hello; world')"},
 		humanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
-			Enabled:   true,
-			KeepAlive: &keepAlive,
-			Image:     "busybox:stable", // Custom lightweight image
+			Enabled:  true,
+			Duration: &duration,
+			Image:    "busybox:stable", // Custom lightweight image
 		},
 	}
 
@@ -1017,7 +1017,7 @@ func TestBuildGitSyncInitContainer(t *testing.T) {
 
 func TestBuildJob_WithHumanInTheLoop_Ports(t *testing.T) {
 	// Test that ports are applied to the sidecar container, not the agent
-	keepAlive := metav1.Duration{Duration: 30 * time.Minute}
+	duration := metav1.Duration{Duration: 30 * time.Minute}
 	task := &kubetaskv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -1035,8 +1035,8 @@ func TestBuildJob_WithHumanInTheLoop_Ports(t *testing.T) {
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "npm run dev"},
 		humanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
-			Enabled:   true,
-			KeepAlive: &keepAlive,
+			Enabled:  true,
+			Duration: &duration,
 			Ports: []kubetaskv1alpha1.ContainerPort{
 				{
 					Name:          "dev-server",
@@ -1198,15 +1198,15 @@ func TestBuildJob_WithHumanInTheLoop_FromAgent(t *testing.T) {
 	task.APIVersion = "kubetask.io/v1alpha1"
 	task.Kind = "Task"
 
-	keepAlive := metav1.Duration{Duration: 2 * time.Hour}
+	duration := metav1.Duration{Duration: 2 * time.Hour}
 	cfg := agentConfig{
 		agentImage:         "test-agent:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
 		humanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
-			Enabled:   true,
-			KeepAlive: &keepAlive,
+			Enabled:  true,
+			Duration: &duration,
 			Ports: []kubetaskv1alpha1.ContainerPort{
 				{
 					Name:          "agent-port",
@@ -1241,8 +1241,8 @@ func TestBuildJob_WithHumanInTheLoop_FromAgent(t *testing.T) {
 	}
 }
 
-func TestBuildJob_WithHumanInTheLoop_DefaultKeepAlive(t *testing.T) {
-	// Test that default keepAlive (1 hour) is used when not specified
+func TestBuildJob_WithHumanInTheLoop_DefaultDuration(t *testing.T) {
+	// Test that default duration (1 hour) is used when not specified
 	task := &kubetaskv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -1261,7 +1261,7 @@ func TestBuildJob_WithHumanInTheLoop_DefaultKeepAlive(t *testing.T) {
 		command:            []string{"sh", "-c", "echo test"},
 		humanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
 			Enabled: true,
-			// KeepAlive not specified, should use default (1 hour)
+			// Duration not specified, should use default (1 hour)
 		},
 	}
 
@@ -1272,7 +1272,7 @@ func TestBuildJob_WithHumanInTheLoop_DefaultKeepAlive(t *testing.T) {
 		t.Fatalf("len(Containers) = %d, want 2", len(containers))
 	}
 
-	// Verify sidecar uses default keepAlive (1 hour = 3600 seconds)
+	// Verify sidecar uses default duration (1 hour = 3600 seconds)
 	sidecar := containers[1]
 	if sidecar.Command[1] != "3600" {
 		t.Errorf("Sidecar Command[1] = %q, want %q (default 1 hour)", sidecar.Command[1], "3600")
@@ -1282,7 +1282,7 @@ func TestBuildJob_WithHumanInTheLoop_DefaultKeepAlive(t *testing.T) {
 func TestBuildJob_WithHumanInTheLoop_SidecarSharesAllMounts(t *testing.T) {
 	// Test that sidecar container has all the same mounts as agent container
 	// including context ConfigMap, directory mounts, and git mounts
-	keepAlive := metav1.Duration{Duration: 30 * time.Minute}
+	duration := metav1.Duration{Duration: 30 * time.Minute}
 	task := &kubetaskv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -1319,8 +1319,8 @@ func TestBuildJob_WithHumanInTheLoop_SidecarSharesAllMounts(t *testing.T) {
 			},
 		},
 		humanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
-			Enabled:   true,
-			KeepAlive: &keepAlive,
+			Enabled:  true,
+			Duration: &duration,
 		},
 	}
 

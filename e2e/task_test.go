@@ -659,7 +659,7 @@ var _ = Describe("Task E2E Tests", func() {
 	Context("Task with humanInTheLoop enabled on Agent", func() {
 		It("should keep the pod running after task completion with sidecar", func() {
 			taskName := uniqueName("task-hitl")
-			keepAlive := metav1.Duration{Duration: 30 * time.Second} // Short keepAlive for testing
+			duration := metav1.Duration{Duration: 30 * time.Second} // Short duration for testing
 
 			By("Creating an Agent with humanInTheLoop enabled")
 			hitlAgentName := uniqueName("hitl-agent")
@@ -674,8 +674,8 @@ var _ = Describe("Task E2E Tests", func() {
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo 'Task executed' && cat ${WORKSPACE_DIR}/task.md"},
 					HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
-						Enabled:   true,
-						KeepAlive: &keepAlive,
+						Enabled:  true,
+						Duration: &duration,
 					},
 				},
 			}
@@ -708,7 +708,7 @@ var _ = Describe("Task E2E Tests", func() {
 				return t.Status.Phase
 			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
 
-			By("Verifying pod is running and stays running for keepAlive period")
+			By("Verifying pod is running and stays running for session duration")
 			// Wait a bit for the task command to complete
 			time.Sleep(10 * time.Second)
 

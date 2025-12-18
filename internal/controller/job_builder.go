@@ -166,16 +166,16 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 	// (Task-level humanInTheLoop was removed to simplify the API)
 	effectiveHumanInTheLoop := cfg.humanInTheLoop
 
-	// Add human-in-the-loop keep-alive environment variable if enabled
+	// Add human-in-the-loop session duration environment variable if enabled
 	if effectiveHumanInTheLoop != nil && effectiveHumanInTheLoop.Enabled {
-		keepAlive := DefaultKeepAlive
-		if effectiveHumanInTheLoop.KeepAlive != nil {
-			keepAlive = effectiveHumanInTheLoop.KeepAlive.Duration
+		sessionDuration := DefaultSessionDuration
+		if effectiveHumanInTheLoop.Duration != nil {
+			sessionDuration = effectiveHumanInTheLoop.Duration.Duration
 		}
-		keepAliveSeconds := int64(keepAlive.Seconds())
+		durationSeconds := int64(sessionDuration.Seconds())
 		envVars = append(envVars, corev1.EnvVar{
-			Name:  EnvHumanInTheLoopKeepAlive,
-			Value: strconv.FormatInt(keepAliveSeconds, 10),
+			Name:  EnvHumanInTheLoopDuration,
+			Value: strconv.FormatInt(durationSeconds, 10),
 		})
 	}
 
@@ -374,7 +374,7 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 	// Build containers list - start with agent container
 	containers := []corev1.Container{agentContainer}
 
-	// Add keep-alive sidecar container if humanInTheLoop is enabled
+	// Add session sidecar container if humanInTheLoop is enabled
 	if effectiveHumanInTheLoop != nil && effectiveHumanInTheLoop.Enabled {
 		// Determine sidecar image: use custom image if specified, otherwise use agentImage
 		sidecarImage := cfg.agentImage
@@ -382,24 +382,24 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 			sidecarImage = effectiveHumanInTheLoop.Image
 		}
 
-		// Determine sidecar command: use Command if specified, otherwise use sleep with KeepAlive
+		// Determine sidecar command: use Command if specified, otherwise use sleep with Duration
 		var sidecarCommand []string
 		if len(effectiveHumanInTheLoop.Command) > 0 {
 			// Use custom command
 			sidecarCommand = effectiveHumanInTheLoop.Command
 		} else {
-			// Use sleep with keepAlive duration (default: 1h)
-			keepAlive := DefaultKeepAlive
-			if effectiveHumanInTheLoop.KeepAlive != nil {
-				keepAlive = effectiveHumanInTheLoop.KeepAlive.Duration
+			// Use sleep with session duration (default: 1h)
+			sessionDuration := DefaultSessionDuration
+			if effectiveHumanInTheLoop.Duration != nil {
+				sessionDuration = effectiveHumanInTheLoop.Duration.Duration
 			}
-			keepAliveSeconds := int64(keepAlive.Seconds())
-			sidecarCommand = []string{"sleep", fmt.Sprintf("%d", keepAliveSeconds)}
+			durationSeconds := int64(sessionDuration.Seconds())
+			sidecarCommand = []string{"sleep", fmt.Sprintf("%d", durationSeconds)}
 		}
 
-		// Build keep-alive sidecar container with same mounts and env as agent
+		// Build session sidecar container with same mounts and env as agent
 		sidecar := corev1.Container{
-			Name:            "keep-alive",
+			Name:            "session",
 			Image:           sidecarImage,
 			ImagePullPolicy: agentContainer.ImagePullPolicy,
 			Command:         sidecarCommand,

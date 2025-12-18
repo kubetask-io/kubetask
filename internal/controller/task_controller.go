@@ -34,11 +34,11 @@ const (
 	// DefaultTTLSecondsAfterFinished is the default TTL for completed/failed tasks (7 days)
 	DefaultTTLSecondsAfterFinished int32 = 604800
 
-	// DefaultKeepAlive is the default keep-alive duration for human-in-the-loop (1 hour)
-	DefaultKeepAlive = time.Hour
+	// DefaultSessionDuration is the default session duration for human-in-the-loop (1 hour)
+	DefaultSessionDuration = time.Hour
 
-	// EnvHumanInTheLoopKeepAlive is the environment variable name for keep-alive seconds
-	EnvHumanInTheLoopKeepAlive = "KUBETASK_KEEP_ALIVE_SECONDS"
+	// EnvHumanInTheLoopDuration is the environment variable name for session duration in seconds
+	EnvHumanInTheLoopDuration = "KUBETASK_SESSION_DURATION_SECONDS"
 
 	// AgentLabelKey is the label key used to identify which Agent a Task uses
 	AgentLabelKey = "kubetask.io/agent"
@@ -140,10 +140,10 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		return ctrl.Result{}, nil // Don't requeue, user needs to fix Agent
 	}
 
-	// Validate humanInTheLoop configuration: KeepAlive and Command are mutually exclusive
+	// Validate humanInTheLoop configuration: Duration and Command are mutually exclusive
 	if agentConfig.humanInTheLoop != nil && agentConfig.humanInTheLoop.Enabled {
-		if agentConfig.humanInTheLoop.KeepAlive != nil && len(agentConfig.humanInTheLoop.Command) > 0 {
-			err := fmt.Errorf("humanInTheLoop.keepAlive and humanInTheLoop.command are mutually exclusive")
+		if agentConfig.humanInTheLoop.Duration != nil && len(agentConfig.humanInTheLoop.Command) > 0 {
+			err := fmt.Errorf("humanInTheLoop.duration and humanInTheLoop.command are mutually exclusive")
 			log.Error(err, "invalid Agent configuration")
 			task.Status.ObservedGeneration = task.Generation
 			task.Status.Phase = kubetaskv1alpha1.TaskPhaseFailed

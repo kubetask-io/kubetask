@@ -842,11 +842,11 @@ var _ = Describe("TaskController", func() {
 	})
 
 	Context("When creating a Task with humanInTheLoop enabled on Agent", func() {
-		It("Should create a sidecar container for keep-alive", func() {
+		It("Should create a session sidecar container", func() {
 			taskName := "test-task-hitl"
 			agentName := "test-agent-hitl"
 			description := "# Human-in-the-loop test"
-			keepAlive := metav1.Duration{Duration: 30 * time.Minute} // 30 minutes
+			duration := metav1.Duration{Duration: 30 * time.Minute} // 30 minutes
 
 			By("Creating Agent with command and humanInTheLoop enabled")
 			agent := &kubetaskv1alpha1.Agent{
@@ -859,8 +859,8 @@ var _ = Describe("TaskController", func() {
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo hello"},
 					HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
-						Enabled:   true,
-						KeepAlive: &keepAlive,
+						Enabled:  true,
+						Duration: &duration,
 					},
 				},
 			}
@@ -909,33 +909,33 @@ var _ = Describe("TaskController", func() {
 
 			// Sidecar container should have sleep command
 			sidecarContainer := createdJob.Spec.Template.Spec.Containers[1]
-			Expect(sidecarContainer.Name).Should(Equal("keep-alive"))
+			Expect(sidecarContainer.Name).Should(Equal("session"))
 			Expect(sidecarContainer.Command).Should(HaveLen(2))
 			Expect(sidecarContainer.Command[0]).Should(Equal("sleep"))
 			Expect(sidecarContainer.Command[1]).Should(Equal("1800")) // 30 minutes
 
-			By("Checking keep-alive environment variable is set on agent container")
-			var keepAliveEnv *corev1.EnvVar
+			By("Checking session duration environment variable is set on agent container")
+			var durationEnv *corev1.EnvVar
 			for _, env := range agentContainer.Env {
-				if env.Name == EnvHumanInTheLoopKeepAlive {
-					keepAliveEnv = &env
+				if env.Name == EnvHumanInTheLoopDuration {
+					durationEnv = &env
 					break
 				}
 			}
-			Expect(keepAliveEnv).ShouldNot(BeNil())
-			Expect(keepAliveEnv.Value).Should(Equal("1800"))
+			Expect(durationEnv).ShouldNot(BeNil())
+			Expect(durationEnv.Value).Should(Equal("1800"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 
-		It("Should use default keep-alive when not specified", func() {
+		It("Should use default duration when not specified", func() {
 			taskName := "test-task-hitl-default"
 			agentName := "test-agent-hitl-default"
 			description := "# Human-in-the-loop default test"
 
-			By("Creating Agent with humanInTheLoop but no keepAlive")
+			By("Creating Agent with humanInTheLoop but no duration")
 			agent := &kubetaskv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
@@ -947,7 +947,7 @@ var _ = Describe("TaskController", func() {
 					Command:            []string{"./run.sh"},
 					HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
 						Enabled: true,
-						// KeepAlive not specified, should use default (1 hour)
+						// Duration not specified, should use default (1 hour)
 					},
 				},
 			}
@@ -966,7 +966,7 @@ var _ = Describe("TaskController", func() {
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
-			By("Checking sidecar uses default keep-alive (3600 seconds)")
+			By("Checking sidecar uses default session duration (3600 seconds)")
 			jobName := fmt.Sprintf("%s-job", taskName)
 			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
 			createdJob := &batchv1.Job{}
