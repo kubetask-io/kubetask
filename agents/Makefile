@@ -4,6 +4,13 @@ SHELL := /bin/bash
 # Agent to build (gemini, goose, echo, etc.)
 AGENT ?= gemini
 
+# No-cache option for fresh builds (usage: make NO_CACHE=1 build)
+# This is useful when agent Dockerfiles use dynamic installation methods
+# (e.g., curl | bash, npm install without version) that don't trigger cache
+# invalidation when upstream packages are updated.
+NO_CACHE ?=
+NO_CACHE_FLAG := $(if $(NO_CACHE),--no-cache,)
+
 # Image URL configuration
 IMG_REGISTRY ?= quay.io
 IMG_ORG ?= kubetask
@@ -25,7 +32,7 @@ all: build
 
 .PHONY: base-build
 base-build: ## Build the universal base image
-	docker build -t $(BASE_IMG) base/
+	docker build $(NO_CACHE_FLAG) -t $(BASE_IMG) base/
 
 .PHONY: base-push
 base-push: ## Push the base image to registry
@@ -53,7 +60,7 @@ build: ## Build agent docker image (AGENT=gemini|goose|echo)
 		echo "Use 'make base-build' to build the base image"; \
 		exit 1; \
 	fi
-	docker build --build-arg BASE_IMAGE=$(BASE_IMG) -t $(IMG) $(AGENT)/
+	docker build $(NO_CACHE_FLAG) --build-arg BASE_IMAGE=$(BASE_IMG) -t $(IMG) $(AGENT)/
 
 .PHONY: push
 push: ## Push the agent docker image
@@ -121,6 +128,8 @@ help: ## Display this help
 	@echo "  make base-build               # Build the universal base image"
 	@echo "  make build                    # Build gemini (default) using base"
 	@echo "  make AGENT=goose build        # Build goose using base"
+	@echo "  make NO_CACHE=1 build         # Build without cache (fetch latest)"
+	@echo "  make NO_CACHE=1 build-all     # Rebuild all agents without cache"
 	@echo "  make build-all                # Build base + all agents"
 	@echo "  make buildx-all               # Multi-arch build base + all agents"
 	@echo "  make list                     # List available agents"

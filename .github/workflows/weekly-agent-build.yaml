@@ -14,6 +14,10 @@ env:
 
 jobs:
   # Build and push base agent image first (other agents depend on it)
+  # Note: All builds use no-cache to ensure fresh installation of CLI tools.
+  # This is necessary because agent Dockerfiles use dynamic installation methods
+  # (e.g., curl | bash, npm install without version) that don't trigger cache
+  # invalidation when upstream packages are updated.
   build-agent-base:
     name: Build Agent Base
     runs-on: ubuntu-latest
@@ -41,6 +45,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-base:latest
+          no-cache: true
 
   # Build all agent images in parallel after base is ready
   build-agent-gemini:
@@ -71,6 +76,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-gemini:latest
+          no-cache: true
 
   build-agent-echo:
     name: Build Agent Echo
@@ -100,6 +106,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-echo:latest
+          no-cache: true
 
   build-agent-goose:
     name: Build Agent Goose
@@ -129,6 +136,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-goose:latest
+          no-cache: true
 
   build-agent-claude:
     name: Build Agent Claude
@@ -158,6 +166,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-claude:latest
+          no-cache: true
 
   build-agent-opencode:
     name: Build Agent OpenCode
@@ -187,6 +196,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-opencode:latest
+          no-cache: true
 
   build-agent-code-server:
     name: Build Agent Code-Server
@@ -216,3 +226,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-code-server:latest
+          no-cache: true
