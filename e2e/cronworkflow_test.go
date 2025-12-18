@@ -3,7 +3,6 @@
 package e2e
 
 import (
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -414,8 +413,3 @@ var _ = Describe("CronWorkflow E2E Tests", func() {
 		})
 	})
 })
-
-// Helper to format duration for display
-func formatDuration(d time.Duration) string {
-	return fmt.Sprintf("%dm%ds", int(d.Minutes()), int(d.Seconds())%60)
-}

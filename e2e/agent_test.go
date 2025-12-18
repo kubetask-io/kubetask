@@ -4,7 +4,6 @@ package e2e
 
 import (
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -489,11 +488,3 @@ var _ = Describe("Agent E2E Tests", func() {
 		})
 	})
 })
-
-// int32Ptr returns a pointer to the given int32 value
-func int32Ptr(i int32) *int32 {
-	return &i
-}
-
-// Ensure time package is used (for potential future use in timing tests)
-var _ = time.Second
