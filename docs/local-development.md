@@ -36,17 +36,20 @@ kubectl cluster-info
 
 ### 2. Build Images
 
-Build the controller image:
+Build all required images:
 
 ```bash
+# Build the controller image
 make docker-build
-```
 
-Build the agent image (gemini is the default):
+# Build the git-init image (used for Git Context cloning)
+make git-init-build
 
-```bash
+# Build the agent image (gemini is the default)
 make agent-build
 ```
+
+**Note:** The git-init image is required when using Git Context. If you only use Inline or ConfigMap contexts, you can skip building it.
 
 ### 3. Load Images to Kind
 
@@ -54,7 +57,6 @@ Load images into the Kind cluster (required because Kind cannot pull from local 
 
 ```bash
 kind load docker-image quay.io/kubetask/kubetask-controller:v0.1.0 --name kubetask
-
 kind load docker-image quay.io/kubetask/kubetask-git-init:v0.1.0 --name kubetask
 kind load docker-image quay.io/kubetask/kubetask-agent-gemini:latest --name kubetask
 ```

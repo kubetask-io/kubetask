@@ -156,6 +156,33 @@ docker-buildx:
 		.
 .PHONY: docker-buildx
 
+##@ Git-Init Image
+
+# Git-init image settings
+GIT_INIT_IMG_NAME ?= kubetask-git-init
+GIT_INIT_IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(GIT_INIT_IMG_NAME):$(VERSION)
+
+# Build git-init image
+git-init-build: ## Build git-init image for Git Context cloning
+	docker build -t $(GIT_INIT_IMG) -f cmd/git-init/Dockerfile .
+.PHONY: git-init-build
+
+# Push git-init image
+git-init-push: ## Push git-init image
+	docker push $(GIT_INIT_IMG)
+.PHONY: git-init-push
+
+# Build and push git-init image for multiple architectures
+git-init-buildx: ## Multi-arch build and push git-init image
+	docker buildx create --use --name=kubetask-builder || true
+	docker buildx build \
+		--platform=$(PLATFORMS) \
+		--tag $(GIT_INIT_IMG) \
+		--push \
+		-f cmd/git-init/Dockerfile \
+		.
+.PHONY: git-init-buildx
+
 ##@ Helm
 
 # Package helm chart
