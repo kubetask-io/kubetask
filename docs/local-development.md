@@ -10,6 +10,23 @@ This guide describes how to set up a local development environment for KubeTask 
 - Helm 3.x
 - Go 1.25+
 
+### Runtime Image Dependencies
+
+When testing **Git Context** functionality (Tasks that clone content from Git repositories), the controller uses [git-sync](https://github.com/kubernetes/git-sync) as an init container:
+
+| Image | Version | Purpose |
+|-------|---------|---------|
+| `registry.k8s.io/git-sync/git-sync` | v4.4.0 | Clone Git repositories for Git-type Context |
+
+For local Kind clusters, you need to pre-load this image if testing Git Context:
+
+```bash
+docker pull registry.k8s.io/git-sync/git-sync:v4.4.0
+kind load docker-image registry.k8s.io/git-sync/git-sync:v4.4.0 --name kubetask
+```
+
+**Note:** This image is only required when using `Context` resources with `type: Git`. If you're only testing Inline or ConfigMap contexts, you can skip this step.
+
 ## Quick Start
 
 ### 1. Create or Use Existing Kind Cluster
