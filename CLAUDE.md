@@ -225,6 +225,20 @@ When making **any** changes to the API (adding, updating, or deleting fields):
 3. Update status conditions appropriately
 4. Test locally with `make run` or `make e2e-setup`
 
+### Adding or Modifying Agents
+
+When making **any** changes related to agents (adding new agents, modifying existing agent images, renaming agents, etc.):
+
+1. Add/update agent files in `agents/<agent-name>/`
+2. **Update GitHub workflow** in `.github/workflows/push.yaml`:
+   - Add path filter for the new agent in the `changes` job
+   - Add corresponding output variable
+   - Add new build job for the agent image (following existing patterns)
+3. Update `agents/README.md` if adding a new agent
+4. Test the agent image build locally with `make agent-build AGENT=<name>`
+
+> **IMPORTANT**: Agent changes are incomplete without updating the CI workflow. The workflow uses path-based filtering to conditionally build agent images, so new agents won't be built in CI unless added to the workflow.
+
 ### Updating CRDs
 
 ```bash
