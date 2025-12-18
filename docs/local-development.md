@@ -59,6 +59,7 @@ Load images into the Kind cluster (required because Kind cannot pull from local 
 kind load docker-image quay.io/kubetask/kubetask-controller:latest --name kubetask
 kind load docker-image quay.io/kubetask/kubetask-git-init:latest --name kubetask
 kind load docker-image quay.io/kubetask/kubetask-agent-gemini:latest --name kubetask
+kind load docker-image quay.io/kubetask/kubetask-agent-code-server:latest --name kubetask
 ```
 
 ### 4. Deploy with Helm
