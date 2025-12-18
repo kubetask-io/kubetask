@@ -462,10 +462,10 @@ func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubetaskv
 	var gitMounts []gitMount
 
 	// 1. Resolve Agent.contexts (appears after description in task.md)
-	for _, ref := range cfg.contexts {
-		rc, dm, gm, err := r.resolveContextRef(ctx, ref, task.Namespace, cfg.workspaceDir)
+	for i, src := range cfg.contexts {
+		rc, dm, gm, err := r.resolveContextSource(ctx, src, task.Namespace, cfg.workspaceDir)
 		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("failed to resolve Agent context %q: %w", ref.Name, err)
+			return nil, nil, nil, nil, fmt.Errorf("failed to resolve Agent context[%d]: %w", i, err)
 		}
 		switch {
 		case dm != nil:
@@ -478,10 +478,10 @@ func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubetaskv
 	}
 
 	// 2. Resolve Task.contexts (appears last in task.md)
-	for _, ref := range task.Spec.Contexts {
-		rc, dm, gm, err := r.resolveContextRef(ctx, ref, task.Namespace, cfg.workspaceDir)
+	for i, src := range task.Spec.Contexts {
+		rc, dm, gm, err := r.resolveContextSource(ctx, src, task.Namespace, cfg.workspaceDir)
 		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("failed to resolve Task context %q: %w", ref.Name, err)
+			return nil, nil, nil, nil, fmt.Errorf("failed to resolve Task context[%d]: %w", i, err)
 		}
 		switch {
 		case dm != nil:
@@ -563,8 +563,24 @@ func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubetaskv
 	return configMap, fileMounts, dirMounts, gitMounts, nil
 }
 
-// resolveContextRef resolves a ContextMount reference to a Context CR
-func (r *TaskReconciler) resolveContextRef(ctx context.Context, ref kubetaskv1alpha1.ContextMount, defaultNS, workspaceDir string) (*resolvedContext, *dirMount, *gitMount, error) {
+// resolveContextSource resolves a ContextSource (either a reference to a Context CR or an inline definition)
+func (r *TaskReconciler) resolveContextSource(ctx context.Context, src kubetaskv1alpha1.ContextSource, defaultNS, workspaceDir string) (*resolvedContext, *dirMount, *gitMount, error) {
+	// Handle reference to Context CR
+	if src.Ref != nil {
+		return r.resolveContextRef(ctx, src.Ref, defaultNS, workspaceDir)
+	}
+
+	// Handle inline context
+	if src.Inline != nil {
+		return r.resolveContextItem(ctx, src.Inline, defaultNS, workspaceDir)
+	}
+
+	// Neither Ref nor Inline specified - this is a validation error
+	return nil, nil, nil, fmt.Errorf("ContextSource must have either Ref or Inline specified")
+}
+
+// resolveContextRef resolves a ContextRef reference to a Context CR
+func (r *TaskReconciler) resolveContextRef(ctx context.Context, ref *kubetaskv1alpha1.ContextRef, defaultNS, workspaceDir string) (*resolvedContext, *dirMount, *gitMount, error) {
 	namespace := ref.Namespace
 	if namespace == "" {
 		namespace = defaultNS
@@ -596,6 +612,42 @@ func (r *TaskReconciler) resolveContextRef(ctx context.Context, ref kubetaskv1al
 		ctxType:   string(contextCR.Spec.Type),
 		content:   content,
 		mountPath: ref.MountPath,
+	}, nil, nil, nil
+}
+
+// resolveContextItem resolves an inline ContextItem
+func (r *TaskReconciler) resolveContextItem(ctx context.Context, item *kubetaskv1alpha1.ContextItem, defaultNS, workspaceDir string) (*resolvedContext, *dirMount, *gitMount, error) {
+	// Create a temporary ContextSpec from the ContextItem
+	spec := &kubetaskv1alpha1.ContextSpec{
+		Type:      item.Type,
+		Inline:    item.Inline,
+		ConfigMap: item.ConfigMap,
+		Git:       item.Git,
+	}
+
+	// Use a generated name for inline contexts
+	name := "inline"
+
+	// Resolve content based on context type
+	content, dm, gm, err := r.resolveContextSpec(ctx, defaultNS, name, workspaceDir, spec, item.MountPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if dm != nil {
+		return nil, dm, nil, nil
+	}
+
+	if gm != nil {
+		return nil, nil, gm, nil
+	}
+
+	return &resolvedContext{
+		name:      name,
+		namespace: defaultNS,
+		ctxType:   string(item.Type),
+		content:   content,
+		mountPath: item.MountPath,
 	}, nil, nil, nil
 }
 

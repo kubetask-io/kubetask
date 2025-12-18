@@ -475,10 +475,12 @@ var _ = Describe("TaskController", func() {
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextMount{
+					Contexts: []kubetaskv1alpha1.ContextSource{
 						{
-							Name:      contextName,
-							MountPath: "/workspace/guides/standards.md",
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name:      contextName,
+								MountPath: "/workspace/guides/standards.md",
+							},
 						},
 					},
 				},
@@ -548,10 +550,12 @@ var _ = Describe("TaskController", func() {
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextMount{
+					Contexts: []kubetaskv1alpha1.ContextSource{
 						{
-							Name: contextName,
-							// No MountPath - should aggregate to task.md
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name: contextName,
+								// No MountPath - should aggregate to task.md
+							},
 						},
 					},
 				},
@@ -616,10 +620,12 @@ var _ = Describe("TaskController", func() {
 				},
 				Spec: kubetaskv1alpha1.TaskSpec{
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextMount{
+					Contexts: []kubetaskv1alpha1.ContextSource{
 						{
-							Name: contextName,
-							// No MountPath - should be appended to task.md
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name: contextName,
+								// No MountPath - should be appended to task.md
+							},
 						},
 					},
 				},
@@ -696,10 +702,12 @@ var _ = Describe("TaskController", func() {
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo test"},
-					Contexts: []kubetaskv1alpha1.ContextMount{
+					Contexts: []kubetaskv1alpha1.ContextSource{
 						{
-							Name: agentContextName,
-							// No mountPath - should be appended to task.md
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name: agentContextName,
+								// No mountPath - should be appended to task.md
+							},
 						},
 					},
 				},
@@ -715,10 +723,12 @@ var _ = Describe("TaskController", func() {
 				Spec: kubetaskv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextMount{
+					Contexts: []kubetaskv1alpha1.ContextSource{
 						{
-							Name: taskContextName,
-							// No mountPath - should be appended to task.md
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name: taskContextName,
+								// No mountPath - should be appended to task.md
+							},
 						},
 					},
 				},

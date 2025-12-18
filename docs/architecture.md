@@ -116,7 +116,7 @@ This approach:
 Task (single task execution)
 ├── TaskSpec
 │   ├── description: *string         (syntactic sugar for /workspace/task.md)
-│   ├── contexts: []ContextMount     (references to Context CRDs)
+│   ├── contexts: []ContextSource    (reference or inline contexts)
 │   └── agentRef: string
 └── TaskExecutionStatus
     ├── phase: TaskPhase
@@ -171,7 +171,7 @@ Agent (execution configuration)
     ├── agentImage: string
     ├── workspaceDir: string         (default: "/workspace")
     ├── command: []string
-    ├── contexts: []ContextMount     (references to Context CRDs)
+    ├── contexts: []ContextSource    (reference or inline contexts)
     ├── credentials: []Credential
     ├── podSpec: *AgentPodSpec
     ├── serviceAccountName: string
@@ -220,16 +220,31 @@ type Task struct {
 }
 
 type TaskSpec struct {
-    Description *string        // Syntactic sugar for /workspace/task.md
-    Contexts    []ContextMount // References to Context CRDs
-    AgentRef    string         // Reference to Agent
+    Description *string          // Syntactic sugar for /workspace/task.md
+    Contexts    []ContextSource  // Reference or inline contexts
+    AgentRef    string           // Reference to Agent
 }
 
-// ContextMount references a Context and specifies how to mount it
-type ContextMount struct {
+// ContextSource can be either a reference to a Context CRD or an inline definition
+type ContextSource struct {
+    Ref    *ContextRef  // Reference to a Context CRD
+    Inline *ContextItem // Inline context definition
+}
+
+// ContextRef references a Context CRD and specifies how to mount it
+type ContextRef struct {
     Name      string // Name of the Context
     Namespace string // Optional, defaults to Task's namespace
     MountPath string // Empty = append to /workspace/task.md with XML tags
+}
+
+// ContextItem defines inline context content
+type ContextItem struct {
+    Type      ContextType      // Inline, ConfigMap, or Git
+    MountPath string           // Empty = append to /workspace/task.md
+    Inline    *InlineContext   // Content when Type is Inline
+    ConfigMap *ConfigMapContext // ConfigMap when Type is ConfigMap
+    Git       *GitContext      // Git repo when Type is Git
 }
 
 type TaskExecutionStatus struct {
@@ -364,7 +379,7 @@ type AgentSpec struct {
     AgentImage         string
     WorkspaceDir       string           // Working directory (default: "/workspace")
     Command            []string         // Custom entrypoint command
-    Contexts           []ContextMount   // References to Context CRDs
+    Contexts           []ContextSource  // Reference or inline contexts
     Credentials        []Credential
     PodSpec            *AgentPodSpec    // Pod configuration (labels, scheduling, runtime)
     ServiceAccountName string
@@ -498,7 +513,7 @@ status:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `spec.description` | String | No | Task instruction (creates /workspace/task.md) |
-| `spec.contexts` | []ContextMount | No | References to reusable Context CRDs |
+| `spec.contexts` | []ContextSource | No | Reference or inline contexts (see below) |
 | `spec.agentRef` | String | No | Reference to Agent (default: "default") |
 
 **Status Field Description:**
@@ -510,9 +525,32 @@ status:
 | `status.startTime` | Timestamp | Start time |
 | `status.completionTime` | Timestamp | End time |
 
-**Context Types:**
+**ContextSource Types:**
 
-Contexts are defined using the Context CRD and referenced via ContextMount:
+Contexts can be defined in two ways:
+
+1. **Reference** (`ref`) - Reference an existing Context CRD:
+```yaml
+contexts:
+  - ref:
+      name: coding-standards
+      mountPath: /workspace/guides/standards.md  # Optional
+```
+
+2. **Inline** (`inline`) - Define context directly in Task/Agent:
+```yaml
+contexts:
+  - inline:
+      type: Git
+      mountPath: ${WORKSPACE_DIR}
+      git:
+        repository: https://github.com/org/repo
+        ref: main
+```
+
+**Context CRD Types:**
+
+Contexts are defined using the Context CRD:
 
 1. **Inline Context**:
 ```yaml
@@ -842,14 +880,14 @@ spec:
 
 **Important Notes:**
 
-- **No mount path in Context**: The mount path is defined by the referencing Task/Agent via `ContextMount.mountPath`
+- **No mount path in Context CRD**: The mount path is defined by the referencing Task/Agent via `ContextRef.mountPath` or `ContextItem.mountPath`
 - **No Status**: Context is a pure data resource (like ConfigMap) with no controller reconciliation
-- **Empty MountPath behavior**: When `ContextMount.mountPath` is empty, content is appended to `/workspace/task.md` with XML tags
+- **Empty MountPath behavior**: When mountPath is empty, content is appended to `/workspace/task.md` with XML tags
 
 **Context Priority (lowest to highest):**
 
-1. Agent.contexts (referenced Context CRDs)
-2. Task.contexts (referenced Context CRDs)
+1. Agent.contexts (array order)
+2. Task.contexts (array order)
 3. Task.description (becomes start of /workspace/task.md)
 
 ### Agent (Execution Configuration)
@@ -931,7 +969,7 @@ spec:
 | `spec.agentImage` | String | No | Agent container image |
 | `spec.workspaceDir` | String | No | Working directory (default: "/workspace") |
 | `spec.command` | []String | No | Custom entrypoint command |
-| `spec.contexts` | []ContextMount | No | References to reusable Context CRDs (applied to all tasks) |
+| `spec.contexts` | []ContextSource | No | Reference or inline contexts (applied to all tasks) |
 | `spec.credentials` | []Credential | No | Secrets as env vars or file mounts |
 | `spec.podSpec` | *AgentPodSpec | No | Advanced Pod configuration (labels, scheduling, runtimeClass) |
 | `spec.serviceAccountName` | String | Yes | ServiceAccount for agent pods |
@@ -1106,13 +1144,13 @@ The controller:
 
 When a Task references an Agent, contexts are merged with the following priority (lowest to highest):
 
-1. **Agent.contexts** (referenced Context CRDs, lowest priority)
-2. **Task.contexts** (referenced Context CRDs)
+1. **Agent.contexts** (array order, lowest priority)
+2. **Task.contexts** (array order)
 3. **Task.description** (highest priority, becomes start of /workspace/task.md)
 
 **Empty MountPath Behavior:**
 
-When `ContextMount.mountPath` is empty, the context content is appended to `/workspace/task.md` with XML tags:
+When `mountPath` is empty (in either `ContextRef` or `ContextItem`), the context content is appended to `/workspace/task.md` with XML tags:
 
 ```xml
 <context name="coding-standards" namespace="default" type="Inline">

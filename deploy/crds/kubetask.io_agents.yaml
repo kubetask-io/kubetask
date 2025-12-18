@@ -103,7 +103,8 @@ spec:
                 type: array
               contexts:
                 description: |-
-                  Contexts references Context CRDs as defaults for all tasks using this Agent.
+                  Contexts provides default contexts for all tasks using this Agent.
+                  Each context can be a reference to a Context CRD (via Ref) or an inline definition (via Inline).
                   These have the lowest priority in context merging.
 
                   Context priority (lowest to highest):
@@ -115,34 +116,134 @@ spec:
                   or common tool configurations that should apply to all tasks.
                 items:
                   description: |-
-                    ContextMount references a Context resource and specifies how to mount it.
-                    This allows the same Context to be mounted at different paths by different Tasks.
+                    ContextSource represents a context that can be either a reference to a Context CRD
+                    or an inline definition. Exactly one of Ref or Inline must be specified.
+
+                    This follows the same pattern as WorkflowRunSpec (workflowRef vs inline),
+                    allowing users to choose between reusable Context CRDs or one-off inline definitions.
                   properties:
-                    mountPath:
+                    inline:
                       description: |-
-                        MountPath specifies where this context should be mounted in the agent pod.
-                        If specified, the context content is written to this file path.
-                        Example: "${WORKSPACE_DIR}/guides/coding-standards.md"
+                        Inline defines context content directly in the Task/Agent.
+                        Use this for one-off contexts that don't need to be reused.
+                      properties:
+                        configMap:
+                          description: ConfigMap context (required when Type == "ConfigMap")
+                          properties:
+                            key:
+                              description: |-
+                                Key specifies a single key to mount as a file.
+                                If not specified, all keys are mounted as files in the directory.
+                              type: string
+                            name:
+                              description: Name of the ConfigMap
+                              type: string
+                            optional:
+                              description: Optional specifies whether the ConfigMap
+                                must exist.
+                              type: boolean
+                          required:
+                          - name
+                          type: object
+                        git:
+                          description: Git context (required when Type == "Git")
+                          properties:
+                            depth:
+                              default: 1
+                              description: |-
+                                Depth specifies the clone depth for shallow cloning.
+                                1 means shallow clone (fastest), 0 means full clone.
+                                Defaults to 1 for efficiency.
+                              type: integer
+                            path:
+                              description: |-
+                                Path is the path within the repository to mount.
+                                Can be a file or directory. If empty, the entire repository is mounted.
 
-                        If NOT specified (empty), the context content is appended to ${WORKSPACE_DIR}/task.md
-                        (where WORKSPACE_DIR is configured in Agent.spec.workspaceDir, defaulting to "/workspace")
-                        in a structured XML format:
-                          <context name="coding-standards" namespace="default" type="File">
-                          ... content ...
-                          </context>
+                                Note on .git directory:
+                                  - If Path is empty (entire repo): The mounted directory WILL contain .git/
+                                  - If Path is specified (subdirectory): The mounted directory will NOT contain .git/
 
-                        This allows multiple contexts to be aggregated into a single task.md file,
-                        which the agent can parse and understand.
-                      type: string
-                    name:
-                      description: Name of the Context resource
-                      type: string
-                    namespace:
-                      description: Namespace of the Context (optional, defaults to
-                        the referencing resource's namespace)
-                      type: string
-                  required:
-                  - name
+                                Example: ".claude/", "docs/guide.md"
+                              type: string
+                            ref:
+                              default: HEAD
+                              description: |-
+                                Ref is the Git reference (branch, tag, or commit SHA).
+                                Defaults to "HEAD" if not specified.
+                              type: string
+                            repository:
+                              description: |-
+                                Repository is the Git repository URL.
+                                Example: "https://github.com/org/contexts"
+                              type: string
+                            secretRef:
+                              description: |-
+                                SecretRef references a Secret containing Git credentials.
+                                The Secret should contain one of:
+                                  - "username" + "password": For HTTPS token-based auth (password can be a PAT)
+                                  - "ssh-privatekey": For SSH key-based auth
+                                If not specified, anonymous clone is attempted.
+                              properties:
+                                name:
+                                  description: Name of the Secret containing Git credentials.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                          required:
+                          - repository
+                          type: object
+                        inline:
+                          description: Inline context (required when Type == "Inline")
+                          properties:
+                            content:
+                              description: Content is the inline content to mount
+                                as a file.
+                              type: string
+                          required:
+                          - content
+                          type: object
+                        mountPath:
+                          description: |-
+                            MountPath specifies where this context should be mounted in the agent pod.
+                            Same semantics as ContextRef.MountPath.
+                          type: string
+                        type:
+                          description: 'Type of context source: Inline, ConfigMap,
+                            or Git'
+                          enum:
+                          - Inline
+                          - ConfigMap
+                          - Git
+                          type: string
+                      required:
+                      - type
+                      type: object
+                    ref:
+                      description: |-
+                        Ref references an existing Context CRD by name.
+                        Use this for reusable contexts that are managed independently.
+                      properties:
+                        mountPath:
+                          description: |-
+                            MountPath specifies where this context should be mounted in the agent pod.
+                            If specified, the context content is written to this file path.
+                            Example: "${WORKSPACE_DIR}/guides/coding-standards.md"
+
+                            If NOT specified (empty), the context content is appended to ${WORKSPACE_DIR}/task.md
+                            in a structured XML format.
+                          type: string
+                        name:
+                          description: Name of the Context resource
+                          type: string
+                        namespace:
+                          description: Namespace of the Context (optional, defaults
+                            to the referencing resource's namespace)
+                          type: string
+                      required:
+                      - name
+                      type: object
                   type: object
                 type: array
               credentials:

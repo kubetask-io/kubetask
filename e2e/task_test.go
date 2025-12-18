@@ -183,18 +183,24 @@ var _ = Describe("Task E2E Tests", func() {
 				Spec: kubetaskv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextMount{
+					Contexts: []kubetaskv1alpha1.ContextSource{
 						{
-							Name:      contextName1,
-							MountPath: "/workspace/intro.md",
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name:      contextName1,
+								MountPath: "/workspace/intro.md",
+							},
 						},
 						{
-							Name:      contextName2,
-							MountPath: "/workspace/details.md",
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name:      contextName2,
+								MountPath: "/workspace/details.md",
+							},
 						},
 						{
-							Name:      contextName3,
-							MountPath: "/workspace/conclusion.md",
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name:      contextName3,
+								MountPath: "/workspace/conclusion.md",
+							},
 						},
 					},
 				},
@@ -271,10 +277,12 @@ var _ = Describe("Task E2E Tests", func() {
 				Spec: kubetaskv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextMount{
+					Contexts: []kubetaskv1alpha1.ContextSource{
 						{
-							Name:      contextName,
-							MountPath: "/workspace/guides/content.md",
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name:      contextName,
+								MountPath: "/workspace/guides/content.md",
+							},
 						},
 					},
 				},
@@ -355,10 +363,12 @@ var _ = Describe("Task E2E Tests", func() {
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
-					Contexts: []kubetaskv1alpha1.ContextMount{
+					Contexts: []kubetaskv1alpha1.ContextSource{
 						{
-							Name: agentContextName,
-							// No mountPath - should be appended to task.md
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name: agentContextName,
+								// No mountPath - should be appended to task.md
+							},
 						},
 					},
 				},
@@ -374,10 +384,12 @@ var _ = Describe("Task E2E Tests", func() {
 				Spec: kubetaskv1alpha1.TaskSpec{
 					AgentRef:    customWSConfigName,
 					Description: &taskDescription,
-					Contexts: []kubetaskv1alpha1.ContextMount{
+					Contexts: []kubetaskv1alpha1.ContextSource{
 						{
-							Name: taskContextName,
-							// No mountPath - should be appended to task.md
+							Ref: &kubetaskv1alpha1.ContextRef{
+								Name: taskContextName,
+								// No mountPath - should be appended to task.md
+							},
 						},
 					},
 				},

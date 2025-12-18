@@ -95,6 +95,9 @@ type GitSecretReference struct {
 
 // ContextMount references a Context resource and specifies how to mount it.
 // This allows the same Context to be mounted at different paths by different Tasks.
+//
+// Deprecated: Use ContextSource with ContextRef instead for new code.
+// This type is kept for backward compatibility but is no longer used in TaskSpec/AgentSpec.
 type ContextMount struct {
 	// Name of the Context resource
 	// +required
@@ -119,6 +122,69 @@ type ContextMount struct {
 	// which the agent can parse and understand.
 	// +optional
 	MountPath string `json:"mountPath,omitempty"`
+}
+
+// ContextSource represents a context that can be either a reference to a Context CRD
+// or an inline definition. Exactly one of Ref or Inline must be specified.
+//
+// This follows the same pattern as WorkflowRunSpec (workflowRef vs inline),
+// allowing users to choose between reusable Context CRDs or one-off inline definitions.
+type ContextSource struct {
+	// Ref references an existing Context CRD by name.
+	// Use this for reusable contexts that are managed independently.
+	// +optional
+	Ref *ContextRef `json:"ref,omitempty"`
+
+	// Inline defines context content directly in the Task/Agent.
+	// Use this for one-off contexts that don't need to be reused.
+	// +optional
+	Inline *ContextItem `json:"inline,omitempty"`
+}
+
+// ContextRef references a Context CRD and specifies how to mount it.
+// This is similar to ContextMount but used within ContextSource.
+type ContextRef struct {
+	// Name of the Context resource
+	// +required
+	Name string `json:"name"`
+
+	// Namespace of the Context (optional, defaults to the referencing resource's namespace)
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// MountPath specifies where this context should be mounted in the agent pod.
+	// If specified, the context content is written to this file path.
+	// Example: "${WORKSPACE_DIR}/guides/coding-standards.md"
+	//
+	// If NOT specified (empty), the context content is appended to ${WORKSPACE_DIR}/task.md
+	// in a structured XML format.
+	// +optional
+	MountPath string `json:"mountPath,omitempty"`
+}
+
+// ContextItem defines inline context with content and mount path.
+// This is the inline version of Context CRD, used directly in Task/Agent specs.
+type ContextItem struct {
+	// Type of context source: Inline, ConfigMap, or Git
+	// +required
+	Type ContextType `json:"type"`
+
+	// MountPath specifies where this context should be mounted in the agent pod.
+	// Same semantics as ContextRef.MountPath.
+	// +optional
+	MountPath string `json:"mountPath,omitempty"`
+
+	// Inline context (required when Type == "Inline")
+	// +optional
+	Inline *InlineContext `json:"inline,omitempty"`
+
+	// ConfigMap context (required when Type == "ConfigMap")
+	// +optional
+	ConfigMap *ConfigMapContext `json:"configMap,omitempty"`
+
+	// Git context (required when Type == "Git")
+	// +optional
+	Git *GitContext `json:"git,omitempty"`
 }
 
 // TaskPhase represents the current phase of a task
@@ -177,15 +243,27 @@ type TaskSpec struct {
 	// +optional
 	Description *string `json:"description,omitempty"`
 
-	// Contexts references Context CRDs to include in this task.
-	// Each ContextMount specifies which Context to use and where to mount it.
+	// Contexts provides additional context for the task.
+	// Each context can be a reference to a Context CRD (via Ref) or an inline definition (via Inline).
+	// Contexts are processed in array order, with later contexts taking precedence.
 	//
 	// Context priority (lowest to highest):
 	//   1. Agent.contexts (Agent-level defaults)
 	//   2. Task.contexts (Task-specific contexts)
 	//   3. Task.description (highest, becomes ${WORKSPACE_DIR}/task.md)
+	//
+	// Example:
+	//   contexts:
+	//     - ref:
+	//         name: coding-standards
+	//     - inline:
+	//         type: Git
+	//         mountPath: ${WORKSPACE_DIR}
+	//         git:
+	//           repository: https://github.com/org/repo
+	//           ref: main
 	// +optional
-	Contexts []ContextMount `json:"contexts,omitempty"`
+	Contexts []ContextSource `json:"contexts,omitempty"`
 
 	// AgentRef references an Agent for this task.
 	// If not specified, uses the "default" Agent in the same namespace.
@@ -309,7 +387,8 @@ type AgentSpec struct {
 	// +kubebuilder:validation:MinItems=1
 	Command []string `json:"command"`
 
-	// Contexts references Context CRDs as defaults for all tasks using this Agent.
+	// Contexts provides default contexts for all tasks using this Agent.
+	// Each context can be a reference to a Context CRD (via Ref) or an inline definition (via Inline).
 	// These have the lowest priority in context merging.
 	//
 	// Context priority (lowest to highest):
@@ -320,7 +399,7 @@ type AgentSpec struct {
 	// Use this for organization-wide defaults like coding standards, security policies,
 	// or common tool configurations that should apply to all tasks.
 	// +optional
-	Contexts []ContextMount `json:"contexts,omitempty"`
+	Contexts []ContextSource `json:"contexts,omitempty"`
 
 	// Credentials defines secrets that should be available to the agent.
 	// Similar to GitHub Actions secrets, these can be mounted as files or
