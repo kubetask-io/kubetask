@@ -839,11 +839,11 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 	}
 
 	initContainer := job.Spec.Template.Spec.InitContainers[0]
-	if initContainer.Name != "git-sync-0" {
-		t.Errorf("Init container name = %q, want %q", initContainer.Name, "git-sync-0")
+	if initContainer.Name != "git-init-0" {
+		t.Errorf("Init container name = %q, want %q", initContainer.Name, "git-init-0")
 	}
-	if initContainer.Image != DefaultGitSyncImage {
-		t.Errorf("Init container image = %q, want %q", initContainer.Image, DefaultGitSyncImage)
+	if initContainer.Image != DefaultGitInitImage {
+		t.Errorf("Init container image = %q, want %q", initContainer.Image, DefaultGitInitImage)
 	}
 
 	// Verify environment variables
@@ -851,17 +851,14 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 	for _, env := range initContainer.Env {
 		envMap[env.Name] = env.Value
 	}
-	if envMap["GITSYNC_REPO"] != "https://github.com/org/repo.git" {
-		t.Errorf("GITSYNC_REPO = %q, want %q", envMap["GITSYNC_REPO"], "https://github.com/org/repo.git")
+	if envMap["GIT_REPO"] != "https://github.com/org/repo.git" {
+		t.Errorf("GIT_REPO = %q, want %q", envMap["GIT_REPO"], "https://github.com/org/repo.git")
 	}
-	if envMap["GITSYNC_REF"] != "main" {
-		t.Errorf("GITSYNC_REF = %q, want %q", envMap["GITSYNC_REF"], "main")
+	if envMap["GIT_REF"] != "main" {
+		t.Errorf("GIT_REF = %q, want %q", envMap["GIT_REF"], "main")
 	}
-	if envMap["GITSYNC_ONE_TIME"] != "true" {
-		t.Errorf("GITSYNC_ONE_TIME = %q, want %q", envMap["GITSYNC_ONE_TIME"], "true")
-	}
-	if envMap["GITSYNC_DEPTH"] != "1" {
-		t.Errorf("GITSYNC_DEPTH = %q, want %q", envMap["GITSYNC_DEPTH"], "1")
+	if envMap["GIT_DEPTH"] != "1" {
+		t.Errorf("GIT_DEPTH = %q, want %q", envMap["GIT_DEPTH"], "1")
 	}
 
 	// Verify emptyDir volume exists
@@ -930,22 +927,22 @@ func TestBuildJob_WithGitMountsAndAuth(t *testing.T) {
 	initContainer := job.Spec.Template.Spec.InitContainers[0]
 	var foundUsername, foundPassword bool
 	for _, env := range initContainer.Env {
-		if env.Name == "GITSYNC_USERNAME" && env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+		if env.Name == "GIT_USERNAME" && env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
 			if env.ValueFrom.SecretKeyRef.Name == "git-credentials" && env.ValueFrom.SecretKeyRef.Key == "username" {
 				foundUsername = true
 			}
 		}
-		if env.Name == "GITSYNC_PASSWORD" && env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+		if env.Name == "GIT_PASSWORD" && env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
 			if env.ValueFrom.SecretKeyRef.Name == "git-credentials" && env.ValueFrom.SecretKeyRef.Key == "password" {
 				foundPassword = true
 			}
 		}
 	}
 	if !foundUsername {
-		t.Errorf("GITSYNC_USERNAME env var with secret reference not found")
+		t.Errorf("GIT_USERNAME env var with secret reference not found")
 	}
 	if !foundPassword {
-		t.Errorf("GITSYNC_PASSWORD env var with secret reference not found")
+		t.Errorf("GIT_PASSWORD env var with secret reference not found")
 	}
 
 	// Verify volume mount without subPath (entire repo)
@@ -964,7 +961,7 @@ func TestBuildJob_WithGitMountsAndAuth(t *testing.T) {
 	}
 }
 
-func TestBuildGitSyncInitContainer(t *testing.T) {
+func TestBuildGitInitContainer(t *testing.T) {
 	gm := gitMount{
 		contextName: "test-context",
 		repository:  "https://github.com/test/repo.git",
@@ -975,14 +972,14 @@ func TestBuildGitSyncInitContainer(t *testing.T) {
 		secretName:  "",
 	}
 
-	container := buildGitSyncInitContainer(gm, "git-vol-0", 0)
+	container := buildGitInitContainer(gm, "git-vol-0", 0)
 
-	if container.Name != "git-sync-0" {
-		t.Errorf("Container name = %q, want %q", container.Name, "git-sync-0")
+	if container.Name != "git-init-0" {
+		t.Errorf("Container name = %q, want %q", container.Name, "git-init-0")
 	}
 
-	if container.Image != DefaultGitSyncImage {
-		t.Errorf("Container image = %q, want %q", container.Image, DefaultGitSyncImage)
+	if container.Image != DefaultGitInitImage {
+		t.Errorf("Container image = %q, want %q", container.Image, DefaultGitInitImage)
 	}
 
 	// Check env vars
@@ -993,14 +990,14 @@ func TestBuildGitSyncInitContainer(t *testing.T) {
 		}
 	}
 
-	if envMap["GITSYNC_REPO"] != "https://github.com/test/repo.git" {
-		t.Errorf("GITSYNC_REPO = %q, want %q", envMap["GITSYNC_REPO"], "https://github.com/test/repo.git")
+	if envMap["GIT_REPO"] != "https://github.com/test/repo.git" {
+		t.Errorf("GIT_REPO = %q, want %q", envMap["GIT_REPO"], "https://github.com/test/repo.git")
 	}
-	if envMap["GITSYNC_REF"] != "develop" {
-		t.Errorf("GITSYNC_REF = %q, want %q", envMap["GITSYNC_REF"], "develop")
+	if envMap["GIT_REF"] != "develop" {
+		t.Errorf("GIT_REF = %q, want %q", envMap["GIT_REF"], "develop")
 	}
-	if envMap["GITSYNC_DEPTH"] != "5" {
-		t.Errorf("GITSYNC_DEPTH = %q, want %q", envMap["GITSYNC_DEPTH"], "5")
+	if envMap["GIT_DEPTH"] != "5" {
+		t.Errorf("GIT_DEPTH = %q, want %q", envMap["GIT_DEPTH"], "5")
 	}
 
 	// Verify volume mount

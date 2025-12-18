@@ -69,16 +69,6 @@ KubeTask enables you to execute AI agent tasks (like Claude, Gemini) using Kuber
 - Kubernetes 1.25+
 - Helm 3.8+
 
-### Runtime Dependencies
-
-When using **Git Context** (cloning content from Git repositories), KubeTask automatically uses the [git-sync](https://github.com/kubernetes/git-sync) image as an init container:
-
-| Image | Version | Purpose |
-|-------|---------|---------|
-| `registry.k8s.io/git-sync/git-sync` | v4.4.0 | Clone Git repositories for Git-type Context |
-
-This image is only pulled when a Task references a Context with `type: Git`. For air-gapped environments, ensure this image is available in your private registry.
-
 ### Installation
 
 ```bash

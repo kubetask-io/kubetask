@@ -79,12 +79,12 @@ func int32Ptr(i int32) *int32 {
 }
 
 const (
-	// DefaultGitSyncImage is the default git-sync container image
-	DefaultGitSyncImage = "registry.k8s.io/git-sync/git-sync:v4.4.0"
+	// DefaultGitInitImage is the default git-init container image for cloning Git repositories
+	DefaultGitInitImage = "quay.io/kubetask/kubetask-git-init:latest"
 )
 
-// buildGitSyncInitContainer creates an init container that clones a Git repository using git-sync.
-func buildGitSyncInitContainer(gm gitMount, volumeName string, index int) corev1.Container {
+// buildGitInitContainer creates an init container that clones a Git repository.
+func buildGitInitContainer(gm gitMount, volumeName string, index int) corev1.Container {
 	// Set default depth to 1 (shallow clone) if not specified
 	depth := gm.depth
 	if depth <= 0 {
@@ -98,26 +98,23 @@ func buildGitSyncInitContainer(gm gitMount, volumeName string, index int) corev1
 	}
 
 	envVars := []corev1.EnvVar{
-		{Name: "GITSYNC_REPO", Value: gm.repository},
-		{Name: "GITSYNC_REF", Value: ref},
-		{Name: "GITSYNC_ONE_TIME", Value: "true"},
-		{Name: "GITSYNC_DEPTH", Value: strconv.Itoa(depth)},
-		{Name: "GITSYNC_ROOT", Value: "/git"},
-		{Name: "GITSYNC_LINK", Value: "repo"},
+		{Name: "GIT_REPO", Value: gm.repository},
+		{Name: "GIT_REF", Value: ref},
+		{Name: "GIT_DEPTH", Value: strconv.Itoa(depth)},
+		{Name: "GIT_ROOT", Value: "/git"},
+		{Name: "GIT_LINK", Value: "repo"},
 	}
 
 	volumeMounts := []corev1.VolumeMount{
 		{Name: volumeName, MountPath: "/git"},
 	}
 
-	// Add secret volume mount for authentication if specified
+	// Add secret environment variables for authentication if specified
 	if gm.secretName != "" {
-		// Mount the secret and configure git-sync to use it
-		// git-sync supports GITSYNC_USERNAME/GITSYNC_PASSWORD for HTTPS
-		// and GITSYNC_SSH_KEY_FILE for SSH
+		// git-init supports GIT_USERNAME/GIT_PASSWORD for HTTPS
 		envVars = append(envVars,
 			corev1.EnvVar{
-				Name: "GITSYNC_USERNAME",
+				Name: "GIT_USERNAME",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{Name: gm.secretName},
@@ -127,7 +124,7 @@ func buildGitSyncInitContainer(gm gitMount, volumeName string, index int) corev1
 				},
 			},
 			corev1.EnvVar{
-				Name: "GITSYNC_PASSWORD",
+				Name: "GIT_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{Name: gm.secretName},
@@ -140,8 +137,8 @@ func buildGitSyncInitContainer(gm gitMount, volumeName string, index int) corev1
 	}
 
 	return corev1.Container{
-		Name:            fmt.Sprintf("git-sync-%d", index),
-		Image:           DefaultGitSyncImage,
+		Name:            fmt.Sprintf("git-init-%d", index),
+		Image:           DefaultGitInitImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Env:             envVars,
 		VolumeMounts:    volumeMounts,
@@ -317,7 +314,7 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 		})
 	}
 
-	// Add Git context mounts (using git-sync init containers)
+	// Add Git context mounts (using git-init containers)
 	for i, gm := range gitMounts {
 		volumeName := fmt.Sprintf("git-context-%d", i)
 
@@ -329,8 +326,8 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 			},
 		})
 
-		// Build init container for git-sync
-		initContainers = append(initContainers, buildGitSyncInitContainer(gm, volumeName, i))
+		// Build init container for git clone
+		initContainers = append(initContainers, buildGitInitContainer(gm, volumeName, i))
 
 		// Add volume mount to agent container
 		// If repoPath is specified, use subPath to mount only that path
