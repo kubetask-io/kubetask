@@ -1433,11 +1433,11 @@ var _ = Describe("TaskController", func() {
 		})
 	})
 
-	Context("When terminating a Running Task via annotation", func() {
-		It("Should delete Job and set Task status to Completed with Terminated condition", func() {
-			taskName := "test-task-terminate"
-			agentName := "test-agent-terminate"
-			description := "# Terminate test"
+	Context("When stopping a Running Task via annotation", func() {
+		It("Should suspend Job and set Task status to Completed with Stopped condition", func() {
+			taskName := "test-task-stop"
+			agentName := "test-agent-stop"
+			description := "# Stop test"
 
 			By("Creating Agent")
 			agent := &kubetaskv1alpha1.Agent{
@@ -1484,13 +1484,13 @@ var _ = Describe("TaskController", func() {
 				return k8sClient.Get(ctx, jobLookupKey, createdJob) == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Adding terminate annotation to Task")
+			By("Adding stop annotation to Task")
 			currentTask := &kubetaskv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, taskLookupKey, currentTask)).Should(Succeed())
 			if currentTask.Annotations == nil {
 				currentTask.Annotations = make(map[string]string)
 			}
-			currentTask.Annotations[AnnotationTerminate] = "true"
+			currentTask.Annotations[AnnotationStop] = "true"
 			Expect(k8sClient.Update(ctx, currentTask)).Should(Succeed())
 
 			By("Checking Task status is Completed")
@@ -1502,20 +1502,26 @@ var _ = Describe("TaskController", func() {
 				return updatedTask.Status.Phase
 			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseCompleted))
 
-			By("Checking Task has Terminated condition")
+			By("Checking Job still exists and is suspended")
+			suspendedJob := &batchv1.Job{}
+			Expect(k8sClient.Get(ctx, jobLookupKey, suspendedJob)).Should(Succeed())
+			Expect(suspendedJob.Spec.Suspend).ShouldNot(BeNil())
+			Expect(*suspendedJob.Spec.Suspend).Should(BeTrue())
+
+			By("Checking Task has Stopped condition")
 			finalTask := &kubetaskv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, taskLookupKey, finalTask)).Should(Succeed())
 
-			var terminatedCondition *metav1.Condition
+			var stoppedCondition *metav1.Condition
 			for i := range finalTask.Status.Conditions {
-				if finalTask.Status.Conditions[i].Type == "Terminated" {
-					terminatedCondition = &finalTask.Status.Conditions[i]
+				if finalTask.Status.Conditions[i].Type == "Stopped" {
+					stoppedCondition = &finalTask.Status.Conditions[i]
 					break
 				}
 			}
-			Expect(terminatedCondition).ShouldNot(BeNil())
-			Expect(terminatedCondition.Status).Should(Equal(metav1.ConditionTrue))
-			Expect(terminatedCondition.Reason).Should(Equal("UserTerminated"))
+			Expect(stoppedCondition).ShouldNot(BeNil())
+			Expect(stoppedCondition.Status).Should(Equal(metav1.ConditionTrue))
+			Expect(stoppedCondition.Reason).Should(Equal("UserStopped"))
 
 			By("Checking CompletionTime is set")
 			Expect(finalTask.Status.CompletionTime).ShouldNot(BeNil())

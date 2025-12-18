@@ -1117,15 +1117,33 @@ Access ports via:
 kubectl port-forward pod/<pod-name> 3000:3000 8080:8080
 ```
 
-**Early Termination:**
+**Early Stop:**
 
-To exit a human-in-the-loop Task early (without waiting for the session duration timeout), set the terminate annotation:
+To exit a human-in-the-loop Task early (without waiting for the session duration timeout), set the stop annotation:
 
 ```bash
-kubectl annotate task my-task kubetask.io/terminate=true
+kubectl annotate task my-task kubetask.io/stop=true
 ```
 
-This immediately terminates the Task and sets its status to `Completed` with a `Terminated` condition.
+This stops the Task gracefully and sets its status to `Completed` with a `Stopped` condition.
+
+**How Task Stop Works (Technical Details):**
+
+When the stop annotation is detected, the controller leverages Kubernetes native Job suspension:
+
+1. **Controller sets `job.spec.suspend = true`** on the associated Job
+2. **Kubernetes sends SIGTERM** to all running Pods (including the agent and any sidecars like code-server)
+3. **Graceful termination period** (default 30 seconds) is honored, allowing processes to clean up
+4. **Pod transitions to `Failed` state** - the Pod is NOT deleted, so logs remain accessible
+5. **Task status is set to `Completed`** with a `Stopped` condition (reason: `UserStopped`)
+
+This approach ensures:
+- **Logs are preserved**: Unlike deleting the Job/Pod, suspending keeps all resources intact
+- **Graceful shutdown**: Containers receive SIGTERM and can clean up properly
+- **Sidecars are terminated**: All containers (agent + sidecars) receive the signal
+- **Resources remain for inspection**: Job and Pod exist until TTL-based cleanup (default 7 days)
+
+Reference: [Kubernetes Jobs - Suspending a Job](https://kubernetes.io/docs/concepts/workloads/controllers/job/#suspending-a-job)
 
 ---
 
@@ -1485,8 +1503,8 @@ kubectl get task update-service-a -o yaml
 # View task logs
 kubectl logs job/$(kubectl get task update-service-a -o jsonpath='{.status.jobName}') -n kubetask-system
 
-# Terminate a running task (immediately stops and marks as Completed)
-kubectl annotate task update-service-a kubetask.io/terminate=true
+# Stop a running task (gracefully stops and marks as Completed with logs preserved)
+kubectl annotate task update-service-a kubetask.io/stop=true
 
 # Delete task
 kubectl delete task update-service-a -n kubetask-system
@@ -1624,7 +1642,7 @@ kubectl get agent default -o yaml
 - No retry on failure (AI tasks are non-idempotent)
 - TTL-based automatic cleanup (default: 7 days)
 - Human-in-the-loop debugging support
-- User-initiated termination via `kubetask.io/terminate=true` annotation
+- User-initiated stop via `kubetask.io/stop=true` annotation (graceful, logs preserved)
 - OwnerReference cascade deletion
 
 **Batch Operations**:

@@ -46,8 +46,8 @@ const (
 	// DefaultQueuedRequeueDelay is the default delay for requeuing queued Tasks
 	DefaultQueuedRequeueDelay = 10 * time.Second
 
-	// AnnotationTerminate is the annotation key for user-initiated task termination
-	AnnotationTerminate = "kubetask.io/terminate"
+	// AnnotationStop is the annotation key for user-initiated task stop
+	AnnotationStop = "kubetask.io/stop"
 
 	// AnnotationHumanInTheLoop indicates that humanInTheLoop is enabled for the task
 	AnnotationHumanInTheLoop = "kubetask.io/human-in-the-loop"
@@ -133,10 +133,10 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return r.handleTaskCleanup(ctx, task)
 	}
 
-	// Check for user-initiated termination (only for Running tasks)
+	// Check for user-initiated stop (only for Running tasks)
 	if task.Status.Phase == kubetaskv1alpha1.TaskPhaseRunning {
-		if task.Annotations != nil && task.Annotations[AnnotationTerminate] == "true" {
-			return r.handleTermination(ctx, task)
+		if task.Annotations != nil && task.Annotations[AnnotationStop] == "true" {
+			return r.handleStop(ctx, task)
 		}
 	}
 
@@ -1008,39 +1008,44 @@ func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubetaskv1a
 	return ctrl.Result{Requeue: true}, nil
 }
 
-// handleTermination handles user-initiated task termination via annotation
-func (r *TaskReconciler) handleTermination(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
+// handleStop handles user-initiated task stop via annotation.
+// It suspends the Job which triggers graceful termination of running Pods via SIGTERM.
+// The Job and Pod are preserved (not deleted) so logs remain accessible.
+func (r *TaskReconciler) handleStop(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.Info("user-initiated termination detected", "task", task.Name)
+	log.Info("user-initiated stop detected", "task", task.Name)
 
-	// Delete the Job if it exists
+	// Suspend the Job if it exists
 	if task.Status.JobName != "" {
 		job := &batchv1.Job{}
 		jobKey := types.NamespacedName{Name: task.Status.JobName, Namespace: task.Namespace}
 		if err := r.Get(ctx, jobKey, job); err == nil {
-			// Use background deletion to clean up pods
-			propagation := metav1.DeletePropagationBackground
-			if err := r.Delete(ctx, job, &client.DeleteOptions{
-				PropagationPolicy: &propagation,
-			}); err != nil && !errors.IsNotFound(err) {
-				log.Error(err, "failed to delete job")
+			// Suspend the Job - Kubernetes will automatically:
+			// 1. Send SIGTERM to running Pods
+			// 2. Wait for graceful termination period (default 30s)
+			// 3. Pod transitions to Failed state (NOT deleted)
+			// 4. Logs remain accessible via kubectl logs
+			suspend := true
+			job.Spec.Suspend = &suspend
+			if err := r.Update(ctx, job); err != nil {
+				log.Error(err, "failed to suspend job")
 				return ctrl.Result{}, err
 			}
-			log.Info("deleted job for terminated task", "job", task.Status.JobName)
+			log.Info("suspended job for stopped task", "job", task.Status.JobName)
 		}
 	}
 
-	// Update Task status to Completed with Terminated condition
+	// Update Task status to Completed with Stopped condition
 	task.Status.Phase = kubetaskv1alpha1.TaskPhaseCompleted
 	task.Status.ObservedGeneration = task.Generation
 	now := metav1.Now()
 	task.Status.CompletionTime = &now
 
 	meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-		Type:    "Terminated",
+		Type:    "Stopped",
 		Status:  metav1.ConditionTrue,
-		Reason:  "UserTerminated",
-		Message: "Task terminated by user via kubetask.io/terminate annotation",
+		Reason:  "UserStopped",
+		Message: "Task stopped by user via kubetask.io/stop annotation",
 	})
 
 	if err := r.Status().Update(ctx, task); err != nil {
