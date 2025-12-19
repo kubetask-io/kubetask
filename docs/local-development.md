@@ -42,14 +42,18 @@ Build all required images:
 # Build the controller image
 make docker-build
 
-# Build the git-init image (used for Git Context cloning)
-make git-init-build
+# Build the kubetask-tools image (provides git-init, save-session, etc.)
+make tools-build
 
 # Build the agent image (gemini is the default)
 make agent-build
 ```
 
-**Note:** The git-init image is required when using Git Context. If you only use Inline or ConfigMap contexts, you can skip building it.
+**Note:** The kubetask-tools image provides multiple utilities:
+- `git-init`: Git repository cloning for Git Context
+- `save-session`: Workspace persistence for session resume
+
+If you only use Inline or ConfigMap contexts and don't need session persistence, you can skip building it.
 
 ### 3. Load Images to Kind
 
@@ -57,9 +61,8 @@ Load images into the Kind cluster (required because Kind cannot pull from local 
 
 ```bash
 kind load docker-image quay.io/kubetask/kubetask-controller:latest --name kubetask
-kind load docker-image quay.io/kubetask/kubetask-git-init:latest --name kubetask
+kind load docker-image quay.io/kubetask/kubetask-tools:latest --name kubetask
 kind load docker-image quay.io/kubetask/kubetask-agent-gemini:latest --name kubetask
-kind load docker-image quay.io/kubetask/kubetask-agent-code-server:latest --name kubetask
 ```
 
 ### 4. Deploy with Helm

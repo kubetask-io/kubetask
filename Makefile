@@ -156,32 +156,32 @@ docker-buildx:
 		.
 .PHONY: docker-buildx
 
-##@ Git-Init Image
+##@ KubeTask Tools Image
 
-# Git-init image settings
-GIT_INIT_IMG_NAME ?= kubetask-git-init
-GIT_INIT_IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(GIT_INIT_IMG_NAME):$(VERSION)
+# Tools image settings (unified image for git-init, save-session, etc.)
+TOOLS_IMG_NAME ?= kubetask-tools
+TOOLS_IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(TOOLS_IMG_NAME):$(VERSION)
 
-# Build git-init image
-git-init-build: ## Build git-init image for Git Context cloning
-	docker build -t $(GIT_INIT_IMG) -f cmd/git-init/Dockerfile .
-.PHONY: git-init-build
+# Build kubetask-tools image
+tools-build: ## Build kubetask-tools image (git-init, save-session, etc.)
+	docker build -t $(TOOLS_IMG) -f cmd/tools/Dockerfile .
+.PHONY: tools-build
 
-# Push git-init image
-git-init-push: ## Push git-init image
-	docker push $(GIT_INIT_IMG)
-.PHONY: git-init-push
+# Push kubetask-tools image
+tools-push: ## Push kubetask-tools image
+	docker push $(TOOLS_IMG)
+.PHONY: tools-push
 
-# Build and push git-init image for multiple architectures
-git-init-buildx: ## Multi-arch build and push git-init image
+# Build and push kubetask-tools image for multiple architectures
+tools-buildx: ## Multi-arch build and push kubetask-tools image
 	docker buildx create --use --name=kubetask-builder || true
 	docker buildx build \
 		--platform=$(PLATFORMS) \
-		--tag $(GIT_INIT_IMG) \
+		--tag $(TOOLS_IMG) \
 		--push \
-		-f cmd/git-init/Dockerfile \
+		-f cmd/tools/Dockerfile \
 		.
-.PHONY: git-init-buildx
+.PHONY: tools-buildx
 
 ##@ Helm
 
@@ -254,7 +254,7 @@ lint: golangci-lint
 ##@ E2E Testing
 
 # Kind cluster name for e2e testing
-E2E_CLUSTER_NAME ?= kind
+E2E_CLUSTER_NAME ?= kubetask-e2e
 E2E_IMG_TAG ?= dev
 
 # Create kind cluster for e2e testing
@@ -309,7 +309,7 @@ e2e-undeploy: ## Undeploy controller and CRDs from kind cluster
 .PHONY: e2e-undeploy
 
 # Setup e2e environment (create cluster, build images, load images, and deploy)
-e2e-setup: e2e-kind-create e2e-docker-build e2e-agent-build e2e-kind-load e2e-agent-load e2e-verify-image e2e-deploy ## Setup complete e2e environment
+e2e-setup: e2e-kind-create e2e-docker-build e2e-agent-build e2e-tools-build e2e-kind-load e2e-agent-load e2e-tools-load e2e-verify-image e2e-deploy ## Setup complete e2e environment
 	@echo "E2E environment setup complete"
 .PHONY: e2e-setup
 
@@ -334,6 +334,16 @@ e2e-agent-build: ## Build echo agent image for e2e testing
 e2e-agent-load: ## Load echo agent image into kind cluster
 	kind load docker-image quay.io/kubetask/kubetask-agent-echo:latest --name $(E2E_CLUSTER_NAME)
 .PHONY: e2e-agent-load
+
+# Build kubetask-tools image for e2e testing
+e2e-tools-build: ## Build kubetask-tools image for e2e testing
+	docker build -t quay.io/kubetask/kubetask-tools:latest -f cmd/tools/Dockerfile .
+.PHONY: e2e-tools-build
+
+# Load kubetask-tools image into kind cluster
+e2e-tools-load: ## Load kubetask-tools image into kind cluster
+	kind load docker-image quay.io/kubetask/kubetask-tools:latest --name $(E2E_CLUSTER_NAME)
+.PHONY: e2e-tools-load
 
 # Run e2e tests
 e2e-test: ## Run e2e tests

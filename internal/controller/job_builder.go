@@ -85,8 +85,9 @@ func int32Ptr(i int32) *int32 {
 }
 
 const (
-	// DefaultGitInitImage is the default git-init container image for cloning Git repositories
-	DefaultGitInitImage = "quay.io/kubetask/kubetask-git-init:latest"
+	// DefaultToolsImage is the default kubetask-tools container image for infrastructure utilities.
+	// This image provides: git-init (Git clone), save-session (workspace persistence), etc.
+	DefaultToolsImage = "quay.io/kubetask/kubetask-tools:latest"
 )
 
 // buildGitInitContainer creates an init container that clones a Git repository.
@@ -144,8 +145,9 @@ func buildGitInitContainer(gm gitMount, volumeName string, index int) corev1.Con
 
 	return corev1.Container{
 		Name:            fmt.Sprintf("git-init-%d", index),
-		Image:           DefaultGitInitImage,
+		Image:           DefaultToolsImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"/kubetask-tools", "git-init"},
 		Env:             envVars,
 		VolumeMounts:    volumeMounts,
 	}
@@ -479,30 +481,18 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 		})
 
 		// Build save-session sidecar container
-		// Uses a signal file to detect when agent container exits
+		// Uses kubetask-tools save-session command to wait for agent and save workspace
 		saveSessionSidecar := corev1.Container{
 			Name:            "save-session",
-			Image:           "busybox:stable",
+			Image:           DefaultToolsImage,
 			ImagePullPolicy: corev1.PullIfNotPresent,
-			Command: []string{
-				"sh", "-c",
-				`echo "save-session: Waiting for agent container to complete..."
-SIGNAL_FILE="/signal/.agent-done"
-# Wait for signal file from agent wrapper
-while [ ! -f "$SIGNAL_FILE" ]; do
-    sleep 2
-done
-echo "save-session: Agent completed, saving workspace to PVC..."
-DEST_DIR="/pvc/${TASK_NAMESPACE}/${TASK_NAME}"
-mkdir -p "$DEST_DIR"
-cp -r "${WORKSPACE_DIR}/." "$DEST_DIR/"
-echo "save-session: Workspace saved to $DEST_DIR"
-`,
-			},
+			Command:         []string{"/kubetask-tools", "save-session"},
 			Env: []corev1.EnvVar{
 				{Name: "TASK_NAME", Value: task.Name},
 				{Name: "TASK_NAMESPACE", Value: task.Namespace},
 				{Name: "WORKSPACE_DIR", Value: cfg.workspaceDir},
+				{Name: "PVC_MOUNT_PATH", Value: "/pvc"},
+				{Name: "SIGNAL_FILE", Value: "/signal/.agent-done"},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "session-pvc", MountPath: "/pvc"},

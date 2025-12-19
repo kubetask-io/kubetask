@@ -1,11 +1,5 @@
 // Copyright Contributors to the KubeTask project
 
-// git-init is a simple Git clone utility for KubeTask Git Context.
-// It clones a Git repository to a specified directory, supporting:
-// - Shallow clones (configurable depth)
-// - Branch/tag/commit reference
-// - HTTPS authentication (username/password)
-// - SSH authentication (private key)
 package main
 
 import (
@@ -15,9 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
-// Environment variable names
+// Environment variable names for git-init
 const (
 	envRepo        = "GIT_REPO"
 	envRef         = "GIT_REF"
@@ -30,7 +26,7 @@ const (
 	envSSHHostKeys = "GIT_SSH_KNOWN_HOSTS"
 )
 
-// Default values
+// Default values for git-init
 const (
 	defaultRef   = "HEAD"
 	defaultDepth = 1
@@ -38,14 +34,35 @@ const (
 	defaultLink  = "repo"
 )
 
-func main() {
-	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "git-init: error: %v\n", err)
-		os.Exit(1)
-	}
+func init() {
+	rootCmd.AddCommand(gitInitCmd)
 }
 
-func run() error {
+var gitInitCmd = &cobra.Command{
+	Use:   "git-init",
+	Short: "Clone Git repositories for Git Context",
+	Long: `git-init clones a Git repository to a specified directory.
+
+It supports:
+  - Shallow clones (configurable depth)
+  - Branch/tag/commit reference
+  - HTTPS authentication (username/password)
+  - SSH authentication (private key)
+
+Environment variables:
+  GIT_REPO            Repository URL (required)
+  GIT_REF             Git reference (branch/tag/commit), default: HEAD
+  GIT_DEPTH           Clone depth, default: 1
+  GIT_ROOT            Root directory for clone, default: /git
+  GIT_LINK            Subdirectory name, default: repo
+  GIT_USERNAME        HTTPS username
+  GIT_PASSWORD        HTTPS password/token
+  GIT_SSH_KEY         SSH private key (content or file path)
+  GIT_SSH_KNOWN_HOSTS Known hosts content for SSH verification`,
+	RunE: runGitInit,
+}
+
+func runGitInit(cmd *cobra.Command, args []string) error {
 	// Get required environment variable
 	repo := os.Getenv(envRepo)
 	if repo == "" {
@@ -83,21 +100,21 @@ func run() error {
 	}
 
 	// Build git clone command
-	args := []string{"clone", "--depth", strconv.Itoa(depth), "--single-branch"}
+	cloneArgs := []string{"clone", "--depth", strconv.Itoa(depth), "--single-branch"}
 
 	// Add branch flag if not HEAD
 	if ref != "HEAD" {
-		args = append(args, "--branch", ref)
+		cloneArgs = append(cloneArgs, "--branch", ref)
 	}
 
-	args = append(args, repo, targetDir)
+	cloneArgs = append(cloneArgs, repo, targetDir)
 
 	// Execute git clone
-	cmd := exec.Command("git", args...) //nolint:gosec // args are constructed from controlled inputs
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cloneCmd := exec.Command("git", cloneArgs...) //nolint:gosec // args are constructed from controlled inputs
+	cloneCmd.Stdout = os.Stdout
+	cloneCmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := cloneCmd.Run(); err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
@@ -108,16 +125,7 @@ func run() error {
 	}
 
 	// Create a shared .gitconfig in the target directory for safe.directory
-	// This is needed because init containers run as a different user than the main container
-	// Without this, git commands fail with "detected dubious ownership" error
-	// We write to a shared location so the main container can use it
 	sharedGitConfig := filepath.Join(root, ".gitconfig")
-	// Use directory = * because the repository may be mounted at a different path
-	// in the agent container (e.g., /workspace/project instead of /git/repo).
-	// This is safe because:
-	// - The .gitconfig is created inside the container and only affects this Pod
-	// - Container isolation is the security boundary
-	// - We cannot predict the final mount path from git-init
 	gitConfigContent := fmt.Sprintf("[safe]\n\tdirectory = %s\n\tdirectory = *\n", targetDir)
 	if err := os.WriteFile(sharedGitConfig, []byte(gitConfigContent), 0644); err != nil {
 		fmt.Printf("git-init: Warning: could not write shared .gitconfig: %v\n", err)
@@ -125,14 +133,7 @@ func run() error {
 		fmt.Printf("git-init: Created shared .gitconfig at %s\n", sharedGitConfig)
 	}
 
-	// Make the cloned repository writable by all users in the container.
-	// This is needed because the agent container may run as a different user.
-	// Without this, file modifications fail with "permission denied" error.
-	//
-	// Security Note: This is acceptable because:
-	// - Container provides process isolation (pod is the security boundary)
-	// - Agent needs write access to develop/modify cloned code
-	// - Alternative approaches (shared UID/fsGroup) reduce image flexibility
+	// Make the cloned repository writable by all users in the container
 	fmt.Println("git-init: Setting repository permissions...")
 	chmodCmd := exec.Command("chmod", "-R", "a+w", targetDir)
 	if err := chmodCmd.Run(); err != nil {
@@ -151,19 +152,16 @@ func run() error {
 		fmt.Printf("  Commit: %s\n", strings.TrimSpace(string(commitOutput)))
 	}
 
-	// Clean up credentials file after successful clone (security best practice)
+	// Clean up credentials file after successful clone
 	cleanupCredentials()
 
 	return nil
 }
 
-// cleanupCredentials removes the git credentials file after a successful clone.
-// This reduces the window of exposure for credentials on disk.
 func cleanupCredentials() {
 	username := os.Getenv(envUsername)
 	password := os.Getenv(envPassword)
 
-	// Only clean up if HTTPS credentials were used
 	if username != "" && password != "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -173,7 +171,6 @@ func cleanupCredentials() {
 		if err := os.Remove(credFile); err == nil {
 			fmt.Println("git-init: Cleaned up credentials file")
 		}
-		// Ignore error - best effort cleanup, file may not exist
 	}
 }
 
@@ -186,20 +183,16 @@ func setupAuth() error {
 	if username != "" && password != "" {
 		fmt.Println("git-init: Configuring HTTPS authentication...")
 
-		// Use git credential helper
 		if err := gitConfig("credential.helper", "store"); err != nil {
 			return err
 		}
 
-		// Get home directory
 		home, err := os.UserHomeDir()
 		if err != nil {
 			home = "/tmp"
 		}
 
-		// Write credentials file
 		credFile := filepath.Join(home, ".git-credentials")
-		// Extract host from repo URL
 		repo := os.Getenv(envRepo)
 		host := extractHost(repo)
 		credContent := fmt.Sprintf("https://%s:%s@%s\n", username, password, host)
@@ -213,7 +206,6 @@ func setupAuth() error {
 	if sshKey != "" {
 		fmt.Println("git-init: Configuring SSH authentication...")
 
-		// Get home directory
 		home, err := os.UserHomeDir()
 		if err != nil {
 			home = "/tmp"
@@ -224,16 +216,13 @@ func setupAuth() error {
 			return fmt.Errorf("failed to create .ssh directory: %w", err)
 		}
 
-		// Check if sshKey is a file path or content
 		var keyContent []byte
 		if _, err := os.Stat(sshKey); err == nil {
-			// It's a file path
 			keyContent, err = os.ReadFile(sshKey) //nolint:gosec // sshKey path is from trusted env var
 			if err != nil {
 				return fmt.Errorf("failed to read SSH key file: %w", err)
 			}
 		} else {
-			// It's the key content itself
 			keyContent = []byte(sshKey)
 		}
 
@@ -242,10 +231,8 @@ func setupAuth() error {
 			return fmt.Errorf("failed to write SSH key: %w", err)
 		}
 
-		// Write SSH config to disable strict host key checking
 		configContent := "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n"
 
-		// If known hosts are provided, use them instead
 		knownHosts := os.Getenv(envSSHHostKeys)
 		if knownHosts == "" {
 			fmt.Println("git-init: WARNING: SSH host key verification disabled (no GIT_SSH_KNOWN_HOSTS provided)")
@@ -264,7 +251,6 @@ func setupAuth() error {
 			return fmt.Errorf("failed to write SSH config: %w", err)
 		}
 
-		// Set GIT_SSH_COMMAND to use our key
 		sshCmd := fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes", keyFile)
 		if err := os.Setenv("GIT_SSH_COMMAND", sshCmd); err != nil {
 			return fmt.Errorf("failed to set GIT_SSH_COMMAND: %w", err)
@@ -280,12 +266,10 @@ func gitConfig(key, value string) error {
 }
 
 func extractHost(repoURL string) string {
-	// Remove protocol prefix
 	url := repoURL
 	url = strings.TrimPrefix(url, "https://")
 	url = strings.TrimPrefix(url, "http://")
 
-	// Get host (everything before first /)
 	if idx := strings.Index(url, "/"); idx != -1 {
 		return url[:idx]
 	}
@@ -308,18 +292,13 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 	return defaultValue
 }
 
-// validateRepoURL validates the repository URL protocol to prevent SSRF attacks.
-// Only allows https://, http://, and git@ (SSH) formats.
 func validateRepoURL(repo string) error {
-	// Allow https:// and git@ (SSH) formats
 	if strings.HasPrefix(repo, "https://") || strings.HasPrefix(repo, "git@") {
 		return nil
 	}
-	// Allow http:// (some internal repos use it), but warn
 	if strings.HasPrefix(repo, "http://") {
 		fmt.Println("git-init: WARNING: Using insecure HTTP protocol")
 		return nil
 	}
-	// Reject file://, ftp://, and other protocols
 	return fmt.Errorf("unsupported repository URL protocol: only https://, http://, and git@ (SSH) are allowed")
 }
