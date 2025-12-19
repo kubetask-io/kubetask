@@ -24,7 +24,7 @@ jobs:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
-      controller: ${{ steps.filter.outputs.controller }}
+      kubetask: ${{ steps.filter.outputs.kubetask }}
       agent-base: ${{ steps.filter.outputs.agent-base }}
       agent-gemini: ${{ steps.filter.outputs.agent-gemini }}
       agent-echo: ${{ steps.filter.outputs.agent-echo }}
@@ -42,7 +42,7 @@ jobs:
         id: filter
         with:
           filters: |
-            controller:
+            kubetask:
               - 'cmd/kubetask/**'
               - 'internal/**'
               - 'api/**'
@@ -121,12 +121,12 @@ jobs:
       - name: Run e2e tests
         run: make e2e
 
-  # Build and push controller image (only when controller code changes)
-  build-controller:
-    name: Build Controller
+  # Build and push kubetask image (only when kubetask code changes)
+  build-kubetask:
+    name: Build KubeTask
     runs-on: ubuntu-latest
     needs: [changes, unit-test, integration-test, e2e-test]
-    if: needs.changes.outputs.controller == 'true'
+    if: needs.changes.outputs.kubetask == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -144,7 +144,7 @@ jobs:
           username: ${{ secrets.QUAY_ROBOT_ACCOUNT }}
           password: ${{ secrets.QUAY_TOKEN }}
 
-      - name: Build and push controller
+      - name: Build and push kubetask
         uses: docker/build-push-action@v6
         with:
           context: .
