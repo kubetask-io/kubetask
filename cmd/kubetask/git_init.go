@@ -127,7 +127,7 @@ func runGitInit(cmd *cobra.Command, args []string) error {
 	// Create a shared .gitconfig in the target directory for safe.directory
 	sharedGitConfig := filepath.Join(root, ".gitconfig")
 	gitConfigContent := fmt.Sprintf("[safe]\n\tdirectory = %s\n\tdirectory = *\n", targetDir)
-	if err := os.WriteFile(sharedGitConfig, []byte(gitConfigContent), 0644); err != nil {
+	if err := os.WriteFile(sharedGitConfig, []byte(gitConfigContent), 0600); err != nil {
 		fmt.Printf("git-init: Warning: could not write shared .gitconfig: %v\n", err)
 	} else {
 		fmt.Printf("git-init: Created shared .gitconfig at %s\n", sharedGitConfig)
@@ -135,7 +135,7 @@ func runGitInit(cmd *cobra.Command, args []string) error {
 
 	// Make the cloned repository writable by all users in the container
 	fmt.Println("git-init: Setting repository permissions...")
-	chmodCmd := exec.Command("chmod", "-R", "a+w", targetDir)
+	chmodCmd := exec.Command("chmod", "-R", "a+w", targetDir) //nolint:gosec // targetDir is constructed from controlled env vars, not user input
 	if err := chmodCmd.Run(); err != nil {
 		fmt.Printf("git-init: Warning: could not set permissions: %v\n", err)
 	} else {

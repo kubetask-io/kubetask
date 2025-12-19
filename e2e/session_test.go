@@ -327,6 +327,7 @@ var _ = Describe("Session Persistence E2E Tests", Label(LabelSession), func() {
 				err = k8sClient.List(ctx, pods,
 					client.InNamespace(testNS),
 					client.MatchingLabels{"batch.kubernetes.io/job-name": jobName})
+				Expect(err).NotTo(HaveOccurred(), "Failed to list pods")
 			}
 			Expect(len(pods.Items)).Should(BeNumerically(">", 0), "Pod should exist")
 

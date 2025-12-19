@@ -86,7 +86,7 @@ func runSaveSession(cmd *cobra.Command, args []string) error {
 	fmt.Println("save-session: Agent completed, saving workspace to PVC...")
 
 	// Create destination directory
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0750); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -94,7 +94,7 @@ func runSaveSession(cmd *cobra.Command, args []string) error {
 	// Using cp -r to preserve directory structure
 	// The trailing /. ensures we copy contents, not the directory itself
 	srcPath := workspaceDir + "/."
-	copyCmd := exec.Command("cp", "-r", srcPath, destDir)
+	copyCmd := exec.Command("cp", "-r", srcPath, destDir) //nolint:gosec // paths are constructed from controlled env vars, not user input
 	copyCmd.Stdout = os.Stdout
 	copyCmd.Stderr = os.Stderr
 
