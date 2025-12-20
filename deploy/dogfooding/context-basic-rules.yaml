@@ -14,7 +14,7 @@ spec:
       ## Task Scope
 
       - If the task content is unrelated to the KubeTask project, DO NOT execute it
-      - Only perform tasks that are relevant to KubeTask development, testing, or operations
+      - Only perform tasks that are relevant to the KubeTask project (e.g., development, testing, operations, research, analysis, troubleshooting)
 
       ## Safety First
 
