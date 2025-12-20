@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kubetaskv1alpha1 "github.com/kubetask/kubetask/api/v1alpha1"
@@ -27,6 +28,10 @@ import (
 const (
 	// DefaultAgentImage is the default agent container image
 	DefaultAgentImage = "quay.io/kubetask/kubetask-agent-gemini:latest"
+
+	// SessionCleanupFinalizer ensures session data is cleaned up from PVC when Task is deleted.
+	// This finalizer is added to Tasks that have session persistence enabled.
+	SessionCleanupFinalizer = "kubetask.io/session-cleanup"
 
 	// ContextConfigMapSuffix is the suffix for ConfigMap names created for context
 	ContextConfigMapSuffix = "-context"
@@ -122,6 +127,11 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 		log.Error(err, "unable to fetch Task")
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion with finalizer (must be checked before any other logic)
+	if !task.DeletionTimestamp.IsZero() {
+		return r.handleSessionCleanup(ctx, task)
 	}
 
 	// If new, initialize status and create Job
@@ -306,6 +316,24 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 	// Get session persistence configuration
 	sessionCfg := r.getSessionPVCConfig(ctx, task.Namespace)
 
+	// Check if session persistence is enabled and add cleanup finalizer
+	persistenceEnabled := sessionCfg != nil &&
+		agentConfig.humanInTheLoop != nil &&
+		agentConfig.humanInTheLoop.Persistence != nil &&
+		agentConfig.humanInTheLoop.Persistence.Enabled
+
+	if persistenceEnabled {
+		if !controllerutil.ContainsFinalizer(task, SessionCleanupFinalizer) {
+			controllerutil.AddFinalizer(task, SessionCleanupFinalizer)
+			if err := r.Update(ctx, task); err != nil {
+				log.Error(err, "unable to add session cleanup finalizer")
+				return ctrl.Result{}, err
+			}
+			log.Info("added session cleanup finalizer", "task", task.Name)
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
+
 	// Create Job with agent configuration and context mounts
 	job := buildJob(task, jobName, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, sessionCfg)
 
@@ -408,6 +436,88 @@ func (r *TaskReconciler) handleTaskCleanup(ctx context.Context, task *kubetaskv1
 	requeueAfter := expirationTime.Sub(now)
 	log.V(1).Info("task not yet expired, requeueing", "task", task.Name, "requeueAfter", requeueAfter)
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// handleSessionCleanup handles Task deletion by cleaning up session data from PVC.
+// It creates a cleanup Job to delete the session directory, then removes the finalizer.
+func (r *TaskReconciler) handleSessionCleanup(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
+	// Check if we have the session cleanup finalizer
+	if !controllerutil.ContainsFinalizer(task, SessionCleanupFinalizer) {
+		// No finalizer, nothing to do - allow deletion to proceed
+		return ctrl.Result{}, nil
+	}
+
+	log.Info("handling session cleanup for deleted task", "task", task.Name)
+
+	// Get session PVC configuration
+	sessionCfg := r.getSessionPVCConfig(ctx, task.Namespace)
+	if sessionCfg == nil {
+		// Session PVC not configured, just remove finalizer
+		log.Info("session PVC not configured, skipping cleanup")
+		return r.removeSessionCleanupFinalizer(ctx, task)
+	}
+
+	// Check if cleanup Job already exists
+	cleanupJobName := fmt.Sprintf("%s-cleanup", task.Name)
+	existingJob := &batchv1.Job{}
+	jobKey := types.NamespacedName{Name: cleanupJobName, Namespace: task.Namespace}
+
+	err := r.Get(ctx, jobKey, existingJob)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create cleanup Job
+			log.Info("creating session cleanup job", "job", cleanupJobName)
+			cleanupJob := buildSessionCleanupJob(task, sessionCfg)
+			if err := r.Create(ctx, cleanupJob); err != nil {
+				if !errors.IsAlreadyExists(err) {
+					log.Error(err, "failed to create cleanup job")
+					return ctrl.Result{}, err
+				}
+			}
+			// Requeue to wait for Job completion
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Check cleanup Job status
+	if existingJob.Status.Succeeded > 0 {
+		log.Info("session cleanup job completed", "job", cleanupJobName)
+		return r.removeSessionCleanupFinalizer(ctx, task)
+	}
+
+	if existingJob.Status.Failed > 0 {
+		// Check if backoff limit reached
+		backoffLimit := int32(3)
+		if existingJob.Spec.BackoffLimit != nil {
+			backoffLimit = *existingJob.Spec.BackoffLimit
+		}
+		if existingJob.Status.Failed >= backoffLimit {
+			log.Error(nil, "session cleanup job failed after retries, removing finalizer anyway",
+				"job", cleanupJobName, "failures", existingJob.Status.Failed)
+			// Remove finalizer to avoid blocking deletion indefinitely
+			return r.removeSessionCleanupFinalizer(ctx, task)
+		}
+	}
+
+	// Job still in progress, requeue
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+}
+
+// removeSessionCleanupFinalizer removes the session cleanup finalizer from the Task.
+func (r *TaskReconciler) removeSessionCleanupFinalizer(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
+	if controllerutil.RemoveFinalizer(task, SessionCleanupFinalizer) {
+		if err := r.Update(ctx, task); err != nil {
+			log.Error(err, "failed to remove session cleanup finalizer")
+			return ctrl.Result{}, err
+		}
+		log.Info("removed session cleanup finalizer", "task", task.Name)
+	}
+	return ctrl.Result{}, nil
 }
 
 // getTTLSecondsAfterFinished retrieves the TTL configuration from KubeTaskConfig.

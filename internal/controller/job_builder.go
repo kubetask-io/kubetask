@@ -802,3 +802,61 @@ func buildSessionPod(task *kubetaskv1alpha1.Task, cfg agentConfig, sessionCfg *s
 		Spec: podSpec,
 	}
 }
+
+// buildSessionCleanupJob creates a Job to clean up session data from PVC.
+// The cleanup Job deletes the session directory at /<namespace>/<task-name>/ on the PVC.
+// This is called when a Task with session persistence is being deleted.
+func buildSessionCleanupJob(task *kubetaskv1alpha1.Task, sessionCfg *sessionPVCConfig) *batchv1.Job {
+	jobName := fmt.Sprintf("%s-cleanup", task.Name)
+	sessionPath := fmt.Sprintf("/%s/%s", task.Namespace, task.Name)
+
+	// TTL to auto-delete the Job after completion (5 minutes)
+	ttlSeconds := int32(300)
+
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: task.Namespace,
+			Labels: map[string]string{
+				"app":                 "kubetask",
+				"kubetask.io/task":    task.Name,
+				"kubetask.io/cleanup": "session",
+			},
+			// NO OwnerReference - Task is being deleted, so we can't set it as owner
+		},
+		Spec: batchv1.JobSpec{
+			BackoffLimit:            int32Ptr(3),
+			TTLSecondsAfterFinished: &ttlSeconds,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app":                 "kubetask",
+						"kubetask.io/task":    task.Name,
+						"kubetask.io/cleanup": "session",
+					},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					Containers: []corev1.Container{{
+						Name:            "cleanup",
+						Image:           DefaultKubeTaskImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         []string{"sh", "-c", fmt.Sprintf("rm -rf /pvc%s && echo 'Cleaned up session data at %s'", sessionPath, sessionPath)},
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      "session-pvc",
+							MountPath: "/pvc",
+						}},
+					}},
+					Volumes: []corev1.Volume{{
+						Name: "session-pvc",
+						VolumeSource: corev1.VolumeSource{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: sessionCfg.pvcName,
+							},
+						},
+					}},
+				},
+			},
+		},
+	}
+}

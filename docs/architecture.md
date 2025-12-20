@@ -1454,6 +1454,37 @@ labels:
   kubetask.io/component: session
 ```
 
+**Session Cleanup:**
+
+When a Task with session persistence is deleted, the controller automatically cleans up the persisted session data from the PVC.
+
+**How Cleanup Works:**
+
+1. When a Task with session persistence is created, a finalizer `kubetask.io/session-cleanup` is added
+2. When the Task is deleted, the controller creates a cleanup Job before allowing deletion
+3. The cleanup Job runs `rm -rf /<namespace>/<task-name>/` on the session PVC
+4. After the cleanup Job completes (or fails after 3 retries), the finalizer is removed
+5. The Task deletion proceeds normally
+
+**Cleanup Job Details:**
+
+- Job name: `<task-name>-cleanup`
+- Labels: `kubetask.io/cleanup: session`, `kubetask.io/task: <task-name>`
+- Auto-deleted after 5 minutes (TTL)
+- BackoffLimit: 3 retries
+
+**Error Handling:**
+
+If cleanup fails after retries, the finalizer is removed anyway to avoid blocking Task deletion indefinitely. In this case, orphaned files may remain on the PVC and require manual cleanup:
+
+```bash
+# List session directories on PVC (if using a debug Pod)
+ls /pvc/<namespace>/
+
+# Manually clean up orphaned session data
+rm -rf /pvc/<namespace>/<task-name>/
+```
+
 ---
 
 ## Agent Configuration

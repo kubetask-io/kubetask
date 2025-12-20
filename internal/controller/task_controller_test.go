@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -1934,6 +1935,402 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, runtimeContext)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+	})
+
+	Context("Session Cleanup Finalizer", func() {
+		It("Should add session cleanup finalizer when persistence is enabled", func() {
+			taskName := "test-task-session-finalizer"
+			agentName := "test-agent-session-finalizer"
+			pvcName := "test-session-pvc"
+			description := "# Session cleanup test"
+
+			By("Creating KubeTaskConfig with session PVC")
+			config := &kubetaskv1alpha1.KubeTaskConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "default",
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.KubeTaskConfigSpec{
+					SessionPVC: &kubetaskv1alpha1.SessionPVCConfig{
+						Name: pvcName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, config)).Should(Succeed())
+
+			By("Creating Agent with session persistence enabled")
+			agent := &kubetaskv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo test"},
+					HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+						Persistence: &kubetaskv1alpha1.SessionPersistence{
+							Enabled: true,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					AgentRef:    agentName,
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task has session cleanup finalizer")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			Eventually(func() bool {
+				updatedTask := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
+					return false
+				}
+				for _, f := range updatedTask.Finalizers {
+					if f == SessionCleanupFinalizer {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+
+			By("Checking Task is Running")
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				updatedTask := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
+					return ""
+				}
+				return updatedTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, config)).Should(Succeed())
+		})
+
+		It("Should NOT add finalizer when persistence is not enabled", func() {
+			taskName := "test-task-no-finalizer"
+			agentName := "test-agent-no-persistence"
+			description := "# No persistence test"
+
+			By("Creating Agent without session persistence")
+			agent := &kubetaskv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo test"},
+					// No HumanInTheLoop.Persistence
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					AgentRef:    agentName,
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task is Running")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				updatedTask := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
+					return ""
+				}
+				return updatedTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+
+			By("Checking Task does NOT have session cleanup finalizer")
+			updatedTask := &kubetaskv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskLookupKey, updatedTask)).Should(Succeed())
+			for _, f := range updatedTask.Finalizers {
+				Expect(f).ShouldNot(Equal(SessionCleanupFinalizer))
+			}
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+
+		It("Should NOT add finalizer when session PVC is not configured", func() {
+			taskName := "test-task-no-pvc-config"
+			agentName := "test-agent-no-pvc"
+			description := "# No PVC config test"
+
+			By("Creating Agent with persistence enabled but no KubeTaskConfig")
+			agent := &kubetaskv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo test"},
+					HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+						Persistence: &kubetaskv1alpha1.SessionPersistence{
+							Enabled: true,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task (without KubeTaskConfig with sessionPVC)")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					AgentRef:    agentName,
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task is Running")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			Eventually(func() kubetaskv1alpha1.TaskPhase {
+				updatedTask := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
+					return ""
+				}
+				return updatedTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+
+			By("Checking Task does NOT have session cleanup finalizer")
+			updatedTask := &kubetaskv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskLookupKey, updatedTask)).Should(Succeed())
+			for _, f := range updatedTask.Finalizers {
+				Expect(f).ShouldNot(Equal(SessionCleanupFinalizer))
+			}
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+
+		It("Should create cleanup Job when Task with finalizer is deleted", func() {
+			taskName := "test-task-cleanup-job"
+			agentName := "test-agent-cleanup-job"
+			pvcName := "test-session-pvc-cleanup"
+			description := "# Cleanup job test"
+
+			By("Creating KubeTaskConfig with session PVC")
+			config := &kubetaskv1alpha1.KubeTaskConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "default",
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.KubeTaskConfigSpec{
+					SessionPVC: &kubetaskv1alpha1.SessionPVCConfig{
+						Name: pvcName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, config)).Should(Succeed())
+
+			By("Creating Agent with session persistence enabled")
+			agent := &kubetaskv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo test"},
+					HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+						Persistence: &kubetaskv1alpha1.SessionPersistence{
+							Enabled: true,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					AgentRef:    agentName,
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Waiting for Task to be Running with finalizer")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			Eventually(func() bool {
+				updatedTask := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
+					return false
+				}
+				hasFinalizer := false
+				for _, f := range updatedTask.Finalizers {
+					if f == SessionCleanupFinalizer {
+						hasFinalizer = true
+						break
+					}
+				}
+				return updatedTask.Status.Phase == kubetaskv1alpha1.TaskPhaseRunning && hasFinalizer
+			}, timeout, interval).Should(BeTrue())
+
+			By("Deleting Task")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+
+			By("Checking cleanup Job is created")
+			cleanupJobName := fmt.Sprintf("%s-cleanup", taskName)
+			cleanupJobLookupKey := types.NamespacedName{Name: cleanupJobName, Namespace: taskNamespace}
+			cleanupJob := &batchv1.Job{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, cleanupJobLookupKey, cleanupJob) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying cleanup Job has correct labels")
+			Expect(cleanupJob.Labels).Should(HaveKeyWithValue("kubetask.io/cleanup", "session"))
+			Expect(cleanupJob.Labels).Should(HaveKeyWithValue("kubetask.io/task", taskName))
+
+			By("Verifying cleanup Job mounts the correct PVC")
+			Expect(cleanupJob.Spec.Template.Spec.Volumes).Should(HaveLen(1))
+			Expect(cleanupJob.Spec.Template.Spec.Volumes[0].PersistentVolumeClaim.ClaimName).Should(Equal(pvcName))
+
+			By("Simulating cleanup Job success")
+			cleanupJob.Status.Succeeded = 1
+			Expect(k8sClient.Status().Update(ctx, cleanupJob)).Should(Succeed())
+
+			By("Checking Task is deleted after cleanup")
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, taskLookupKey, &kubetaskv1alpha1.Task{})
+				return err != nil && errors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, config)).Should(Succeed())
+		})
+
+		It("Should remove finalizer even if cleanup Job fails after retries", func() {
+			taskName := "test-task-cleanup-fail"
+			agentName := "test-agent-cleanup-fail"
+			pvcName := "test-session-pvc-fail"
+			description := "# Cleanup failure test"
+
+			By("Creating KubeTaskConfig with session PVC")
+			config := &kubetaskv1alpha1.KubeTaskConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "default",
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.KubeTaskConfigSpec{
+					SessionPVC: &kubetaskv1alpha1.SessionPVCConfig{
+						Name: pvcName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, config)).Should(Succeed())
+
+			By("Creating Agent with session persistence enabled")
+			agent := &kubetaskv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "echo test"},
+					HumanInTheLoop: &kubetaskv1alpha1.HumanInTheLoop{
+						Persistence: &kubetaskv1alpha1.SessionPersistence{
+							Enabled: true,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubetaskv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubetaskv1alpha1.TaskSpec{
+					AgentRef:    agentName,
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Waiting for Task to be Running with finalizer")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			Eventually(func() bool {
+				updatedTask := &kubetaskv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
+					return false
+				}
+				hasFinalizer := false
+				for _, f := range updatedTask.Finalizers {
+					if f == SessionCleanupFinalizer {
+						hasFinalizer = true
+						break
+					}
+				}
+				return updatedTask.Status.Phase == kubetaskv1alpha1.TaskPhaseRunning && hasFinalizer
+			}, timeout, interval).Should(BeTrue())
+
+			By("Deleting Task")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+
+			By("Waiting for cleanup Job to be created")
+			cleanupJobName := fmt.Sprintf("%s-cleanup", taskName)
+			cleanupJobLookupKey := types.NamespacedName{Name: cleanupJobName, Namespace: taskNamespace}
+			cleanupJob := &batchv1.Job{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, cleanupJobLookupKey, cleanupJob) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Simulating cleanup Job failure (reaching backoff limit)")
+			cleanupJob.Status.Failed = 3 // Matches the backoff limit
+			Expect(k8sClient.Status().Update(ctx, cleanupJob)).Should(Succeed())
+
+			By("Checking Task is deleted despite cleanup failure")
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, taskLookupKey, &kubetaskv1alpha1.Task{})
+				return err != nil && errors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, config)).Should(Succeed())
 		})
 	})
 })
