@@ -715,7 +715,7 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 
 	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, nil, nil, nil)
 
-	// Verify context-files volume exists
+	// Verify context-files volume exists (for init container to read from)
 	var foundContextVolume bool
 	for _, vol := range job.Spec.Template.Spec.Volumes {
 		if vol.Name == "context-files" && vol.ConfigMap != nil {
@@ -729,19 +729,56 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 		t.Errorf("context-files volume not found")
 	}
 
-	// Verify volume mount exists
+	// Verify workspace emptyDir volume exists
+	var foundWorkspaceVolume bool
+	for _, vol := range job.Spec.Template.Spec.Volumes {
+		if vol.Name == "workspace" && vol.EmptyDir != nil {
+			foundWorkspaceVolume = true
+		}
+	}
+	if !foundWorkspaceVolume {
+		t.Errorf("workspace emptyDir volume not found")
+	}
+
+	// Verify agent container mounts workspace emptyDir
 	container := job.Spec.Template.Spec.Containers[0]
-	var foundMount bool
+	var foundWorkspaceMount bool
 	for _, mount := range container.VolumeMounts {
-		if mount.MountPath == "/workspace/task.md" {
-			foundMount = true
-			if mount.SubPath != "workspace-task.md" {
-				t.Errorf("VolumeMount.SubPath = %q, want %q", mount.SubPath, "workspace-task.md")
+		if mount.MountPath == "/workspace" && mount.Name == "workspace" {
+			foundWorkspaceMount = true
+		}
+	}
+	if !foundWorkspaceMount {
+		t.Errorf("Agent container should mount workspace emptyDir at /workspace")
+	}
+
+	// Verify context-init container exists
+	initContainers := job.Spec.Template.Spec.InitContainers
+	var foundContextInit bool
+	for _, ic := range initContainers {
+		if ic.Name == "context-init" {
+			foundContextInit = true
+			// Verify init container mounts the ConfigMap
+			var foundConfigMapMount bool
+			var foundInitWorkspaceMount bool
+			for _, mount := range ic.VolumeMounts {
+				if mount.Name == "context-files" && mount.MountPath == "/configmap-files" {
+					foundConfigMapMount = true
+				}
+				if mount.Name == "workspace" && mount.MountPath == "/workspace" {
+					foundInitWorkspaceMount = true
+				}
+			}
+			if !foundConfigMapMount {
+				t.Errorf("context-init container should mount context-files ConfigMap at /configmap-files")
+			}
+			if !foundInitWorkspaceMount {
+				t.Errorf("context-init container should mount workspace emptyDir at /workspace")
 			}
 		}
 	}
-	if !foundMount {
-		t.Errorf("Volume mount for /workspace/task.md not found")
+	if !foundContextInit {
+		t.Errorf("context-init init container not found")
 	}
 }
 
@@ -773,7 +810,7 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 
 	job := buildJob(task, "test-task-job", cfg, nil, nil, dirMounts, nil, nil)
 
-	// Verify dir-mount volume exists
+	// Verify dir-mount volume exists (for init container to read from)
 	var foundDirVolume bool
 	for _, vol := range job.Spec.Template.Spec.Volumes {
 		if vol.Name == "dir-mount-0" && vol.ConfigMap != nil {
@@ -790,16 +827,49 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 		t.Errorf("dir-mount-0 volume not found")
 	}
 
-	// Verify volume mount exists
-	container := job.Spec.Template.Spec.Containers[0]
-	var foundMount bool
-	for _, mount := range container.VolumeMounts {
-		if mount.MountPath == "/workspace/guides" {
-			foundMount = true
+	// Verify workspace emptyDir volume exists
+	var foundWorkspaceVolume bool
+	for _, vol := range job.Spec.Template.Spec.Volumes {
+		if vol.Name == "workspace" && vol.EmptyDir != nil {
+			foundWorkspaceVolume = true
 		}
 	}
-	if !foundMount {
-		t.Errorf("Volume mount for /workspace/guides not found")
+	if !foundWorkspaceVolume {
+		t.Errorf("workspace emptyDir volume not found")
+	}
+
+	// Verify agent container mounts workspace emptyDir (not dir-mount directly)
+	container := job.Spec.Template.Spec.Containers[0]
+	var foundWorkspaceMount bool
+	for _, mount := range container.VolumeMounts {
+		if mount.MountPath == "/workspace" && mount.Name == "workspace" {
+			foundWorkspaceMount = true
+		}
+	}
+	if !foundWorkspaceMount {
+		t.Errorf("Agent container should mount workspace emptyDir at /workspace")
+	}
+
+	// Verify context-init container exists and mounts the ConfigMap
+	initContainers := job.Spec.Template.Spec.InitContainers
+	var foundContextInit bool
+	for _, ic := range initContainers {
+		if ic.Name == "context-init" {
+			foundContextInit = true
+			// Verify init container mounts the dir-mount ConfigMap
+			var foundDirMount bool
+			for _, mount := range ic.VolumeMounts {
+				if mount.Name == "dir-mount-0" && mount.MountPath == "/configmap-dir-0" {
+					foundDirMount = true
+				}
+			}
+			if !foundDirMount {
+				t.Errorf("context-init container should mount dir-mount-0 ConfigMap at /configmap-dir-0")
+			}
+		}
+	}
+	if !foundContextInit {
+		t.Errorf("context-init init container not found")
 	}
 }
 
@@ -1393,10 +1463,12 @@ func TestBuildJob_WithHumanInTheLoop_SidecarSharesAllMounts(t *testing.T) {
 	}
 
 	// Verify all expected mounts are present
+	// Note: With the new emptyDir + init container approach, workspace content is
+	// accessed via the workspace emptyDir mount, not individual file/dir mounts.
+	// The init container copies ConfigMap content to the workspace emptyDir.
 	expectedMounts := []string{
-		"/workspace/task.md",      // Context ConfigMap file mount
-		"/workspace/config",       // Directory mount
-		"/workspace/src",          // Git mount
+		"/workspace",              // Workspace emptyDir (includes task.md and config via init container)
+		"/workspace/src",          // Git mount (still separate emptyDir)
 		"/home/agent/.ssh/id_rsa", // Credential file mount
 	}
 
@@ -1489,6 +1561,130 @@ func TestBuildJob_WithHumanInTheLoop_CustomCommand(t *testing.T) {
 	}
 	if sidecar.Ports[0].ContainerPort != 8080 {
 		t.Errorf("Sidecar port = %d, want 8080", sidecar.Ports[0].ContainerPort)
+	}
+}
+
+func TestBuildContextInitContainer(t *testing.T) {
+	tests := []struct {
+		name         string
+		workspaceDir string
+		fileMounts   []fileMount
+		dirMounts    []dirMount
+		wantEnvVars  map[string]string
+	}{
+		{
+			name:         "with file mounts only",
+			workspaceDir: "/workspace",
+			fileMounts: []fileMount{
+				{filePath: "/workspace/task.md"},
+				{filePath: "/workspace/guides/readme.md"},
+			},
+			dirMounts: nil,
+			wantEnvVars: map[string]string{
+				"WORKSPACE_DIR":  "/workspace",
+				"CONFIGMAP_PATH": "/configmap-files",
+				"FILE_MAPPINGS":  `[{"key":"workspace-task.md","targetPath":"/workspace/task.md"},{"key":"workspace-guides-readme.md","targetPath":"/workspace/guides/readme.md"}]`,
+			},
+		},
+		{
+			name:         "with dir mounts only",
+			workspaceDir: "/workspace",
+			fileMounts:   nil,
+			dirMounts: []dirMount{
+				{dirPath: "/workspace/config", configMapName: "config-cm"},
+				{dirPath: "/workspace/scripts", configMapName: "scripts-cm"},
+			},
+			wantEnvVars: map[string]string{
+				"WORKSPACE_DIR":  "/workspace",
+				"CONFIGMAP_PATH": "/configmap-files",
+				"DIR_MAPPINGS":   `[{"sourcePath":"/configmap-dir-0","targetPath":"/workspace/config"},{"sourcePath":"/configmap-dir-1","targetPath":"/workspace/scripts"}]`,
+			},
+		},
+		{
+			name:         "with both file and dir mounts",
+			workspaceDir: "/workspace",
+			fileMounts: []fileMount{
+				{filePath: "/workspace/task.md"},
+			},
+			dirMounts: []dirMount{
+				{dirPath: "/workspace/guides", configMapName: "guides-cm"},
+			},
+			wantEnvVars: map[string]string{
+				"WORKSPACE_DIR":  "/workspace",
+				"CONFIGMAP_PATH": "/configmap-files",
+				"FILE_MAPPINGS":  `[{"key":"workspace-task.md","targetPath":"/workspace/task.md"}]`,
+				"DIR_MAPPINGS":   `[{"sourcePath":"/configmap-dir-0","targetPath":"/workspace/guides"}]`,
+			},
+		},
+		{
+			name:         "with custom workspace dir",
+			workspaceDir: "/home/agent/work",
+			fileMounts: []fileMount{
+				{filePath: "/home/agent/work/task.md"},
+			},
+			dirMounts: nil,
+			wantEnvVars: map[string]string{
+				"WORKSPACE_DIR":  "/home/agent/work",
+				"CONFIGMAP_PATH": "/configmap-files",
+				"FILE_MAPPINGS":  `[{"key":"home-agent-work-task.md","targetPath":"/home/agent/work/task.md"}]`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			container := buildContextInitContainer(tt.workspaceDir, tt.fileMounts, tt.dirMounts)
+
+			// Verify container name
+			if container.Name != "context-init" {
+				t.Errorf("Container.Name = %q, want %q", container.Name, "context-init")
+			}
+
+			// Verify image
+			if container.Image != DefaultKubeTaskImage {
+				t.Errorf("Container.Image = %q, want %q", container.Image, DefaultKubeTaskImage)
+			}
+
+			// Verify command uses /kubetask context-init
+			if len(container.Command) != 2 {
+				t.Fatalf("len(Container.Command) = %d, want 2", len(container.Command))
+			}
+			if container.Command[0] != "/kubetask" {
+				t.Errorf("Container.Command[0] = %q, want %q", container.Command[0], "/kubetask")
+			}
+			if container.Command[1] != "context-init" {
+				t.Errorf("Container.Command[1] = %q, want %q", container.Command[1], "context-init")
+			}
+
+			// Verify environment variables
+			envMap := make(map[string]string)
+			for _, env := range container.Env {
+				envMap[env.Name] = env.Value
+			}
+
+			for key, wantValue := range tt.wantEnvVars {
+				gotValue, ok := envMap[key]
+				if !ok {
+					t.Errorf("Missing expected env var: %s", key)
+					continue
+				}
+				if gotValue != wantValue {
+					t.Errorf("Env[%s] = %q, want %q", key, gotValue, wantValue)
+				}
+			}
+
+			// Verify no unexpected env vars for FILE_MAPPINGS/DIR_MAPPINGS
+			if tt.fileMounts == nil || len(tt.fileMounts) == 0 {
+				if _, ok := envMap["FILE_MAPPINGS"]; ok {
+					t.Errorf("FILE_MAPPINGS should not be set when there are no file mounts")
+				}
+			}
+			if tt.dirMounts == nil || len(tt.dirMounts) == 0 {
+				if _, ok := envMap["DIR_MAPPINGS"]; ok {
+					t.Errorf("DIR_MAPPINGS should not be set when there are no dir mounts")
+				}
+			}
+		})
 	}
 }
 

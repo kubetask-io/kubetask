@@ -12,14 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Environment variable names for save-session
-const (
-	envTaskName      = "TASK_NAME"
-	envTaskNamespace = "TASK_NAMESPACE"
-	envWorkspaceDir  = "WORKSPACE_DIR"
-	envPVCMountPath  = "PVC_MOUNT_PATH"
-	envSignalFile    = "SIGNAL_FILE"
-)
+// Note: Environment variable constants are defined in constants.go
 
 // Default values for save-session
 const (

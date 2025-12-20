@@ -3,6 +3,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -153,12 +154,91 @@ func buildGitInitContainer(gm gitMount, volumeName string, index int) corev1.Con
 	}
 }
 
+// contextInitFileMapping represents a mapping from ConfigMap key to target file path.
+// This mirrors the FileMapping struct in cmd/kubetask/context_init.go.
+type contextInitFileMapping struct {
+	Key        string `json:"key"`
+	TargetPath string `json:"targetPath"`
+}
+
+// contextInitDirMapping represents a mapping from source directory to target directory.
+// This mirrors the DirMapping struct in cmd/kubetask/context_init.go.
+type contextInitDirMapping struct {
+	SourcePath string `json:"sourcePath"`
+	TargetPath string `json:"targetPath"`
+}
+
+// buildContextInitContainer creates an init container that copies ConfigMap content to the writable workspace.
+// This enables agents to create files in the workspace directory, which is not possible with direct ConfigMap mounts.
+// The init container uses /kubetask context-init command which reads configuration from environment variables.
+func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirMounts []dirMount) corev1.Container {
+	envVars := []corev1.EnvVar{
+		{Name: "WORKSPACE_DIR", Value: workspaceDir},
+		{Name: "CONFIGMAP_PATH", Value: "/configmap-files"},
+	}
+
+	// Build file mappings JSON
+	if len(fileMounts) > 0 {
+		var mappings []contextInitFileMapping
+		for _, mount := range fileMounts {
+			mappings = append(mappings, contextInitFileMapping{
+				Key:        sanitizeConfigMapKey(mount.filePath),
+				TargetPath: mount.filePath,
+			})
+		}
+		mappingsJSON, _ := json.Marshal(mappings)
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "FILE_MAPPINGS",
+			Value: string(mappingsJSON),
+		})
+	}
+
+	// Build directory mappings JSON
+	if len(dirMounts) > 0 {
+		var mappings []contextInitDirMapping
+		for i, dm := range dirMounts {
+			mappings = append(mappings, contextInitDirMapping{
+				SourcePath: fmt.Sprintf("/configmap-dir-%d", i),
+				TargetPath: dm.dirPath,
+			})
+		}
+		mappingsJSON, _ := json.Marshal(mappings)
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "DIR_MAPPINGS",
+			Value: string(mappingsJSON),
+		})
+	}
+
+	return corev1.Container{
+		Name:            "context-init",
+		Image:           DefaultKubeTaskImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"/kubetask", "context-init"},
+		Env:             envVars,
+		// VolumeMounts will be added by the caller
+	}
+}
+
 // buildJob creates a Job object for the task with context mounts
 func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, sessionCfg *sessionPVCConfig) *batchv1.Job {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var envVars []corev1.EnvVar
 	var initContainers []corev1.Container
+
+	// Always add workspace emptyDir volume for writable workspace.
+	// This is essential for SCC environments where containers run with random UIDs
+	// that don't have write access to directories created in the container image.
+	volumes = append(volumes, corev1.Volume{
+		Name: "workspace",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      "workspace",
+		MountPath: cfg.workspaceDir,
+	})
 
 	// Base environment variables for SCC (Security Context Constraints) compatibility.
 	// In environments with SCC or similar security policies, containers run with
@@ -287,7 +367,11 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 		}
 	}
 
+	// Track volume mounts for the context-init container
+	var contextInitMounts []corev1.VolumeMount
+
 	// Add context ConfigMap volume if it exists (for aggregated content)
+	// The ConfigMap is mounted to the init container, which copies content to the writable workspace
 	if contextConfigMap != nil {
 		volumes = append(volumes, corev1.Volume{
 			Name: "context-files",
@@ -300,18 +384,16 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 			},
 		})
 
-		// Add volume mounts for each file path
-		for _, mount := range fileMounts {
-			configMapKey := sanitizeConfigMapKey(mount.filePath)
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      "context-files",
-				MountPath: mount.filePath,
-				SubPath:   configMapKey,
-			})
-		}
+		// Mount ConfigMap to init container at a temporary path
+		contextInitMounts = append(contextInitMounts, corev1.VolumeMount{
+			Name:      "context-files",
+			MountPath: "/configmap-files",
+			ReadOnly:  true,
+		})
 	}
 
 	// Add directory mounts (ConfigMapRef - entire ConfigMap as a directory)
+	// These are also mounted to the init container and copied to workspace
 	for i, dm := range dirMounts {
 		volumeName := fmt.Sprintf("dir-mount-%d", i)
 		volumes = append(volumes, corev1.Volume{
@@ -325,10 +407,24 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 				},
 			},
 		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+
+		// Mount ConfigMap to init container at a temporary path
+		contextInitMounts = append(contextInitMounts, corev1.VolumeMount{
 			Name:      volumeName,
-			MountPath: dm.dirPath,
+			MountPath: fmt.Sprintf("/configmap-dir-%d", i),
+			ReadOnly:  true,
 		})
+	}
+
+	// Add context-init container if there are any context files or directories to copy
+	if len(fileMounts) > 0 || len(dirMounts) > 0 {
+		contextInit := buildContextInitContainer(cfg.workspaceDir, fileMounts, dirMounts)
+		// Add workspace mount so init container can write to it
+		contextInit.VolumeMounts = append(contextInitMounts, corev1.VolumeMount{
+			Name:      "workspace",
+			MountPath: cfg.workspaceDir,
+		})
+		initContainers = append(initContainers, contextInit)
 	}
 
 	// Add Git context mounts (using git-init containers)
