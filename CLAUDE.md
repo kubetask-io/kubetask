@@ -641,6 +641,7 @@ kubectl logs job/<job-name> -n kubetask-system
 5. **Performance**: Avoid unnecessary API calls, use caching where appropriate
 6. **Security**: Never log sensitive data (tokens, credentials)
 7. **Testing**: Write tests for new features, maintain coverage
+8. **Stopping Tasks**: When asked to stop running Tasks, use the annotation method (`kubectl annotate task <name> kubetask.io/stop=true`) instead of `kubectl delete task`. The annotation method preserves Job and Pod resources, keeping logs accessible for debugging. Only use `kubectl delete` when explicitly asked to remove the Task entirely.
 
 ## References
 
