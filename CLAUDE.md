@@ -168,6 +168,25 @@ make docker-push
 make docker-buildx
 ```
 
+### Cluster Deployment
+
+> **CRITICAL**: Always deploy KubeTask to the `kubetask-system` namespace. This is the standard namespace used throughout all documentation and examples. Never use `kubetask` or other namespace names.
+
+```bash
+# Create namespace
+kubectl create namespace kubetask-system
+
+# Install with Helm (with webhook enabled)
+helm install kubetask ./charts/kubetask \
+  --namespace kubetask-system \
+  --set webhook.enabled=true
+
+# Or install from OCI registry
+helm install kubetask oci://quay.io/kubetask/helm-charts/kubetask \
+  --namespace kubetask-system \
+  --set webhook.enabled=true
+```
+
 ### Agent Images
 
 Agent images are located in `agents/`. Each subdirectory contains a Dockerfile for a specific AI agent (gemini, claude, codex, etc.).
