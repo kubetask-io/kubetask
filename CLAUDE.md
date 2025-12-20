@@ -135,22 +135,25 @@ make fmt
 
 ### E2E Testing
 
-**IMPORTANT**: When running E2E tests, always follow the complete flow:
-1. First, clean up any existing Kind cluster
-2. Then, set up the E2E environment
-3. Finally, run the E2E tests
+> **CRITICAL FOR AI ASSISTANTS**: When the user asks to run "e2e tests", "e2e testing", "test e2e", or any variation, you MUST execute all three commands in sequence. NEVER run `make e2e-test` alone - this will cause failures due to stale cluster state.
+
+**Required E2E test flow** (always execute all three steps):
 
 ```bash
-# Complete E2E test flow (always use this sequence)
-make e2e-teardown  # Clean up existing Kind cluster first
-make e2e-setup     # Setup complete e2e environment
-make e2e-test      # Run e2e tests
+# Step 1: Clean up existing Kind cluster
+make e2e-teardown
 
-# For iterative development (after initial setup)
-make e2e-reload  # Rebuild and reload controller image
+# Step 2: Setup complete e2e environment
+make e2e-setup
+
+# Step 3: Run e2e tests
+make e2e-test
 ```
 
-> **Note for AI assistants**: When the user asks to run "e2e tests" or "e2e testing", always execute the complete flow: `e2e-teardown` → `e2e-setup` → `e2e-test`. This ensures a clean environment and prevents flaky tests from stale state.
+For iterative development only (when you've already run the full flow once in this session):
+```bash
+make e2e-reload  # Rebuild and reload controller image, then run e2e-test
+```
 
 ### Docker and Registry
 
