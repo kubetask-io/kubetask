@@ -34,6 +34,20 @@ type sessionPVCConfig struct {
 	pvcName string
 }
 
+// systemConfig holds resolved system-level configuration from KubeTaskConfig.
+// This configures internal KubeTask components (git-init, context-init, save-session).
+type systemConfig struct {
+	// systemImage is the container image for internal KubeTask components.
+	// Defaults to DefaultKubeTaskImage if not specified.
+	systemImage string
+	// systemImagePullPolicy is the image pull policy for system containers.
+	// Defaults to IfNotPresent if not specified.
+	systemImagePullPolicy corev1.PullPolicy
+	// agentImagePullPolicy is the default image pull policy for agent containers.
+	// Defaults to IfNotPresent if not specified.
+	agentImagePullPolicy corev1.PullPolicy
+}
+
 // fileMount represents a file to be mounted at a specific path
 type fileMount struct {
 	filePath string
@@ -128,7 +142,7 @@ const (
 )
 
 // buildGitInitContainer creates an init container that clones a Git repository.
-func buildGitInitContainer(gm gitMount, volumeName string, index int) corev1.Container {
+func buildGitInitContainer(gm gitMount, volumeName string, index int, sysCfg systemConfig) corev1.Container {
 	// Set default depth to 1 (shallow clone) if not specified
 	depth := gm.depth
 	if depth <= 0 {
@@ -182,8 +196,8 @@ func buildGitInitContainer(gm gitMount, volumeName string, index int) corev1.Con
 
 	return corev1.Container{
 		Name:            fmt.Sprintf("git-init-%d", index),
-		Image:           DefaultKubeTaskImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		Image:           sysCfg.systemImage,
+		ImagePullPolicy: sysCfg.systemImagePullPolicy,
 		Command:         []string{"/kubetask", "git-init"},
 		Env:             envVars,
 		VolumeMounts:    volumeMounts,
@@ -208,7 +222,7 @@ type contextInitDirMapping struct {
 // buildContextInitContainer creates an init container that copies ConfigMap content to the writable workspace.
 // This enables agents to create files in the workspace directory, which is not possible with direct ConfigMap mounts.
 // The init container uses /kubetask context-init command which reads configuration from environment variables.
-func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirMounts []dirMount) corev1.Container {
+func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirMounts []dirMount, sysCfg systemConfig) corev1.Container {
 	envVars := []corev1.EnvVar{
 		{Name: "WORKSPACE_DIR", Value: workspaceDir},
 		{Name: "CONFIGMAP_PATH", Value: "/configmap-files"},
@@ -249,8 +263,8 @@ func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirM
 
 	return corev1.Container{
 		Name:            "context-init",
-		Image:           DefaultKubeTaskImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		Image:           sysCfg.systemImage,
+		ImagePullPolicy: sysCfg.systemImagePullPolicy,
 		Command:         []string{"/kubetask", "context-init"},
 		Env:             envVars,
 		// VolumeMounts will be added by the caller
@@ -258,7 +272,7 @@ func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirM
 }
 
 // buildJob creates a Job object for the task with context mounts
-func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, sessionCfg *sessionPVCConfig) *batchv1.Job {
+func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, sessionCfg *sessionPVCConfig, sysCfg systemConfig) *batchv1.Job {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var envVars []corev1.EnvVar
@@ -456,7 +470,7 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 
 	// Add context-init container if there are any context files or directories to copy
 	if len(fileMounts) > 0 || len(dirMounts) > 0 {
-		contextInit := buildContextInitContainer(cfg.workspaceDir, fileMounts, dirMounts)
+		contextInit := buildContextInitContainer(cfg.workspaceDir, fileMounts, dirMounts, sysCfg)
 		// Add workspace mount so init container can write to it
 		contextInit.VolumeMounts = append(contextInitMounts, corev1.VolumeMount{
 			Name:      "workspace",
@@ -515,7 +529,7 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 		})
 
 		// Build init container for git clone
-		initContainers = append(initContainers, buildGitInitContainer(gm, volumeName, i))
+		initContainers = append(initContainers, buildGitInitContainer(gm, volumeName, i, sysCfg))
 
 		// Add volume mount to agent container
 		// If repoPath is specified, use subPath to mount only that path
@@ -565,7 +579,7 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 	agentContainer := corev1.Container{
 		Name:            "agent",
 		Image:           cfg.agentImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: sysCfg.agentImagePullPolicy,
 		Env:             envVars,
 		EnvFrom:         envFromSources,
 		VolumeMounts:    volumeMounts,
@@ -662,8 +676,8 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 		// Uses kubetask save-session command to wait for agent and save workspace
 		saveSessionSidecar := corev1.Container{
 			Name:            "save-session",
-			Image:           DefaultKubeTaskImage,
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			Image:           sysCfg.systemImage,
+			ImagePullPolicy: sysCfg.systemImagePullPolicy,
 			Command:         []string{"/kubetask", "save-session"},
 			Env: []corev1.EnvVar{
 				{Name: "TASK_NAME", Value: task.Name},
@@ -760,7 +774,7 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 // buildSessionPod creates a Pod for resuming work on a completed Task.
 // The session Pod has the same image, credentials, and environment as the original agent,
 // but mounts the persisted workspace from the shared PVC.
-func buildSessionPod(task *kubetaskv1alpha1.Task, cfg agentConfig, sessionCfg *sessionPVCConfig) *corev1.Pod {
+func buildSessionPod(task *kubetaskv1alpha1.Task, cfg agentConfig, sessionCfg *sessionPVCConfig, sysCfg systemConfig) *corev1.Pod {
 	sessionPodName := fmt.Sprintf("%s-session", task.Name)
 	pvcSubPath := fmt.Sprintf("%s/%s", task.Namespace, task.Name)
 
@@ -905,7 +919,7 @@ func buildSessionPod(task *kubetaskv1alpha1.Task, cfg agentConfig, sessionCfg *s
 	sessionContainer := corev1.Container{
 		Name:            "session",
 		Image:           image,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: sysCfg.agentImagePullPolicy,
 		Command:         command,
 		WorkingDir:      cfg.workspaceDir,
 		Env:             envVars,
@@ -986,7 +1000,7 @@ func buildSessionPod(task *kubetaskv1alpha1.Task, cfg agentConfig, sessionCfg *s
 // buildSessionCleanupJob creates a Job to clean up session data from PVC.
 // The cleanup Job deletes the session directory at /<namespace>/<task-name>/ on the PVC.
 // This is called when a Task with session persistence is being deleted.
-func buildSessionCleanupJob(task *kubetaskv1alpha1.Task, sessionCfg *sessionPVCConfig) *batchv1.Job {
+func buildSessionCleanupJob(task *kubetaskv1alpha1.Task, sessionCfg *sessionPVCConfig, sysCfg systemConfig) *batchv1.Job {
 	jobName := fmt.Sprintf("%s-cleanup", task.Name)
 	sessionPath := fmt.Sprintf("/%s/%s", task.Namespace, task.Name)
 
@@ -1019,8 +1033,8 @@ func buildSessionCleanupJob(task *kubetaskv1alpha1.Task, sessionCfg *sessionPVCC
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{{
 						Name:            "cleanup",
-						Image:           DefaultKubeTaskImage,
-						ImagePullPolicy: corev1.PullIfNotPresent,
+						Image:           sysCfg.systemImage,
+						ImagePullPolicy: sysCfg.systemImagePullPolicy,
 						Command:         []string{"sh", "-c", fmt.Sprintf("rm -rf /pvc%s && echo 'Cleaned up session data at %s'", sessionPath, sessionPath)},
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      "session-pvc",

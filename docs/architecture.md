@@ -210,6 +210,10 @@ Agent (execution configuration)
 
 KubeTaskConfig (system configuration)
 └── KubeTaskConfigSpec
+    ├── systemImage: *SystemImageConfig       (internal KubeTask components)
+    │   ├── image: string                     (default: DefaultKubeTaskImage)
+    │   └── imagePullPolicy: PullPolicy       (default: IfNotPresent)
+    ├── agentImagePullPolicy: PullPolicy      (default: IfNotPresent)
     ├── taskLifecycle: *TaskLifecycleConfig
     │   └── ttlSecondsAfterFinished: *int32
     └── sessionPVC: *SessionPVCConfig
@@ -556,8 +560,16 @@ type KubeTaskConfig struct {
 }
 
 type KubeTaskConfigSpec struct {
-    TaskLifecycle *TaskLifecycleConfig
-    SessionPVC    *SessionPVCConfig    // PVC infrastructure for session persistence
+    SystemImage          *SystemImageConfig   // System image for internal components
+    AgentImagePullPolicy corev1.PullPolicy    // Default pull policy for agent containers
+    TaskLifecycle        *TaskLifecycleConfig
+    SessionPVC           *SessionPVCConfig    // PVC infrastructure for session persistence
+}
+
+// SystemImageConfig configures the KubeTask system image
+type SystemImageConfig struct {
+    Image           string            // System image (default: built-in DefaultKubeTaskImage)
+    ImagePullPolicy corev1.PullPolicy // Pull policy: Always/Never/IfNotPresent (default: IfNotPresent)
 }
 
 type TaskLifecycleConfig struct {
@@ -1743,7 +1755,7 @@ Task Created
 
 ### KubeTaskConfig (System-level Configuration)
 
-KubeTaskConfig provides cluster or namespace-level settings for task lifecycle management and session PVC infrastructure.
+KubeTaskConfig provides cluster or namespace-level settings for task lifecycle management, session PVC infrastructure, and container image configuration.
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
@@ -1752,6 +1764,16 @@ metadata:
   name: default
   namespace: kubetask-system
 spec:
+  # System image configuration for internal KubeTask components
+  # (git-init, context-init, save-session containers)
+  systemImage:
+    image: quay.io/kubetask/kubetask:latest  # Default system image
+    imagePullPolicy: Always  # Always/Never/IfNotPresent (default: IfNotPresent)
+
+  # Default image pull policy for agent containers
+  # Can be overridden by individual Agent specifications
+  agentImagePullPolicy: Always  # Always/Never/IfNotPresent (default: IfNotPresent)
+
   taskLifecycle:
     # TTL for completed/failed tasks before automatic deletion
     # Default: 604800 (7 days)
@@ -1773,11 +1795,26 @@ spec:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `spec.systemImage.image` | string | No | System image for internal components (default: built-in DefaultKubeTaskImage) |
+| `spec.systemImage.imagePullPolicy` | string | No | Pull policy for system containers: Always, Never, IfNotPresent (default: IfNotPresent) |
+| `spec.agentImagePullPolicy` | string | No | Default pull policy for agent containers: Always, Never, IfNotPresent (default: IfNotPresent) |
 | `spec.taskLifecycle.ttlSecondsAfterFinished` | int32 | No | TTL in seconds for completed/failed tasks (default: 604800 = 7 days) |
 | `spec.sessionPVC.name` | string | No | Shared PVC name (default: "kubetask-session-data") |
 | `spec.sessionPVC.storageClassName` | string | No | StorageClass for PVC (empty = cluster default) |
 | `spec.sessionPVC.storageSize` | string | No | PVC size (default: "10Gi") |
 | `spec.sessionPVC.retentionPolicy.ttlSecondsAfterTaskDeletion` | int32 | No | How long to keep session data after Task deletion (default: 604800 = 7 days) |
+
+**Image Pull Policy:**
+
+Setting `imagePullPolicy: Always` is recommended when:
+- Using `:latest` tags in development/staging environments
+- Nodes may have cached old images that differ from registry versions
+- Frequent image updates are expected
+
+The `systemImage` configuration affects all internal KubeTask containers:
+- `git-init`: Clones Git repositories for Context
+- `context-init`: Copies ConfigMap content to writable workspace
+- `save-session`: Persists workspace to PVC after Task completion
 
 **Session Persistence Requirements:**
 

@@ -48,6 +48,16 @@ spec:
           spec:
             description: Spec defines the KubeTask configuration
             properties:
+              agentImagePullPolicy:
+                description: |-
+                  AgentImagePullPolicy specifies the default image pull policy for agent containers.
+                  This can be overridden by individual Agent specifications.
+                  Defaults to IfNotPresent if not specified.
+                enum:
+                - Always
+                - Never
+                - IfNotPresent
+                type: string
               sessionPVC:
                 description: |-
                   SessionPVC configures the PVC infrastructure for session persistence.
@@ -93,6 +103,28 @@ spec:
                     description: |-
                       StorageSize specifies the size of the PVC if auto-provisioned.
                       Example: "10Gi", "50Gi"
+                    type: string
+                type: object
+              systemImage:
+                description: |-
+                  SystemImage configures the KubeTask system image used for internal components
+                  such as git-init, context-init, and save-session containers.
+                  If not specified, uses the built-in default image with IfNotPresent policy.
+                properties:
+                  image:
+                    description: |-
+                      Image specifies the system image to use for internal KubeTask components.
+                      If not specified, defaults to the built-in DefaultKubeTaskImage.
+                      Example: "quay.io/kubetask/kubetask:v0.2.0"
+                    type: string
+                  imagePullPolicy:
+                    description: |-
+                      ImagePullPolicy specifies the image pull policy for the system image.
+                      Defaults to IfNotPresent if not specified.
+                    enum:
+                    - Always
+                    - Never
+                    - IfNotPresent
                     type: string
                 type: object
               taskLifecycle:

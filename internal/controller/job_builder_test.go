@@ -16,6 +16,15 @@ import (
 	kubetaskv1alpha1 "github.com/kubetask/kubetask/api/v1alpha1"
 )
 
+// defaultSystemConfig returns a systemConfig with default values for testing.
+func defaultSystemConfig() systemConfig {
+	return systemConfig{
+		systemImage:           DefaultKubeTaskImage,
+		systemImagePullPolicy: corev1.PullIfNotPresent,
+		agentImagePullPolicy:  corev1.PullIfNotPresent,
+	}
+}
+
 func TestSanitizeConfigMapKey(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -220,7 +229,7 @@ func TestBuildJob_BasicTask(t *testing.T) {
 		command:            []string{"sh", "-c", "echo test"},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	// Verify job metadata
 	if job.Name != "test-task-job" {
@@ -337,7 +346,7 @@ func TestBuildJob_WithCredentials(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	container := job.Spec.Template.Spec.Containers[0]
 
@@ -413,7 +422,7 @@ func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	container := job.Spec.Template.Spec.Containers[0]
 
@@ -468,7 +477,7 @@ func TestBuildJob_WithMixedCredentials(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	container := job.Spec.Template.Spec.Containers[0]
 
@@ -535,7 +544,7 @@ func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	container := job.Spec.Template.Spec.Containers[0]
 	podSpec := job.Spec.Template.Spec
@@ -616,7 +625,7 @@ func TestBuildJob_WithHumanInTheLoop_Sidecar(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	// Verify there are 2 containers: agent and session sidecar
 	containers := job.Spec.Template.Spec.Containers
@@ -713,7 +722,7 @@ func TestBuildJob_WithHumanInTheLoop_CustomImage(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	// Verify there are 2 containers
 	containers := job.Spec.Template.Spec.Containers
@@ -775,7 +784,7 @@ func TestBuildJob_WithPodScheduling(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	podSpec := job.Spec.Template.Spec
 
@@ -840,7 +849,7 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 		{filePath: "/workspace/task.md"},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, nil, nil, nil, defaultSystemConfig())
 
 	// Verify context-files volume exists (for init container to read from)
 	var foundContextVolume bool
@@ -935,7 +944,7 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, dirMounts, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, dirMounts, nil, nil, defaultSystemConfig())
 
 	// Verify dir-mount volume exists (for init container to read from)
 	var foundDirVolume bool
@@ -1032,7 +1041,7 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, gitMounts, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, gitMounts, nil, defaultSystemConfig())
 
 	// Verify init container exists
 	if len(job.Spec.Template.Spec.InitContainers) != 1 {
@@ -1122,7 +1131,7 @@ func TestBuildJob_WithGitMountsAndAuth(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, gitMounts, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, gitMounts, nil, defaultSystemConfig())
 
 	// Verify init container has auth env vars
 	initContainer := job.Spec.Template.Spec.InitContainers[0]
@@ -1173,7 +1182,7 @@ func TestBuildGitInitContainer(t *testing.T) {
 		secretName:  "",
 	}
 
-	container := buildGitInitContainer(gm, "git-vol-0", 0)
+	container := buildGitInitContainer(gm, "git-vol-0", 0, defaultSystemConfig())
 
 	if container.Name != "git-init-0" {
 		t.Errorf("Container name = %q, want %q", container.Name, "git-init-0")
@@ -1252,7 +1261,7 @@ func TestBuildJob_WithHumanInTheLoop_Ports(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	containers := job.Spec.Template.Spec.Containers
 	if len(containers) != 2 {
@@ -1325,7 +1334,7 @@ func TestBuildJob_WithHumanInTheLoop_Disabled(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	containers := job.Spec.Template.Spec.Containers
 
@@ -1372,7 +1381,7 @@ func TestBuildJob_WithHumanInTheLoop_UDPPort(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	containers := job.Spec.Template.Spec.Containers
 	if len(containers) != 2 {
@@ -1422,7 +1431,7 @@ func TestBuildJob_WithHumanInTheLoop_FromAgent(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	containers := job.Spec.Template.Spec.Containers
 	if len(containers) != 2 {
@@ -1473,7 +1482,7 @@ func TestBuildJob_WithHumanInTheLoop_DefaultDuration(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	containers := job.Spec.Template.Spec.Containers
 	if len(containers) != 2 {
@@ -1562,7 +1571,7 @@ func TestBuildJob_WithHumanInTheLoop_SidecarSharesAllMounts(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, dirMounts, gitMounts, nil)
+	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, dirMounts, gitMounts, nil, defaultSystemConfig())
 
 	containers := job.Spec.Template.Spec.Containers
 	if len(containers) != 2 {
@@ -1651,7 +1660,7 @@ func TestBuildJob_WithHumanInTheLoop_CustomCommand(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	// Verify we have 2 containers (agent + sidecar)
 	if len(job.Spec.Template.Spec.Containers) != 2 {
@@ -1760,7 +1769,7 @@ func TestBuildContextInitContainer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			container := buildContextInitContainer(tt.workspaceDir, tt.fileMounts, tt.dirMounts)
+			container := buildContextInitContainer(tt.workspaceDir, tt.fileMounts, tt.dirMounts, defaultSystemConfig())
 
 			// Verify container name
 			if container.Name != "context-init" {
@@ -1852,7 +1861,7 @@ func TestBuildJob_WithExternalFileMounts(t *testing.T) {
 		{filePath: "/etc/github-app/github-app-iat.sh"},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, nil, nil, nil)
+	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, nil, nil, nil, defaultSystemConfig())
 
 	// Verify workspace emptyDir volume exists
 	var foundWorkspaceVolume bool

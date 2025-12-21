@@ -316,6 +316,9 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 	// Get session persistence configuration
 	sessionCfg := r.getSessionPVCConfig(ctx, task.Namespace)
 
+	// Get system configuration (image, pull policies)
+	sysCfg := r.getSystemConfig(ctx, task.Namespace)
+
 	// Check if session persistence is enabled and add cleanup finalizer
 	persistenceEnabled := sessionCfg != nil &&
 		agentConfig.humanInTheLoop != nil &&
@@ -335,7 +338,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 	}
 
 	// Create Job with agent configuration and context mounts
-	job := buildJob(task, jobName, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, sessionCfg)
+	job := buildJob(task, jobName, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, sessionCfg, sysCfg)
 
 	if err := r.Create(ctx, job); err != nil {
 		log.Error(err, "unable to create Job", "job", jobName)
@@ -459,6 +462,9 @@ func (r *TaskReconciler) handleSessionCleanup(ctx context.Context, task *kubetas
 		return r.removeSessionCleanupFinalizer(ctx, task)
 	}
 
+	// Get system configuration
+	sysCfg := r.getSystemConfig(ctx, task.Namespace)
+
 	// Check if cleanup Job already exists
 	cleanupJobName := fmt.Sprintf("%s-cleanup", task.Name)
 	existingJob := &batchv1.Job{}
@@ -469,7 +475,7 @@ func (r *TaskReconciler) handleSessionCleanup(ctx context.Context, task *kubetas
 		if errors.IsNotFound(err) {
 			// Create cleanup Job
 			log.Info("creating session cleanup job", "job", cleanupJobName)
-			cleanupJob := buildSessionCleanupJob(task, sessionCfg)
+			cleanupJob := buildSessionCleanupJob(task, sessionCfg, sysCfg)
 			if err := r.Create(ctx, cleanupJob); err != nil {
 				if !errors.IsAlreadyExists(err) {
 					log.Error(err, "failed to create cleanup job")
@@ -1204,6 +1210,49 @@ func (r *TaskReconciler) getSessionPVCConfig(ctx context.Context, namespace stri
 	}
 }
 
+// getSystemConfig retrieves the system configuration from KubeTaskConfig.
+// It looks for config in KubeTaskConfig named "default" in the task's namespace.
+// Returns a systemConfig with defaults if no config is found.
+func (r *TaskReconciler) getSystemConfig(ctx context.Context, namespace string) systemConfig {
+	log := log.FromContext(ctx)
+
+	// Default configuration
+	cfg := systemConfig{
+		systemImage:           DefaultKubeTaskImage,
+		systemImagePullPolicy: corev1.PullIfNotPresent,
+		agentImagePullPolicy:  corev1.PullIfNotPresent,
+	}
+
+	// Try to get KubeTaskConfig from the task's namespace
+	config := &kubetaskv1alpha1.KubeTaskConfig{}
+	configKey := types.NamespacedName{Name: "default", Namespace: namespace}
+
+	if err := r.Get(ctx, configKey, config); err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, "unable to get KubeTaskConfig for system config, using defaults")
+		}
+		// Config not found, use defaults
+		return cfg
+	}
+
+	// Apply system image configuration if specified
+	if config.Spec.SystemImage != nil {
+		if config.Spec.SystemImage.Image != "" {
+			cfg.systemImage = config.Spec.SystemImage.Image
+		}
+		if config.Spec.SystemImage.ImagePullPolicy != "" {
+			cfg.systemImagePullPolicy = config.Spec.SystemImage.ImagePullPolicy
+		}
+	}
+
+	// Apply agent image pull policy if specified
+	if config.Spec.AgentImagePullPolicy != "" {
+		cfg.agentImagePullPolicy = config.Spec.AgentImagePullPolicy
+	}
+
+	return cfg
+}
+
 // handleSessionResume creates a session Pod for resuming work on a completed Task.
 func (r *TaskReconciler) handleSessionResume(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
@@ -1271,9 +1320,12 @@ func (r *TaskReconciler) handleSessionResume(ctx context.Context, task *kubetask
 		return ctrl.Result{}, nil
 	}
 
+	// Get system configuration
+	sysCfg := r.getSystemConfig(ctx, task.Namespace)
+
 	// Create session Pod
 	log.Info("creating session pod", "task", task.Name)
-	sessionPod := buildSessionPod(task, agentCfg, sessionCfg)
+	sessionPod := buildSessionPod(task, agentCfg, sessionCfg, sysCfg)
 
 	if err := r.Create(ctx, sessionPod); err != nil {
 		log.Error(err, "failed to create session pod")

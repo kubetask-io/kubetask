@@ -878,6 +878,19 @@ type KubeTaskConfig struct {
 
 // KubeTaskConfigSpec defines the system-level configuration
 type KubeTaskConfigSpec struct {
+	// SystemImage configures the KubeTask system image used for internal components
+	// such as git-init, context-init, and save-session containers.
+	// If not specified, uses the built-in default image with IfNotPresent policy.
+	// +optional
+	SystemImage *SystemImageConfig `json:"systemImage,omitempty"`
+
+	// AgentImagePullPolicy specifies the default image pull policy for agent containers.
+	// This can be overridden by individual Agent specifications.
+	// Defaults to IfNotPresent if not specified.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	AgentImagePullPolicy corev1.PullPolicy `json:"agentImagePullPolicy,omitempty"`
+
 	// TaskLifecycle configures task lifecycle management including cleanup policies.
 	// +optional
 	TaskLifecycle *TaskLifecycleConfig `json:"taskLifecycle,omitempty"`
@@ -955,6 +968,22 @@ type SessionRetentionPolicy struct {
 	// +optional
 	// +kubebuilder:default=604800
 	TTLSecondsAfterTaskDeletion *int32 `json:"ttlSecondsAfterTaskDeletion,omitempty"`
+}
+
+// SystemImageConfig configures the KubeTask system image used for internal components
+// such as git-init, context-init, and save-session containers.
+type SystemImageConfig struct {
+	// Image specifies the system image to use for internal KubeTask components.
+	// If not specified, defaults to the built-in DefaultKubeTaskImage.
+	// Example: "quay.io/kubetask/kubetask:v0.2.0"
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// ImagePullPolicy specifies the image pull policy for the system image.
+	// Defaults to IfNotPresent if not specified.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 }
 
 // SessionPhase represents the current phase of a session

@@ -489,6 +489,14 @@ kind: KubeTaskConfig
 metadata:
   name: default
 spec:
+  # System image for internal components (git-init, context-init, save-session)
+  systemImage:
+    image: quay.io/kubetask/kubetask:latest
+    imagePullPolicy: Always  # Recommended when using :latest tags
+
+  # Default pull policy for agent containers
+  agentImagePullPolicy: Always
+
   sessionPVC:
     name: kubetask-session-data  # Shared PVC for all HITL tasks
     storageSize: 50Gi
