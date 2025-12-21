@@ -45,6 +45,14 @@ rules:
   - apiGroups: ["kubetask.io"]
     resources: ["kubetaskconfigs"]
     verbs: ["get", "list", "watch"]
+  # Allow agent to read Jobs (for workflow stage dependencies)
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch"]
+  # Allow agent to read Pods and Pod logs (for analyzing previous task results)
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
