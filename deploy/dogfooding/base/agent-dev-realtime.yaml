@@ -13,9 +13,6 @@ spec:
     - gemini --output-format stream-json --yolo -p "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubetask-agent
   credentials:
-    - name: github
-      secretRef:
-        name: github-credentials
     - name: gemini
       secretRef:
         name: gemini-credentials

@@ -1,0 +1,14 @@
+# Copyright Contributors to the KubeTask project
+# Context for GitHub scripts - mounts entire ConfigMap as directory
+# Contains: github-app-iat.sh, github.sh
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: github-scripts
+  labels:
+    app.kubernetes.io/name: kubetask
+spec:
+  type: ConfigMap
+  configMap:
+    name: github-scripts
+    # No key specified = mount all keys as files in the directory

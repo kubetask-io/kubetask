@@ -15,13 +15,38 @@ spec:
   maxConcurrentTasks: 3
   credentials:
     # Mount entire secret - all keys become env vars automatically
-    - name: github
+    - name: git
       secretRef:
-        name: github-credentials
+        name: git-settings
     - name: gemini
       secretRef:
         name: gemini-credentials
+    # GitHub App credentials for IAT generation (mounted as files)
+    - name: github-app-client-id
+      secretRef:
+        name: github-app-credentials
+        key: client_id
+      mountPath: /etc/github-app/client_id
+    - name: github-app-installation-id
+      secretRef:
+        name: github-app-credentials
+        key: installation_id
+      mountPath: /etc/github-app/installation_id
+    - name: github-app-private-key
+      secretRef:
+        name: github-app-credentials
+        key: private_key
+      mountPath: /etc/github-app/private_key
+      fileMode: 0400
   # Agent-level contexts (lowest priority, applied to all tasks)
   contexts:
     - ref:
         name: basic-rules
+    - ref:
+        name: github-app-auth
+    # GitHub scripts (from ConfigMap, mounted as executables)
+    # Note: Must be within workspace because init container copies ConfigMap content
+    - ref:
+        name: github-scripts
+        mountPath: .github-app
+        fileMode: 493  # 0755 in decimal

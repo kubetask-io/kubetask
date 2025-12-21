@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -204,10 +205,24 @@ func copyDir(src, dst string) error {
 
 	// Copy each entry
 	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
+		name := entry.Name()
 
-		if entry.IsDir() {
+		// Skip Kubernetes ConfigMap internal entries (..data, ..TIMESTAMP directories)
+		// These are used for atomic updates and should not be copied directly
+		if strings.HasPrefix(name, "..") {
+			continue
+		}
+
+		srcPath := filepath.Join(src, name)
+		dstPath := filepath.Join(dst, name)
+
+		// For symlinks (common with ConfigMap mounts), resolve to get the actual type
+		info, err := os.Stat(srcPath) // Stat follows symlinks
+		if err != nil {
+			return fmt.Errorf("failed to stat %s: %w", srcPath, err)
+		}
+
+		if info.IsDir() {
 			if err := copyDir(srcPath, dstPath); err != nil {
 				return err
 			}

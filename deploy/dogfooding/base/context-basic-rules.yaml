@@ -51,10 +51,11 @@ spec:
 
       Since tasks run autonomously in the background, you MUST use non-interactive command forms:
 
-      - **Git push**: Always use `git push https://${GH_TOKEN}@github.com/<org>/<repo>.git <branch>` instead of `git push origin <branch>`
+      - **Git push**: Always use `git push https://x-access-token:${GH_TOKEN}@github.com/<org>/<repo>.git <branch>` instead of `git push origin <branch>`
         - Get `<org>/<repo>` from `git remote -v` output, NOT from assumptions
-      - **Git clone**: Use `git clone https://${GH_TOKEN}@github.com/<org>/<repo>.git` for private repos
-      - **Git remote**: Set remote URL with token: `git remote set-url origin https://${GH_TOKEN}@github.com/<org>/<repo>.git`
+        - **IMPORTANT**: Use `x-access-token` as username for GitHub App tokens
+      - **Git clone**: Use `git clone https://x-access-token:${GH_TOKEN}@github.com/<org>/<repo>.git` for private repos
+      - **Git remote**: Set remote URL with token: `git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/<org>/<repo>.git`
       - **Never** use commands that prompt for username/password
       - **Never** use interactive flags like `-i` or `--interactive`
       - **Always** use `--no-edit` flag when applicable (e.g., `git merge --no-edit`)

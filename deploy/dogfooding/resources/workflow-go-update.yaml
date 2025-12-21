@@ -9,7 +9,6 @@ spec:
     - name: update-go
       tasks:
         - name: check-and-update
-          agentRef: dev
           contexts:
           - inline:
             type: Git
