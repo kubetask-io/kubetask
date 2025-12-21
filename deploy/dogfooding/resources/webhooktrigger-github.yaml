@@ -1,0 +1,201 @@
+apiVersion: kubetask.io/v1alpha1
+kind: WebhookTrigger
+metadata:
+  name: github-pr-review-only
+spec:
+  auth:
+    hmac:
+      secretRef:
+        name: github-webhook-secret
+        key: hmacKey
+      signatureHeader: X-Hub-Signature-256
+      algorithm: sha256
+  matchPolicy: First
+  rules:
+    # Rule 1: PR opened - auto review
+    - name: pr-opened
+      filter: |
+        headers["x-github-event"] == "pull_request" &&
+        body.action == "opened"
+      resourceTemplate:
+        task:
+          agentRef: default
+          description: |
+            Review this Pull Request and post your review as a comment:
+
+            Repository: {{ .repository.full_name }}
+            Author: {{ .sender.login }}
+
+            PR #{{ .pull_request.number }}: {{ .pull_request.title }}
+            PR URL: {{ .pull_request.html_url }}
+            PR Body: {{ .pull_request.body }}
+
+            ## Instructions
+
+            1. Clone the repository and checkout the PR branch
+            2. Review the code changes thoroughly
+            3. Prepare a constructive review with:
+               - Summary of changes
+               - Code quality observations
+               - Suggestions for improvement (if any)
+               - Overall assessment
+            4. Post your review as a PR comment.
+
+    # Rule 2: @kubetask-bot mention from privileged users (OWNER, MEMBER, CONTRIBUTOR, COLLABORATOR)
+    - name: comment-privileged
+      filter: |
+        headers["x-github-event"] == "issue_comment" &&
+        body.action == "created" &&
+        body.comment.body.contains("@kubetask-bot") &&
+        body.comment.author_association in ["OWNER", "MEMBER", "CONTRIBUTOR", "COLLABORATOR"]
+      resourceTemplate:
+        task:
+          agentRef: default
+          description: |
+            # @kubetask-bot Mention Handler (Privileged User)
+
+            ## Event Details
+
+            - Repository: {{ .repository.full_name }}
+            - Clone URL: {{ .repository.clone_url }}
+            - Issue/PR #{{ .issue.number }}: {{ .issue.title }}
+            - Issue/PR URL: {{ .issue.html_url }}
+            - Is PR: {{ if .issue.pull_request }}Yes{{ else }}No{{ end }}
+
+            ## Comment Details
+
+            - Commenter: @{{ .comment.user.login }}
+            - Author Association: {{ .comment.author_association }}
+            - Comment URL: {{ .comment.html_url }}
+
+            ### Comment Body
+
+            {{ .comment.body }}
+
+            ## Instructions
+
+            You are @kubetask-bot responding to a mention from a **privileged user** ({{ .comment.author_association }}).
+
+            ### Step 1: Analyze Intent
+
+            Read the comment and determine what the user is asking:
+            - **Question**: User is asking about the code, seeking explanation, or asking for help
+            - **Code Change Request**: User is asking you to modify, fix, add, update, or remove code
+
+            ### Step 2: For Questions
+
+            If the user is asking a question:
+            1. Clone the repository
+            2. {{ if .issue.pull_request }}Checkout the PR branch: `gh pr checkout {{ .issue.number }}`{{ else }}Checkout the default branch{{ end }}
+            3. Read and analyze the relevant code
+            4. Reply with your answer using: `gh {{ if .issue.pull_request }}pr{{ else }}issue{{ end }} comment {{ .issue.number }} --body "..."`
+
+            ### Step 3: For Code Change Requests
+
+            {{ if .issue.pull_request }}
+            If the user is requesting code changes on this PR:
+
+            1. First, check if this PR is from a fork:
+               ```bash
+               gh pr view {{ .issue.number }} --json headRepositoryOwner,baseRepository --jq '{head: .headRepositoryOwner.login, base: .baseRepository.owner.login}'
+               ```
+
+            2. **If same-repo PR** (head owner == base owner):
+               - Checkout the PR branch: `gh pr checkout {{ .issue.number }}`
+               - Make the requested changes
+               - Commit with signoff: `git commit -s -m "fix: <description>"`
+               - Push the changes
+               - Reply confirming the changes were made
+
+            3. **If fork PR** (different owners):
+               - Reply explaining: "This PR is from a fork. I cannot directly push to fork PRs. Please make the changes locally, or a maintainer with write access to your fork can assist."
+            {{ else }}
+            This is an issue, not a PR. For code change requests on issues:
+            - Reply explaining that code changes should be made via a Pull Request
+            - Offer to help create a PR if the user describes what changes they want
+            {{ end }}
+
+            ### Response Format
+
+            Always structure your response as:
+
+            ```
+            > [Quote the user's original comment]
+
+            @{{ .comment.user.login }} [Your response here]
+            ```
+
+    # Rule 3: @kubetask-bot mention from non-privileged users (FIRST_TIME_CONTRIBUTOR, FIRST_TIMER, NONE)
+    - name: comment-unprivileged
+      filter: |
+        headers["x-github-event"] == "issue_comment" &&
+        body.action == "created" &&
+        body.comment.body.contains("@kubetask-bot") &&
+        body.comment.author_association in ["FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "NONE"]
+      resourceTemplate:
+        task:
+          agentRef: default
+          description: |
+            # @kubetask-bot Mention Handler (Non-Privileged User)
+
+            ## Event Details
+
+            - Repository: {{ .repository.full_name }}
+            - Clone URL: {{ .repository.clone_url }}
+            - Issue/PR #{{ .issue.number }}: {{ .issue.title }}
+            - Issue/PR URL: {{ .issue.html_url }}
+            - Is PR: {{ if .issue.pull_request }}Yes{{ else }}No{{ end }}
+
+            ## Comment Details
+
+            - Commenter: @{{ .comment.user.login }}
+            - Author Association: {{ .comment.author_association }}
+            - Comment URL: {{ .comment.html_url }}
+
+            ### Comment Body
+
+            {{ .comment.body }}
+
+            ## Instructions
+
+            You are @kubetask-bot responding to a mention from a **non-privileged user** ({{ .comment.author_association }}).
+
+            ### Step 1: Analyze Intent
+
+            Read the comment and determine what the user is asking:
+            - **Question**: User is asking about the code or seeking help
+            - **Code Change Request**: User is asking you to modify code
+
+            ### Step 2: For Questions
+
+            If the user is asking a question:
+            1. Clone the repository
+            2. {{ if .issue.pull_request }}Checkout the PR branch: `gh pr checkout {{ .issue.number }}`{{ else }}Checkout the default branch{{ end }}
+            3. Read and analyze the relevant code
+            4. Reply with your answer using: `gh {{ if .issue.pull_request }}pr{{ else }}issue{{ end }} comment {{ .issue.number }} --body "..."`
+
+            ### Step 3: For Code Change Requests
+
+            If the user is requesting code changes, politely decline:
+
+            Reply with something like:
+            ```
+            Thank you for your suggestion! Code change requests via @kubetask-bot are currently only available to repository maintainers, members, and contributors.
+
+            If you'd like to see this change implemented:
+            1. You can submit a Pull Request with the changes yourself
+            2. Open an issue describing the desired changes for a maintainer to review
+            3. Once you become a contributor (by having a PR merged), you'll be able to request code changes
+
+            I'm happy to answer questions about the codebase or help explain how to implement the change!
+            ```
+
+            ### Response Format
+
+            Always structure your response as:
+
+            ```
+            > [Quote the user's original comment]
+
+            @{{ .comment.user.login }} [Your response here]
+            ```

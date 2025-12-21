@@ -6,4 +6,4 @@ namespace: kubetask-dogfooding
 
 resources:
   - workflow-go-update.yaml
-  - webhooktrigger-github-pr-review.yaml
+  - webhooktrigger-github.yaml
