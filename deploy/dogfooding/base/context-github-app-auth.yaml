@@ -1,0 +1,105 @@
+# Copyright Contributors to the KubeTask project
+# Context for GitHub App authentication - provides instructions for agents to obtain GH_TOKEN
+apiVersion: kubetask.io/v1alpha1
+kind: Context
+metadata:
+  name: github-app-auth
+  labels:
+    app.kubernetes.io/name: kubetask
+spec:
+  type: Text
+  text: |
+    # GitHub App Authentication
+
+    ## IMPORTANT: You MUST Generate Token First
+
+    **DO NOT run `gh` commands directly without setting GH_TOKEN first!**
+
+    Running `gh` CLI commands without authentication will fail with errors like:
+    - `gh: authentication required`
+    - `HTTP 401: Requires authentication`
+
+    You MUST generate an Installation Access Token (IAT) before any GitHub interaction.
+
+    ## Overview
+
+    When you need to interact with GitHub (e.g., comment on PRs, create issues, push code),
+    you must first generate an Installation Access Token (IAT) using the GitHub App credentials.
+
+    ## Generating GH_TOKEN
+
+    The GitHub App credentials are mounted at `/etc/github-app/`. To generate a token:
+
+    ```bash
+    export GH_TOKEN=$(/etc/github-app/github-app-iat.sh \
+      "$(cat /etc/github-app/client_id)" \
+      /etc/github-app/private_key \
+      "$(cat /etc/github-app/installation_id)")
+    ```
+
+    ## CRITICAL: Same Shell Session Required
+
+    **Each tool call runs in a SEPARATE shell session.** Environment variables set in one call
+    are NOT available in the next call. You MUST combine token generation and usage in a SINGLE command.
+
+    **WRONG** (token lost between calls):
+    ```bash
+    # Call 1: Token is set but lost after this call ends
+    export GH_TOKEN=$(/etc/github-app/github-app-iat.sh ...)
+
+    # Call 2: GH_TOKEN is empty here! Will prompt for password!
+    git push https://${GH_TOKEN}@github.com/org/repo.git branch
+    ```
+
+    **CORRECT** (single command with &&):
+    ```bash
+    export GH_TOKEN=$(/etc/github-app/github-app-iat.sh \
+      "$(cat /etc/github-app/client_id)" \
+      /etc/github-app/private_key \
+      "$(cat /etc/github-app/installation_id)") && \
+    git push https://${GH_TOKEN}@github.com/<org>/<repo>.git <branch>
+    ```
+
+    ## Important Notes
+
+    1. **Token Validity**: The token is valid for 1 hour. For long-running tasks, regenerate if needed.
+    2. **Security**: Never echo or log the token value. The script outputs only the token for secure assignment.
+    3. **Dependencies**: Requires `openssl`, `curl`, and `jq` (pre-installed in agent images).
+
+    ## Usage Examples
+
+    ### Using with gh CLI (SINGLE COMMAND)
+
+    ```bash
+    # Token generation AND gh command in ONE call using &&
+    export GH_TOKEN=$(/etc/github-app/github-app-iat.sh \
+      "$(cat /etc/github-app/client_id)" \
+      /etc/github-app/private_key \
+      "$(cat /etc/github-app/installation_id)") && \
+    gh pr create --title "My PR" --body "Description"
+    ```
+
+    ### Using with git push (SINGLE COMMAND)
+
+    ```bash
+    # Token generation AND git push in ONE call
+    export GH_TOKEN=$(/etc/github-app/github-app-iat.sh \
+      "$(cat /etc/github-app/client_id)" \
+      /etc/github-app/private_key \
+      "$(cat /etc/github-app/installation_id)") && \
+    git push https://${GH_TOKEN}@github.com/<org>/<repo>.git <branch>
+    ```
+
+    ### Using with GitHub API directly
+
+    ```bash
+    curl -H "Authorization: Bearer ${GH_TOKEN}" \
+      -H "Accept: application/vnd.github+json" \
+      https://api.github.com/repos/<org>/<repo>/issues
+    ```
+
+    ## Troubleshooting
+
+    - If token generation fails, check that `/etc/github-app/` contains: `client_id`, `private_key`, `installation_id`
+    - Errors are written to stderr, not stdout
+    - Verify the GitHub App has required permissions for your operation

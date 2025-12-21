@@ -26,11 +26,33 @@ spec:
       - All commits must be signed: `git commit -s -m "your commit message"`
       - Check the default branch (main or master) before creating PRs
 
+      ## Git Branch Naming (IMPORTANT)
+
+      When creating a new branch, **always append a random suffix** to avoid conflicts with existing branches:
+
+      ```bash
+      # Generate a random suffix (6 chars)
+      SUFFIX=$(head -c 6 /dev/urandom | base64 | tr -dc 'a-z0-9' | head -c 6)
+      BRANCH_NAME="feature-name-${SUFFIX}"
+      git checkout -b "${BRANCH_NAME}"
+      ```
+
+      **Example**: Instead of `add-owners-file`, use `add-owners-file-a3b2c1`
+
+      ## Git Remote Verification (CRITICAL)
+
+      Before any git push or PR creation, you MUST verify the correct repository:
+
+      - **Always run `git remote -v`** to check the actual remote URL
+      - **Extract org/repo from remote URL**, do NOT infer from task description or directory name
+      - **Example**: If remote shows `https://github.com/kubetask-io/kubetask.git`, use `kubetask-io/kubetask` (not `kubetask/kubetask`)
+
       ## Non-Interactive Commands (CRITICAL)
 
       Since tasks run autonomously in the background, you MUST use non-interactive command forms:
 
       - **Git push**: Always use `git push https://${GH_TOKEN}@github.com/<org>/<repo>.git <branch>` instead of `git push origin <branch>`
+        - Get `<org>/<repo>` from `git remote -v` output, NOT from assumptions
       - **Git clone**: Use `git clone https://${GH_TOKEN}@github.com/<org>/<repo>.git` for private repos
       - **Git remote**: Set remote URL with token: `git remote set-url origin https://${GH_TOKEN}@github.com/<org>/<repo>.git`
       - **Never** use commands that prompt for username/password
@@ -55,7 +77,3 @@ spec:
       # Use target-repo/.tmp for temporary files
       # Clean up when done: rm -rf target-repo/.tmp
       ```
-
-      ## Git Commit Standards
-
-      - All commits must be signed: `git commit -s -m "your commit message"`
