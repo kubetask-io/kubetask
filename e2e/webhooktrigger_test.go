@@ -85,7 +85,7 @@ var _ = Describe("WebhookTrigger E2E Tests", Label(LabelWebhookTrigger), func() 
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
-					TaskTemplate: kubetaskv1alpha1.WebhookTaskTemplate{
+					TaskTemplate: &kubetaskv1alpha1.WebhookTaskTemplate{
 						AgentRef:    agentName,
 						Description: "Test webhook task",
 					},
@@ -133,7 +133,7 @@ var _ = Describe("WebhookTrigger E2E Tests", Label(LabelWebhookTrigger), func() 
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
-					TaskTemplate: kubetaskv1alpha1.WebhookTaskTemplate{
+					TaskTemplate: &kubetaskv1alpha1.WebhookTaskTemplate{
 						AgentRef:    agentName,
 						Description: "Webhook triggered task: {{ .event }}",
 					},
@@ -201,7 +201,7 @@ var _ = Describe("WebhookTrigger E2E Tests", Label(LabelWebhookTrigger), func() 
 				},
 				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
 					Filter: `body.action == "opened"`,
-					TaskTemplate: kubetaskv1alpha1.WebhookTaskTemplate{
+					TaskTemplate: &kubetaskv1alpha1.WebhookTaskTemplate{
 						AgentRef:    agentName,
 						Description: "Filtered webhook task",
 					},
@@ -300,7 +300,7 @@ var _ = Describe("WebhookTrigger E2E Tests", Label(LabelWebhookTrigger), func() 
 							Algorithm:       "sha256",
 						},
 					},
-					TaskTemplate: kubetaskv1alpha1.WebhookTaskTemplate{
+					TaskTemplate: &kubetaskv1alpha1.WebhookTaskTemplate{
 						AgentRef:    agentName,
 						Description: "HMAC authenticated task",
 					},
@@ -378,7 +378,7 @@ var _ = Describe("WebhookTrigger E2E Tests", Label(LabelWebhookTrigger), func() 
 				},
 				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
 					ConcurrencyPolicy: kubetaskv1alpha1.ConcurrencyPolicyForbid,
-					TaskTemplate: kubetaskv1alpha1.WebhookTaskTemplate{
+					TaskTemplate: &kubetaskv1alpha1.WebhookTaskTemplate{
 						AgentRef:    agentName,
 						Description: "Forbid policy task - sleeps for 30s",
 					},
@@ -446,7 +446,7 @@ var _ = Describe("WebhookTrigger E2E Tests", Label(LabelWebhookTrigger), func() 
 				},
 				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
 					ConcurrencyPolicy: kubetaskv1alpha1.ConcurrencyPolicyReplace,
-					TaskTemplate: kubetaskv1alpha1.WebhookTaskTemplate{
+					TaskTemplate: &kubetaskv1alpha1.WebhookTaskTemplate{
 						AgentRef:    agentName,
 						Description: "Replace policy task #{{ .seq }}",
 					},
@@ -522,7 +522,7 @@ var _ = Describe("WebhookTrigger E2E Tests", Label(LabelWebhookTrigger), func() 
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
-					TaskTemplate: kubetaskv1alpha1.WebhookTaskTemplate{
+					TaskTemplate: &kubetaskv1alpha1.WebhookTaskTemplate{
 						AgentRef: agentName,
 						Description: `Review PR #{{ .pull_request.number }}
 Repository: {{ .repository.full_name }}
@@ -589,6 +589,240 @@ Author: {{ .pull_request.user.login }}`,
 		})
 	})
 
+	Context("WebhookTrigger with rules-based triggers", func() {
+		It("should match rules and create Task based on matchPolicy First", func() {
+
+			triggerName := uniqueName("wht-rules")
+
+			By("Creating a WebhookTrigger with multiple rules")
+			trigger := &kubetaskv1alpha1.WebhookTrigger{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      triggerName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
+					MatchPolicy: kubetaskv1alpha1.MatchPolicyFirst,
+					Rules: []kubetaskv1alpha1.WebhookRule{
+						{
+							Name:   "pr-review",
+							Filter: `body.event_type == "pull_request"`,
+							ResourceTemplate: kubetaskv1alpha1.WebhookResourceTemplate{
+								Task: &kubetaskv1alpha1.WebhookTaskSpec{
+									AgentRef:    agentName,
+									Description: "PR Review Task: {{ .pr_number }}",
+								},
+							},
+						},
+						{
+							Name:   "issue-triage",
+							Filter: `body.event_type == "issue"`,
+							ResourceTemplate: kubetaskv1alpha1.WebhookResourceTemplate{
+								Task: &kubetaskv1alpha1.WebhookTaskSpec{
+									AgentRef:    agentName,
+									Description: "Issue Triage Task: {{ .issue_number }}",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, trigger)).Should(Succeed())
+
+			By("Waiting for WebhookTrigger to be ready")
+			triggerKey := types.NamespacedName{Name: triggerName, Namespace: testNS}
+			Eventually(func() bool {
+				t := &kubetaskv1alpha1.WebhookTrigger{}
+				if err := k8sClient.Get(ctx, triggerKey, t); err != nil {
+					return false
+				}
+				return t.Status.WebhookURL != ""
+			}, timeout, interval).Should(BeTrue())
+
+			webhookURL := getWebhookURL(testNS, triggerName)
+
+			By("Sending PR event webhook")
+			payload := map[string]interface{}{
+				"event_type": "pull_request",
+				"pr_number":  123,
+			}
+			payloadBytes, _ := json.Marshal(payload)
+			resp, err := postWebhook(webhookURL, payloadBytes)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = resp.Body.Close() }()
+			Expect(resp.StatusCode).Should(Equal(http.StatusCreated))
+
+			By("Verifying Task was created with pr-review rule label")
+			Eventually(func() bool {
+				tasks := &kubetaskv1alpha1.TaskList{}
+				if err := k8sClient.List(ctx, tasks, client.InNamespace(testNS),
+					client.MatchingLabels{
+						"kubetask.io/webhook-trigger": triggerName,
+						"kubetask.io/webhook-rule":    "pr-review",
+					}); err != nil {
+					return false
+				}
+				return len(tasks.Items) > 0
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying RuleStatuses is updated")
+			Eventually(func() int64 {
+				t := &kubetaskv1alpha1.WebhookTrigger{}
+				if err := k8sClient.Get(ctx, triggerKey, t); err != nil {
+					return 0
+				}
+				for _, rs := range t.Status.RuleStatuses {
+					if rs.Name == "pr-review" {
+						return rs.TotalTriggered
+					}
+				}
+				return 0
+			}, timeout, interval).Should(BeNumerically(">=", 1))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, trigger)).Should(Succeed())
+		})
+
+		It("should match all rules when matchPolicy is All", func() {
+
+			triggerName := uniqueName("wht-rules-all")
+
+			By("Creating a WebhookTrigger with matchPolicy All")
+			trigger := &kubetaskv1alpha1.WebhookTrigger{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      triggerName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
+					MatchPolicy: kubetaskv1alpha1.MatchPolicyAll,
+					Rules: []kubetaskv1alpha1.WebhookRule{
+						{
+							Name:   "rule-a",
+							Filter: `body.priority == "high"`,
+							ResourceTemplate: kubetaskv1alpha1.WebhookResourceTemplate{
+								Task: &kubetaskv1alpha1.WebhookTaskSpec{
+									AgentRef:    agentName,
+									Description: "High priority handler",
+								},
+							},
+						},
+						{
+							Name:   "rule-b",
+							Filter: `body.category == "bug"`,
+							ResourceTemplate: kubetaskv1alpha1.WebhookResourceTemplate{
+								Task: &kubetaskv1alpha1.WebhookTaskSpec{
+									AgentRef:    agentName,
+									Description: "Bug handler",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, trigger)).Should(Succeed())
+
+			By("Waiting for WebhookTrigger to be ready")
+			triggerKey := types.NamespacedName{Name: triggerName, Namespace: testNS}
+			Eventually(func() bool {
+				t := &kubetaskv1alpha1.WebhookTrigger{}
+				if err := k8sClient.Get(ctx, triggerKey, t); err != nil {
+					return false
+				}
+				return t.Status.WebhookURL != ""
+			}, timeout, interval).Should(BeTrue())
+
+			webhookURL := getWebhookURL(testNS, triggerName)
+
+			By("Sending webhook that matches both rules")
+			payload := map[string]interface{}{
+				"priority": "high",
+				"category": "bug",
+			}
+			payloadBytes, _ := json.Marshal(payload)
+			resp, err := postWebhook(webhookURL, payloadBytes)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = resp.Body.Close() }()
+			Expect(resp.StatusCode).Should(Equal(http.StatusCreated))
+
+			By("Verifying two Tasks were created (one for each rule)")
+			Eventually(func() int {
+				tasks := &kubetaskv1alpha1.TaskList{}
+				if err := k8sClient.List(ctx, tasks, client.InNamespace(testNS),
+					client.MatchingLabels{"kubetask.io/webhook-trigger": triggerName}); err != nil {
+					return 0
+				}
+				return len(tasks.Items)
+			}, timeout, interval).Should(Equal(2))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, trigger)).Should(Succeed())
+		})
+	})
+
+	Context("WebhookTrigger with resourceTemplate", func() {
+		It("should create Task using resourceTemplate.task", func() {
+
+			triggerName := uniqueName("wht-restpl")
+
+			By("Creating a WebhookTrigger with resourceTemplate")
+			trigger := &kubetaskv1alpha1.WebhookTrigger{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      triggerName,
+					Namespace: testNS,
+				},
+				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
+					ResourceTemplate: &kubetaskv1alpha1.WebhookResourceTemplate{
+						Task: &kubetaskv1alpha1.WebhookTaskSpec{
+							AgentRef:    agentName,
+							Description: "ResourceTemplate Task: {{ .message }}",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, trigger)).Should(Succeed())
+
+			By("Waiting for WebhookTrigger to be ready")
+			triggerKey := types.NamespacedName{Name: triggerName, Namespace: testNS}
+			Eventually(func() bool {
+				t := &kubetaskv1alpha1.WebhookTrigger{}
+				if err := k8sClient.Get(ctx, triggerKey, t); err != nil {
+					return false
+				}
+				return t.Status.WebhookURL != ""
+			}, timeout, interval).Should(BeTrue())
+
+			webhookURL := getWebhookURL(testNS, triggerName)
+
+			By("Sending webhook")
+			payload := map[string]interface{}{
+				"message": "hello from resourceTemplate",
+			}
+			payloadBytes, _ := json.Marshal(payload)
+			resp, err := postWebhook(webhookURL, payloadBytes)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = resp.Body.Close() }()
+			Expect(resp.StatusCode).Should(Equal(http.StatusCreated))
+
+			By("Verifying Task was created")
+			Eventually(func() bool {
+				tasks := &kubetaskv1alpha1.TaskList{}
+				if err := k8sClient.List(ctx, tasks, client.InNamespace(testNS),
+					client.MatchingLabels{"kubetask.io/webhook-trigger": triggerName}); err != nil {
+					return false
+				}
+				return len(tasks.Items) > 0
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying Task description is rendered correctly")
+			tasks := &kubetaskv1alpha1.TaskList{}
+			Expect(k8sClient.List(ctx, tasks, client.InNamespace(testNS),
+				client.MatchingLabels{"kubetask.io/webhook-trigger": triggerName})).Should(Succeed())
+			Expect(*tasks.Items[0].Spec.Description).Should(ContainSubstring("hello from resourceTemplate"))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, trigger)).Should(Succeed())
+		})
+	})
+
 	Context("WebhookTrigger garbage collection", func() {
 		It("should clean up Tasks when WebhookTrigger is deleted", func() {
 			triggerName := uniqueName("wht-gc")
@@ -600,7 +834,7 @@ Author: {{ .pull_request.user.login }}`,
 					Namespace: testNS,
 				},
 				Spec: kubetaskv1alpha1.WebhookTriggerSpec{
-					TaskTemplate: kubetaskv1alpha1.WebhookTaskTemplate{
+					TaskTemplate: &kubetaskv1alpha1.WebhookTaskTemplate{
 						AgentRef:    agentName,
 						Description: "GC test task",
 					},

@@ -60,6 +60,7 @@ spec:
                 description: |-
                   Auth defines authentication for webhook validation.
                   If not specified, webhooks are accepted without authentication.
+                  Authentication is applied at the trigger level (before rule evaluation).
                 properties:
                   bearerToken:
                     description: BearerToken configures Bearer token validation from
@@ -159,15 +160,22 @@ spec:
                   - Replace
                 default: Allow
                 description: |-
-                  ConcurrencyPolicy specifies how to treat concurrent tasks triggered by this webhook.
-                  - Allow: Create a new task regardless of existing running tasks (default)
-                  - Forbid: Skip this webhook if there's already a running task
-                  - Replace: Stop the running task and create a new one
+                  ConcurrencyPolicy specifies how to treat concurrent resources triggered by this webhook.
+                  This is the default policy applied at the trigger level.
+                  Individual rules can override this with their own concurrencyPolicy.
+
+                  - Allow: Create a new resource regardless of existing running resources (default)
+                  - Forbid: Skip this webhook if there's already a running resource
+                  - Replace: Stop the running resource and create a new one
                 type: string
               filter:
                 description: |-
                   Filter is a CEL expression that must evaluate to true for the webhook to trigger.
                   If not specified, all webhooks are accepted.
+
+                  DEPRECATED: Use Rules[].filter instead for multiple filters.
+                  This field is kept for backward compatibility with simple single-rule triggers.
+                  Mutually exclusive with Rules.
 
                   The webhook payload is available as the variable "body".
                   HTTP headers are available as the variable "headers" (map[string]string, lowercase keys).
@@ -193,10 +201,1024 @@ spec:
                       body.pull_request.additions + body.pull_request.deletions < 500 &&
                       body.pull_request.labels.exists(l, l.name == "needs-review")
                 type: string
+              matchPolicy:
+                allOf:
+                - enum:
+                  - First
+                  - All
+                - enum:
+                  - First
+                  - All
+                default: First
+                description: |-
+                  MatchPolicy specifies how matching rules are selected.
+                  - First: Only trigger the first matching rule (default)
+                  - All: Trigger all matching rules, creating multiple resources
+
+                  This field is only relevant when Rules is specified.
+                type: string
+              resourceTemplate:
+                description: |-
+                  ResourceTemplate defines what resource to create when a webhook matches.
+                  Supports Task, WorkflowRun (inline), or WorkflowRef.
+                  This replaces TaskTemplate for new code and allows triggering Workflows.
+                  Mutually exclusive with Rules and TaskTemplate.
+                properties:
+                  task:
+                    description: |-
+                      Task defines a Task to create.
+                      Use this for simple single-stage task execution.
+                      Mutually exclusive with WorkflowRun and WorkflowRef.
+                    properties:
+                      agentRef:
+                        description: |-
+                          AgentRef references an Agent for task execution.
+                          If not specified, uses the "default" Agent in the same namespace.
+                        type: string
+                      contexts:
+                        description: |-
+                          Contexts provides additional context for the task.
+                          Each context can be a reference to a Context CRD (via Ref) or inline definition.
+                        items:
+                          description: |-
+                            ContextSource represents a context that can be either a reference to a Context CRD
+                            or an inline definition. Exactly one of Ref or Inline must be specified.
+
+                            This follows the same pattern as WorkflowRunSpec (workflowRef vs inline),
+                            allowing users to choose between reusable Context CRDs or one-off inline definitions.
+                          properties:
+                            inline:
+                              description: |-
+                                Inline defines context content directly in the Task/Agent.
+                                Use this for one-off contexts that don't need to be reused.
+                              properties:
+                                configMap:
+                                  description: ConfigMap context (required when Type
+                                    == "ConfigMap")
+                                  properties:
+                                    key:
+                                      description: |-
+                                        Key specifies a single key to mount as a file.
+                                        If not specified, all keys are mounted as files in the directory.
+                                      type: string
+                                    name:
+                                      description: Name of the ConfigMap
+                                      type: string
+                                    optional:
+                                      description: Optional specifies whether the
+                                        ConfigMap must exist.
+                                      type: boolean
+                                  required:
+                                  - name
+                                  type: object
+                                git:
+                                  description: Git context (required when Type ==
+                                    "Git")
+                                  properties:
+                                    depth:
+                                      default: 1
+                                      description: |-
+                                        Depth specifies the clone depth for shallow cloning.
+                                        1 means shallow clone (fastest), 0 means full clone.
+                                        Defaults to 1 for efficiency.
+                                      type: integer
+                                    path:
+                                      description: |-
+                                        Path is the path within the repository to mount.
+                                        Can be a file or directory. If empty, the entire repository is mounted.
+
+                                        Note on .git directory:
+                                          - If Path is empty (entire repo): The mounted directory WILL contain .git/
+                                          - If Path is specified (subdirectory): The mounted directory will NOT contain .git/
+
+                                        Example: ".claude/", "docs/guide.md"
+                                      type: string
+                                    ref:
+                                      default: HEAD
+                                      description: |-
+                                        Ref is the Git reference (branch, tag, or commit SHA).
+                                        Defaults to "HEAD" if not specified.
+                                      type: string
+                                    repository:
+                                      description: |-
+                                        Repository is the Git repository URL.
+                                        Example: "https://github.com/org/contexts"
+                                      type: string
+                                    secretRef:
+                                      description: |-
+                                        SecretRef references a Secret containing Git credentials.
+                                        The Secret should contain one of:
+                                          - "username" + "password": For HTTPS token-based auth (password can be a PAT)
+                                          - "ssh-privatekey": For SSH key-based auth
+                                        If not specified, anonymous clone is attempted.
+                                      properties:
+                                        name:
+                                          description: Name of the Secret containing
+                                            Git credentials.
+                                          type: string
+                                      required:
+                                      - name
+                                      type: object
+                                  required:
+                                  - repository
+                                  type: object
+                                mountPath:
+                                  description: |-
+                                    MountPath specifies where this context should be mounted in the agent pod.
+
+                                    Path resolution follows Tekton conventions:
+                                    - Absolute paths (starting with "/") are used as-is
+                                    - Relative paths (NOT starting with "/") are prefixed with the agent's workspaceDir
+
+                                    See ContextRef.MountPath for detailed examples.
+
+                                    Note: For Runtime context type, MountPath is ignored - content is always
+                                    appended to task.md.
+                                  type: string
+                                runtime:
+                                  description: |-
+                                    Runtime context (optional when Type == "Runtime")
+                                    Enables KubeTask platform awareness. The controller injects a system prompt
+                                    that explains the runtime environment to the agent.
+                                  type: object
+                                text:
+                                  description: |-
+                                    Text is the text content (required when Type == "Text").
+                                    Contains text content defined directly in YAML.
+                                  type: string
+                                type:
+                                  description: 'Type of context source: Text, ConfigMap,
+                                    Git, or Runtime'
+                                  enum:
+                                  - Text
+                                  - ConfigMap
+                                  - Git
+                                  - Runtime
+                                  type: string
+                              required:
+                              - type
+                              type: object
+                            ref:
+                              description: |-
+                                Ref references an existing Context CRD by name.
+                                Use this for reusable contexts that are managed independently.
+                              properties:
+                                mountPath:
+                                  description: |-
+                                    MountPath specifies where this context should be mounted in the agent pod.
+
+                                    Path resolution follows Tekton conventions:
+                                    - Absolute paths (starting with "/") are used as-is
+                                    - Relative paths (NOT starting with "/") are prefixed with the agent's workspaceDir
+
+                                    Examples:
+                                    - "/etc/config/app.conf" -> mounts at /etc/config/app.conf (absolute)
+                                    - "guides/readme.md" -> mounts at ${workspaceDir}/guides/readme.md (relative)
+
+                                    If NOT specified (empty), the context content is appended to ${WORKSPACE_DIR}/task.md
+                                    in a structured XML format.
+                                  type: string
+                                name:
+                                  description: Name of the Context resource
+                                  type: string
+                                namespace:
+                                  description: Namespace of the Context (optional,
+                                    defaults to the referencing resource's namespace)
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                          type: object
+                        type: array
+                      description:
+                        description: |-
+                          Description is the task instruction/prompt.
+                          Supports Go template syntax with webhook payload data.
+
+                          Available template data:
+                            - The entire webhook JSON payload is available as the root object
+                            - HTTP headers are available via .headers (map with lowercase keys)
+                            - Example: {{ .pull_request.number }}, {{ .repository.full_name }}
+                        type: string
+                    required:
+                    - description
+                    type: object
+                  workflowRef:
+                    description: |-
+                      WorkflowRef references an existing Workflow by name.
+                      Creates a WorkflowRun that references this Workflow.
+                      Use this to reuse pre-defined Workflow templates.
+                      Mutually exclusive with Task and WorkflowRun.
+                    type: string
+                  workflowRun:
+                    description: |-
+                      WorkflowRun defines a WorkflowRun to create with inline workflow definition.
+                      Use this for multi-stage workflows defined directly in the trigger.
+                      Mutually exclusive with Task and WorkflowRef.
+                    properties:
+                      inline:
+                        description: |-
+                          Inline defines workflow stages directly in the trigger.
+                          Use this for ad-hoc workflows that don't need to be reused.
+                          Stage task descriptions support Go template syntax with webhook payload data.
+                          Mutually exclusive with WorkflowRef.
+                        properties:
+                          stages:
+                            description: |-
+                              Stages defines the sequential stages of the workflow.
+                              Each stage contains one or more tasks that run in parallel.
+                              Stages are executed sequentially - stage N+1 starts only after
+                              all tasks in stage N complete successfully.
+                            items:
+                              description: WorkflowStage defines a stage in the workflow
+                                containing parallel tasks.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name is an optional name for this stage.
+                                    If not specified, auto-generated as "stage-0", "stage-1", etc.
+                                    based on the stage's index in the stages array.
+                                  type: string
+                                tasks:
+                                  description: |-
+                                    Tasks defines the tasks to run in parallel within this stage.
+                                    All tasks in a stage start simultaneously and must all complete
+                                    successfully before the next stage begins.
+                                  items:
+                                    description: |-
+                                      WorkflowTask defines a task within a workflow stage.
+                                      Each task will be created as a Task CR when its stage starts.
+                                    properties:
+                                      name:
+                                        description: |-
+                                          Name is a required unique name for this task within the workflow.
+                                          The actual Task CR name will be "{workflow-name}-{task-name}".
+                                          Must be a valid Kubernetes name (lowercase, alphanumeric, hyphens).
+                                        maxLength: 53
+                                        minLength: 1
+                                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                        type: string
+                                      spec:
+                                        description: |-
+                                          Spec is the TaskSpec that will be used to create the Task.
+                                          Each task should specify its own agentRef as needed.
+                                        properties:
+                                          agentRef:
+                                            description: |-
+                                              AgentRef references an Agent for this task.
+                                              If not specified, uses the "default" Agent in the same namespace.
+                                            type: string
+                                          contexts:
+                                            description: |-
+                                              Contexts provides additional context for the task.
+                                              Each context can be a reference to a Context CRD (via Ref) or an inline definition (via Inline).
+                                              Contexts are processed in array order, with later contexts taking precedence.
+
+                                              Context priority (lowest to highest):
+                                                1. Agent.contexts (Agent-level defaults)
+                                                2. Task.contexts (Task-specific contexts)
+                                                3. Task.description (highest, becomes ${WORKSPACE_DIR}/task.md)
+
+                                              Example:
+                                                contexts:
+                                                  - ref:
+                                                      name: coding-standards
+                                                  - inline:
+                                                      type: Git
+                                                      mountPath: ${WORKSPACE_DIR}
+                                                      git:
+                                                        repository: https://github.com/org/repo
+                                                        ref: main
+                                            items:
+                                              description: |-
+                                                ContextSource represents a context that can be either a reference to a Context CRD
+                                                or an inline definition. Exactly one of Ref or Inline must be specified.
+
+                                                This follows the same pattern as WorkflowRunSpec (workflowRef vs inline),
+                                                allowing users to choose between reusable Context CRDs or one-off inline definitions.
+                                              properties:
+                                                inline:
+                                                  description: |-
+                                                    Inline defines context content directly in the Task/Agent.
+                                                    Use this for one-off contexts that don't need to be reused.
+                                                  properties:
+                                                    configMap:
+                                                      description: ConfigMap context
+                                                        (required when Type == "ConfigMap")
+                                                      properties:
+                                                        key:
+                                                          description: |-
+                                                            Key specifies a single key to mount as a file.
+                                                            If not specified, all keys are mounted as files in the directory.
+                                                          type: string
+                                                        name:
+                                                          description: Name of the
+                                                            ConfigMap
+                                                          type: string
+                                                        optional:
+                                                          description: Optional specifies
+                                                            whether the ConfigMap
+                                                            must exist.
+                                                          type: boolean
+                                                      required:
+                                                      - name
+                                                      type: object
+                                                    git:
+                                                      description: Git context (required
+                                                        when Type == "Git")
+                                                      properties:
+                                                        depth:
+                                                          default: 1
+                                                          description: |-
+                                                            Depth specifies the clone depth for shallow cloning.
+                                                            1 means shallow clone (fastest), 0 means full clone.
+                                                            Defaults to 1 for efficiency.
+                                                          type: integer
+                                                        path:
+                                                          description: |-
+                                                            Path is the path within the repository to mount.
+                                                            Can be a file or directory. If empty, the entire repository is mounted.
+
+                                                            Note on .git directory:
+                                                              - If Path is empty (entire repo): The mounted directory WILL contain .git/
+                                                              - If Path is specified (subdirectory): The mounted directory will NOT contain .git/
+
+                                                            Example: ".claude/", "docs/guide.md"
+                                                          type: string
+                                                        ref:
+                                                          default: HEAD
+                                                          description: |-
+                                                            Ref is the Git reference (branch, tag, or commit SHA).
+                                                            Defaults to "HEAD" if not specified.
+                                                          type: string
+                                                        repository:
+                                                          description: |-
+                                                            Repository is the Git repository URL.
+                                                            Example: "https://github.com/org/contexts"
+                                                          type: string
+                                                        secretRef:
+                                                          description: |-
+                                                            SecretRef references a Secret containing Git credentials.
+                                                            The Secret should contain one of:
+                                                              - "username" + "password": For HTTPS token-based auth (password can be a PAT)
+                                                              - "ssh-privatekey": For SSH key-based auth
+                                                            If not specified, anonymous clone is attempted.
+                                                          properties:
+                                                            name:
+                                                              description: Name of
+                                                                the Secret containing
+                                                                Git credentials.
+                                                              type: string
+                                                          required:
+                                                          - name
+                                                          type: object
+                                                      required:
+                                                      - repository
+                                                      type: object
+                                                    mountPath:
+                                                      description: |-
+                                                        MountPath specifies where this context should be mounted in the agent pod.
+
+                                                        Path resolution follows Tekton conventions:
+                                                        - Absolute paths (starting with "/") are used as-is
+                                                        - Relative paths (NOT starting with "/") are prefixed with the agent's workspaceDir
+
+                                                        See ContextRef.MountPath for detailed examples.
+
+                                                        Note: For Runtime context type, MountPath is ignored - content is always
+                                                        appended to task.md.
+                                                      type: string
+                                                    runtime:
+                                                      description: |-
+                                                        Runtime context (optional when Type == "Runtime")
+                                                        Enables KubeTask platform awareness. The controller injects a system prompt
+                                                        that explains the runtime environment to the agent.
+                                                      type: object
+                                                    text:
+                                                      description: |-
+                                                        Text is the text content (required when Type == "Text").
+                                                        Contains text content defined directly in YAML.
+                                                      type: string
+                                                    type:
+                                                      description: 'Type of context
+                                                        source: Text, ConfigMap, Git,
+                                                        or Runtime'
+                                                      enum:
+                                                      - Text
+                                                      - ConfigMap
+                                                      - Git
+                                                      - Runtime
+                                                      type: string
+                                                  required:
+                                                  - type
+                                                  type: object
+                                                ref:
+                                                  description: |-
+                                                    Ref references an existing Context CRD by name.
+                                                    Use this for reusable contexts that are managed independently.
+                                                  properties:
+                                                    mountPath:
+                                                      description: |-
+                                                        MountPath specifies where this context should be mounted in the agent pod.
+
+                                                        Path resolution follows Tekton conventions:
+                                                        - Absolute paths (starting with "/") are used as-is
+                                                        - Relative paths (NOT starting with "/") are prefixed with the agent's workspaceDir
+
+                                                        Examples:
+                                                        - "/etc/config/app.conf" -> mounts at /etc/config/app.conf (absolute)
+                                                        - "guides/readme.md" -> mounts at ${workspaceDir}/guides/readme.md (relative)
+
+                                                        If NOT specified (empty), the context content is appended to ${WORKSPACE_DIR}/task.md
+                                                        in a structured XML format.
+                                                      type: string
+                                                    name:
+                                                      description: Name of the Context
+                                                        resource
+                                                      type: string
+                                                    namespace:
+                                                      description: Namespace of the
+                                                        Context (optional, defaults
+                                                        to the referencing resource's
+                                                        namespace)
+                                                      type: string
+                                                  required:
+                                                  - name
+                                                  type: object
+                                              type: object
+                                            type: array
+                                          description:
+                                            description: |-
+                                              Description is the task instruction/prompt.
+                                              The controller creates ${WORKSPACE_DIR}/task.md with this content
+                                              (where WORKSPACE_DIR is configured in Agent.spec.workspaceDir, defaulting to "/workspace").
+                                              This is the primary way to tell the agent what to do.
+
+                                              Example:
+                                                description: "Update all dependencies and create a PR"
+                                            type: string
+                                        type: object
+                                    required:
+                                    - name
+                                    - spec
+                                    type: object
+                                  minItems: 1
+                                  type: array
+                              required:
+                              - tasks
+                              type: object
+                            minItems: 1
+                            type: array
+                        required:
+                        - stages
+                        type: object
+                      workflowRef:
+                        description: |-
+                          WorkflowRef references an existing Workflow by name.
+                          The Workflow must exist in the same namespace as the WebhookTrigger.
+                          Mutually exclusive with Inline.
+                        type: string
+                    type: object
+                type: object
+              rules:
+                description: |-
+                  Rules defines multiple filter-to-resourceTemplate mappings.
+                  Each rule specifies a CEL filter and the resource template to use when the filter matches.
+                  Rules are evaluated in array order.
+
+                  When matchPolicy is "First", only the first matching rule triggers.
+                  When matchPolicy is "All", all matching rules trigger (creating multiple resources).
+
+                  Rules is mutually exclusive with the legacy Filter and TaskTemplate fields.
+                  If Rules is specified, Filter and TaskTemplate must be empty.
+                items:
+                  description: |-
+                    WebhookRule defines a single rule within a WebhookTrigger.
+                    Each rule has its own filter and resourceTemplate, allowing different
+                    webhook payloads to trigger different resources from the same URL.
+                  properties:
+                    concurrencyPolicy:
+                      allOf:
+                      - enum:
+                        - Allow
+                        - Forbid
+                        - Replace
+                      - enum:
+                        - Allow
+                        - Forbid
+                        - Replace
+                      description: |-
+                        ConcurrencyPolicy overrides the trigger-level concurrencyPolicy for this rule.
+                        If not specified, the trigger-level concurrencyPolicy is used.
+
+                        This allows fine-grained control: some rules might use "Allow" to create
+                        multiple resources, while others use "Replace" to stop existing resources.
+
+                        Note: When matchPolicy is "All" and concurrencyPolicy is "Replace",
+                        each rule tracks its own active resources independently.
+                      type: string
+                    filter:
+                      description: |-
+                        Filter is a CEL expression that must evaluate to true for this rule to trigger.
+                        If not specified, this rule matches all webhooks (after authentication).
+
+                        The webhook payload is available as the variable "body".
+                        HTTP headers are available as the variable "headers" (map[string]string, lowercase keys).
+
+                        Examples:
+                          # Match GitHub PR opened events
+                          filter: 'body.action == "opened" && has(body.pull_request)'
+
+                          # Match specific event types via headers
+                          filter: 'headers["x-github-event"] == "push"'
+                      type: string
+                    name:
+                      description: |-
+                        Name is a unique identifier for this rule within the trigger.
+                        Used for status tracking, logging, debugging, and resource naming.
+                        Must be unique within the rules array.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    resourceTemplate:
+                      description: ResourceTemplate defines what resource to create
+                        when this rule's filter matches.
+                      properties:
+                        task:
+                          description: |-
+                            Task defines a Task to create.
+                            Use this for simple single-stage task execution.
+                            Mutually exclusive with WorkflowRun and WorkflowRef.
+                          properties:
+                            agentRef:
+                              description: |-
+                                AgentRef references an Agent for task execution.
+                                If not specified, uses the "default" Agent in the same namespace.
+                              type: string
+                            contexts:
+                              description: |-
+                                Contexts provides additional context for the task.
+                                Each context can be a reference to a Context CRD (via Ref) or inline definition.
+                              items:
+                                description: |-
+                                  ContextSource represents a context that can be either a reference to a Context CRD
+                                  or an inline definition. Exactly one of Ref or Inline must be specified.
+
+                                  This follows the same pattern as WorkflowRunSpec (workflowRef vs inline),
+                                  allowing users to choose between reusable Context CRDs or one-off inline definitions.
+                                properties:
+                                  inline:
+                                    description: |-
+                                      Inline defines context content directly in the Task/Agent.
+                                      Use this for one-off contexts that don't need to be reused.
+                                    properties:
+                                      configMap:
+                                        description: ConfigMap context (required when
+                                          Type == "ConfigMap")
+                                        properties:
+                                          key:
+                                            description: |-
+                                              Key specifies a single key to mount as a file.
+                                              If not specified, all keys are mounted as files in the directory.
+                                            type: string
+                                          name:
+                                            description: Name of the ConfigMap
+                                            type: string
+                                          optional:
+                                            description: Optional specifies whether
+                                              the ConfigMap must exist.
+                                            type: boolean
+                                        required:
+                                        - name
+                                        type: object
+                                      git:
+                                        description: Git context (required when Type
+                                          == "Git")
+                                        properties:
+                                          depth:
+                                            default: 1
+                                            description: |-
+                                              Depth specifies the clone depth for shallow cloning.
+                                              1 means shallow clone (fastest), 0 means full clone.
+                                              Defaults to 1 for efficiency.
+                                            type: integer
+                                          path:
+                                            description: |-
+                                              Path is the path within the repository to mount.
+                                              Can be a file or directory. If empty, the entire repository is mounted.
+
+                                              Note on .git directory:
+                                                - If Path is empty (entire repo): The mounted directory WILL contain .git/
+                                                - If Path is specified (subdirectory): The mounted directory will NOT contain .git/
+
+                                              Example: ".claude/", "docs/guide.md"
+                                            type: string
+                                          ref:
+                                            default: HEAD
+                                            description: |-
+                                              Ref is the Git reference (branch, tag, or commit SHA).
+                                              Defaults to "HEAD" if not specified.
+                                            type: string
+                                          repository:
+                                            description: |-
+                                              Repository is the Git repository URL.
+                                              Example: "https://github.com/org/contexts"
+                                            type: string
+                                          secretRef:
+                                            description: |-
+                                              SecretRef references a Secret containing Git credentials.
+                                              The Secret should contain one of:
+                                                - "username" + "password": For HTTPS token-based auth (password can be a PAT)
+                                                - "ssh-privatekey": For SSH key-based auth
+                                              If not specified, anonymous clone is attempted.
+                                            properties:
+                                              name:
+                                                description: Name of the Secret containing
+                                                  Git credentials.
+                                                type: string
+                                            required:
+                                            - name
+                                            type: object
+                                        required:
+                                        - repository
+                                        type: object
+                                      mountPath:
+                                        description: |-
+                                          MountPath specifies where this context should be mounted in the agent pod.
+
+                                          Path resolution follows Tekton conventions:
+                                          - Absolute paths (starting with "/") are used as-is
+                                          - Relative paths (NOT starting with "/") are prefixed with the agent's workspaceDir
+
+                                          See ContextRef.MountPath for detailed examples.
+
+                                          Note: For Runtime context type, MountPath is ignored - content is always
+                                          appended to task.md.
+                                        type: string
+                                      runtime:
+                                        description: |-
+                                          Runtime context (optional when Type == "Runtime")
+                                          Enables KubeTask platform awareness. The controller injects a system prompt
+                                          that explains the runtime environment to the agent.
+                                        type: object
+                                      text:
+                                        description: |-
+                                          Text is the text content (required when Type == "Text").
+                                          Contains text content defined directly in YAML.
+                                        type: string
+                                      type:
+                                        description: 'Type of context source: Text,
+                                          ConfigMap, Git, or Runtime'
+                                        enum:
+                                        - Text
+                                        - ConfigMap
+                                        - Git
+                                        - Runtime
+                                        type: string
+                                    required:
+                                    - type
+                                    type: object
+                                  ref:
+                                    description: |-
+                                      Ref references an existing Context CRD by name.
+                                      Use this for reusable contexts that are managed independently.
+                                    properties:
+                                      mountPath:
+                                        description: |-
+                                          MountPath specifies where this context should be mounted in the agent pod.
+
+                                          Path resolution follows Tekton conventions:
+                                          - Absolute paths (starting with "/") are used as-is
+                                          - Relative paths (NOT starting with "/") are prefixed with the agent's workspaceDir
+
+                                          Examples:
+                                          - "/etc/config/app.conf" -> mounts at /etc/config/app.conf (absolute)
+                                          - "guides/readme.md" -> mounts at ${workspaceDir}/guides/readme.md (relative)
+
+                                          If NOT specified (empty), the context content is appended to ${WORKSPACE_DIR}/task.md
+                                          in a structured XML format.
+                                        type: string
+                                      name:
+                                        description: Name of the Context resource
+                                        type: string
+                                      namespace:
+                                        description: Namespace of the Context (optional,
+                                          defaults to the referencing resource's namespace)
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                type: object
+                              type: array
+                            description:
+                              description: |-
+                                Description is the task instruction/prompt.
+                                Supports Go template syntax with webhook payload data.
+
+                                Available template data:
+                                  - The entire webhook JSON payload is available as the root object
+                                  - HTTP headers are available via .headers (map with lowercase keys)
+                                  - Example: {{ .pull_request.number }}, {{ .repository.full_name }}
+                              type: string
+                          required:
+                          - description
+                          type: object
+                        workflowRef:
+                          description: |-
+                            WorkflowRef references an existing Workflow by name.
+                            Creates a WorkflowRun that references this Workflow.
+                            Use this to reuse pre-defined Workflow templates.
+                            Mutually exclusive with Task and WorkflowRun.
+                          type: string
+                        workflowRun:
+                          description: |-
+                            WorkflowRun defines a WorkflowRun to create with inline workflow definition.
+                            Use this for multi-stage workflows defined directly in the trigger.
+                            Mutually exclusive with Task and WorkflowRef.
+                          properties:
+                            inline:
+                              description: |-
+                                Inline defines workflow stages directly in the trigger.
+                                Use this for ad-hoc workflows that don't need to be reused.
+                                Stage task descriptions support Go template syntax with webhook payload data.
+                                Mutually exclusive with WorkflowRef.
+                              properties:
+                                stages:
+                                  description: |-
+                                    Stages defines the sequential stages of the workflow.
+                                    Each stage contains one or more tasks that run in parallel.
+                                    Stages are executed sequentially - stage N+1 starts only after
+                                    all tasks in stage N complete successfully.
+                                  items:
+                                    description: WorkflowStage defines a stage in
+                                      the workflow containing parallel tasks.
+                                    properties:
+                                      name:
+                                        description: |-
+                                          Name is an optional name for this stage.
+                                          If not specified, auto-generated as "stage-0", "stage-1", etc.
+                                          based on the stage's index in the stages array.
+                                        type: string
+                                      tasks:
+                                        description: |-
+                                          Tasks defines the tasks to run in parallel within this stage.
+                                          All tasks in a stage start simultaneously and must all complete
+                                          successfully before the next stage begins.
+                                        items:
+                                          description: |-
+                                            WorkflowTask defines a task within a workflow stage.
+                                            Each task will be created as a Task CR when its stage starts.
+                                          properties:
+                                            name:
+                                              description: |-
+                                                Name is a required unique name for this task within the workflow.
+                                                The actual Task CR name will be "{workflow-name}-{task-name}".
+                                                Must be a valid Kubernetes name (lowercase, alphanumeric, hyphens).
+                                              maxLength: 53
+                                              minLength: 1
+                                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                              type: string
+                                            spec:
+                                              description: |-
+                                                Spec is the TaskSpec that will be used to create the Task.
+                                                Each task should specify its own agentRef as needed.
+                                              properties:
+                                                agentRef:
+                                                  description: |-
+                                                    AgentRef references an Agent for this task.
+                                                    If not specified, uses the "default" Agent in the same namespace.
+                                                  type: string
+                                                contexts:
+                                                  description: |-
+                                                    Contexts provides additional context for the task.
+                                                    Each context can be a reference to a Context CRD (via Ref) or an inline definition (via Inline).
+                                                    Contexts are processed in array order, with later contexts taking precedence.
+
+                                                    Context priority (lowest to highest):
+                                                      1. Agent.contexts (Agent-level defaults)
+                                                      2. Task.contexts (Task-specific contexts)
+                                                      3. Task.description (highest, becomes ${WORKSPACE_DIR}/task.md)
+
+                                                    Example:
+                                                      contexts:
+                                                        - ref:
+                                                            name: coding-standards
+                                                        - inline:
+                                                            type: Git
+                                                            mountPath: ${WORKSPACE_DIR}
+                                                            git:
+                                                              repository: https://github.com/org/repo
+                                                              ref: main
+                                                  items:
+                                                    description: |-
+                                                      ContextSource represents a context that can be either a reference to a Context CRD
+                                                      or an inline definition. Exactly one of Ref or Inline must be specified.
+
+                                                      This follows the same pattern as WorkflowRunSpec (workflowRef vs inline),
+                                                      allowing users to choose between reusable Context CRDs or one-off inline definitions.
+                                                    properties:
+                                                      inline:
+                                                        description: |-
+                                                          Inline defines context content directly in the Task/Agent.
+                                                          Use this for one-off contexts that don't need to be reused.
+                                                        properties:
+                                                          configMap:
+                                                            description: ConfigMap
+                                                              context (required when
+                                                              Type == "ConfigMap")
+                                                            properties:
+                                                              key:
+                                                                description: |-
+                                                                  Key specifies a single key to mount as a file.
+                                                                  If not specified, all keys are mounted as files in the directory.
+                                                                type: string
+                                                              name:
+                                                                description: Name
+                                                                  of the ConfigMap
+                                                                type: string
+                                                              optional:
+                                                                description: Optional
+                                                                  specifies whether
+                                                                  the ConfigMap must
+                                                                  exist.
+                                                                type: boolean
+                                                            required:
+                                                            - name
+                                                            type: object
+                                                          git:
+                                                            description: Git context
+                                                              (required when Type
+                                                              == "Git")
+                                                            properties:
+                                                              depth:
+                                                                default: 1
+                                                                description: |-
+                                                                  Depth specifies the clone depth for shallow cloning.
+                                                                  1 means shallow clone (fastest), 0 means full clone.
+                                                                  Defaults to 1 for efficiency.
+                                                                type: integer
+                                                              path:
+                                                                description: |-
+                                                                  Path is the path within the repository to mount.
+                                                                  Can be a file or directory. If empty, the entire repository is mounted.
+
+                                                                  Note on .git directory:
+                                                                    - If Path is empty (entire repo): The mounted directory WILL contain .git/
+                                                                    - If Path is specified (subdirectory): The mounted directory will NOT contain .git/
+
+                                                                  Example: ".claude/", "docs/guide.md"
+                                                                type: string
+                                                              ref:
+                                                                default: HEAD
+                                                                description: |-
+                                                                  Ref is the Git reference (branch, tag, or commit SHA).
+                                                                  Defaults to "HEAD" if not specified.
+                                                                type: string
+                                                              repository:
+                                                                description: |-
+                                                                  Repository is the Git repository URL.
+                                                                  Example: "https://github.com/org/contexts"
+                                                                type: string
+                                                              secretRef:
+                                                                description: |-
+                                                                  SecretRef references a Secret containing Git credentials.
+                                                                  The Secret should contain one of:
+                                                                    - "username" + "password": For HTTPS token-based auth (password can be a PAT)
+                                                                    - "ssh-privatekey": For SSH key-based auth
+                                                                  If not specified, anonymous clone is attempted.
+                                                                properties:
+                                                                  name:
+                                                                    description: Name
+                                                                      of the Secret
+                                                                      containing Git
+                                                                      credentials.
+                                                                    type: string
+                                                                required:
+                                                                - name
+                                                                type: object
+                                                            required:
+                                                            - repository
+                                                            type: object
+                                                          mountPath:
+                                                            description: |-
+                                                              MountPath specifies where this context should be mounted in the agent pod.
+
+                                                              Path resolution follows Tekton conventions:
+                                                              - Absolute paths (starting with "/") are used as-is
+                                                              - Relative paths (NOT starting with "/") are prefixed with the agent's workspaceDir
+
+                                                              See ContextRef.MountPath for detailed examples.
+
+                                                              Note: For Runtime context type, MountPath is ignored - content is always
+                                                              appended to task.md.
+                                                            type: string
+                                                          runtime:
+                                                            description: |-
+                                                              Runtime context (optional when Type == "Runtime")
+                                                              Enables KubeTask platform awareness. The controller injects a system prompt
+                                                              that explains the runtime environment to the agent.
+                                                            type: object
+                                                          text:
+                                                            description: |-
+                                                              Text is the text content (required when Type == "Text").
+                                                              Contains text content defined directly in YAML.
+                                                            type: string
+                                                          type:
+                                                            description: 'Type of
+                                                              context source: Text,
+                                                              ConfigMap, Git, or Runtime'
+                                                            enum:
+                                                            - Text
+                                                            - ConfigMap
+                                                            - Git
+                                                            - Runtime
+                                                            type: string
+                                                        required:
+                                                        - type
+                                                        type: object
+                                                      ref:
+                                                        description: |-
+                                                          Ref references an existing Context CRD by name.
+                                                          Use this for reusable contexts that are managed independently.
+                                                        properties:
+                                                          mountPath:
+                                                            description: |-
+                                                              MountPath specifies where this context should be mounted in the agent pod.
+
+                                                              Path resolution follows Tekton conventions:
+                                                              - Absolute paths (starting with "/") are used as-is
+                                                              - Relative paths (NOT starting with "/") are prefixed with the agent's workspaceDir
+
+                                                              Examples:
+                                                              - "/etc/config/app.conf" -> mounts at /etc/config/app.conf (absolute)
+                                                              - "guides/readme.md" -> mounts at ${workspaceDir}/guides/readme.md (relative)
+
+                                                              If NOT specified (empty), the context content is appended to ${WORKSPACE_DIR}/task.md
+                                                              in a structured XML format.
+                                                            type: string
+                                                          name:
+                                                            description: Name of the
+                                                              Context resource
+                                                            type: string
+                                                          namespace:
+                                                            description: Namespace
+                                                              of the Context (optional,
+                                                              defaults to the referencing
+                                                              resource's namespace)
+                                                            type: string
+                                                        required:
+                                                        - name
+                                                        type: object
+                                                    type: object
+                                                  type: array
+                                                description:
+                                                  description: |-
+                                                    Description is the task instruction/prompt.
+                                                    The controller creates ${WORKSPACE_DIR}/task.md with this content
+                                                    (where WORKSPACE_DIR is configured in Agent.spec.workspaceDir, defaulting to "/workspace").
+                                                    This is the primary way to tell the agent what to do.
+
+                                                    Example:
+                                                      description: "Update all dependencies and create a PR"
+                                                  type: string
+                                              type: object
+                                          required:
+                                          - name
+                                          - spec
+                                          type: object
+                                        minItems: 1
+                                        type: array
+                                    required:
+                                    - tasks
+                                    type: object
+                                  minItems: 1
+                                  type: array
+                              required:
+                              - stages
+                              type: object
+                            workflowRef:
+                              description: |-
+                                WorkflowRef references an existing Workflow by name.
+                                The Workflow must exist in the same namespace as the WebhookTrigger.
+                                Mutually exclusive with Inline.
+                              type: string
+                          type: object
+                      type: object
+                  required:
+                  - name
+                  - resourceTemplate
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               taskTemplate:
                 description: |-
                   TaskTemplate defines the Task to create when a webhook matches.
-                  The template supports Go template syntax with webhook payload data.
+                  DEPRECATED: Use ResourceTemplate instead for new code.
+                  This field is kept for backward compatibility with existing triggers.
+                  Mutually exclusive with Rules and ResourceTemplate.
                 properties:
                   agentRef:
                     description: |-
@@ -375,16 +1397,24 @@ spec:
                 required:
                 - description
                 type: object
-            required:
-            - taskTemplate
             type: object
           status:
             description: Status represents the current status of the WebhookTrigger
             properties:
+              activeResources:
+                description: |-
+                  ActiveResources lists the names of currently running resources (Task or WorkflowRun)
+                  created by this trigger. Used for concurrency policy enforcement.
+                  When using Rules, this contains resources from all rules.
+                  For per-rule tracking, see RuleStatuses[].ActiveResources.
+                items:
+                  type: string
+                type: array
               activeTasks:
                 description: |-
                   ActiveTasks lists the names of currently running Tasks created by this trigger.
-                  Used for concurrency policy enforcement.
+                  DEPRECATED: Use ActiveResources instead for new code.
+                  Used for concurrency policy enforcement with legacy TaskTemplate.
                 items:
                   type: string
                 type: array
@@ -459,9 +1489,43 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              ruleStatuses:
+                description: |-
+                  RuleStatuses contains per-rule status information.
+                  Only populated when Rules is used (not for legacy TaskTemplate triggers).
+                items:
+                  description: WebhookRuleStatus contains status information for a
+                    single rule.
+                  properties:
+                    activeResources:
+                      description: |-
+                        ActiveResources lists the names of currently running resources created by this rule.
+                        Used for per-rule concurrency policy enforcement.
+                      items:
+                        type: string
+                      type: array
+                    lastTriggeredTime:
+                      description: LastTriggeredTime is when this rule was last triggered.
+                      format: date-time
+                      type: string
+                    name:
+                      description: Name is the rule name (matches WebhookRule.Name).
+                      type: string
+                    totalTriggered:
+                      description: TotalTriggered is the number of times this rule
+                        created a resource.
+                      format: int64
+                      type: integer
+                  required:
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               totalTriggered:
                 description: TotalTriggered is the total number of times this trigger
-                  created a Task.
+                  created a resource.
                 format: int64
                 type: integer
               webhookURL:

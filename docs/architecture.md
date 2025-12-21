@@ -168,19 +168,32 @@ CronWorkflow (scheduled WorkflowRun triggering)
     ├── lastSuccessfulTime: *Time
     └── conditions: []Condition
 
-WebhookTrigger (webhook-driven Task creation)
+WebhookTrigger (webhook-driven Task/WorkflowRun creation)
 ├── WebhookTriggerSpec
 │   ├── auth: *WebhookAuth           (HMAC, BearerToken, or Header)
-│   ├── filter: string               (CEL expression for filtering)
+│   ├── matchPolicy: MatchPolicy     (First or All, for rules-based triggers)
+│   ├── rules: []WebhookRule         (multiple filter-to-resourceTemplate mappings)
+│   │   ├── name: string             (unique rule identifier)
+│   │   ├── filter: string           (CEL expression for filtering)
+│   │   ├── concurrencyPolicy: string (per-rule override)
+│   │   └── resourceTemplate: WebhookResourceTemplate
+│   │       ├── task: *WebhookTaskSpec       (create Task)
+│   │       ├── workflowRef: string          (reference Workflow, create WorkflowRun)
+│   │       └── workflowRun: *WebhookWorkflowRunSpec (inline WorkflowRun)
+│   ├── filter: string               (DEPRECATED: use rules[].filter)
 │   ├── concurrencyPolicy: string    (Allow, Forbid, Replace)
-│   └── taskTemplate: WebhookTaskTemplate
-│       ├── agentRef: string
-│       ├── description: string      (Go template with payload data)
-│       └── contexts: []ContextSource
+│   ├── taskTemplate: *WebhookTaskTemplate   (DEPRECATED: use resourceTemplate)
+│   └── resourceTemplate: *WebhookResourceTemplate (new: supports Task/WorkflowRun)
 └── WebhookTriggerStatus
     ├── lastTriggeredTime: *Time
     ├── totalTriggered: int64
-    ├── activeTasks: []string
+    ├── activeTasks: []string        (DEPRECATED: use activeResources)
+    ├── activeResources: []string    (currently running Tasks/WorkflowRuns)
+    ├── ruleStatuses: []WebhookRuleStatus  (per-rule status)
+    │   ├── name: string
+    │   ├── lastTriggeredTime: *Time
+    │   ├── totalTriggered: int64
+    │   └── activeResources: []string
     ├── webhookURL: string
     └── conditions: []Condition
 
@@ -381,10 +394,28 @@ type WebhookTrigger struct {
 }
 
 type WebhookTriggerSpec struct {
-    Auth              *WebhookAuth        // Authentication configuration
-    Filter            string              // CEL expression for filtering
-    ConcurrencyPolicy ConcurrencyPolicy   // Allow, Forbid, or Replace
-    TaskTemplate      WebhookTaskTemplate // Task to create when triggered
+    Auth              *WebhookAuth             // Authentication configuration
+    MatchPolicy       MatchPolicy              // First (default) or All
+    Rules             []WebhookRule            // Multiple filter-to-resourceTemplate mappings
+    Filter            string                   // DEPRECATED: CEL expression for filtering
+    ConcurrencyPolicy ConcurrencyPolicy        // Allow, Forbid, or Replace
+    TaskTemplate      *WebhookTaskTemplate     // DEPRECATED: use ResourceTemplate
+    ResourceTemplate  *WebhookResourceTemplate // Task, WorkflowRun, or WorkflowRef
+}
+
+// WebhookRule defines a single rule for rules-based triggers
+type WebhookRule struct {
+    Name              string                  // Unique rule identifier
+    Filter            string                  // CEL expression for filtering
+    ConcurrencyPolicy ConcurrencyPolicy       // Per-rule override
+    ResourceTemplate  WebhookResourceTemplate // What to create when matched
+}
+
+// WebhookResourceTemplate defines Task or WorkflowRun to create
+type WebhookResourceTemplate struct {
+    Task        *WebhookTaskSpec        // Create Task
+    WorkflowRef string                  // Reference Workflow, create WorkflowRun
+    WorkflowRun *WebhookWorkflowRunSpec // Inline WorkflowRun
 }
 
 type WebhookAuth struct {
@@ -413,11 +444,20 @@ const (
 )
 
 type WebhookTriggerStatus struct {
-    LastTriggeredTime *metav1.Time       // When last triggered
-    TotalTriggered    int64              // Total trigger count
-    ActiveTasks       []string           // Currently running Task names
-    WebhookURL        string             // Full webhook URL path
+    LastTriggeredTime *metav1.Time         // When last triggered
+    TotalTriggered    int64                // Total trigger count
+    ActiveTasks       []string             // DEPRECATED: use ActiveResources
+    ActiveResources   []string             // Currently running Task/WorkflowRun names
+    RuleStatuses      []WebhookRuleStatus  // Per-rule status (only for rules-based)
+    WebhookURL        string               // Full webhook URL path
     Conditions        []metav1.Condition
+}
+
+type WebhookRuleStatus struct {
+    Name              string       // Rule name
+    LastTriggeredTime *metav1.Time // When this rule was last triggered
+    TotalTriggered    int64        // Times this rule triggered
+    ActiveResources   []string     // Active resources for this rule
 }
 
 // Context represents a reusable context resource
@@ -946,73 +986,102 @@ CronWorkflow uses a **Forbid** policy - if a WorkflowRun is still active when th
 
 ### WebhookTrigger (Event-Driven Triggering)
 
-WebhookTrigger enables event-driven Task creation from external webhooks (GitHub, GitLab, custom systems, etc.). When a webhook matches the configured authentication and filter, a Task is created based on the template.
+WebhookTrigger enables event-driven Task or WorkflowRun creation from external webhooks (GitHub, GitLab, custom systems, etc.). It supports two modes:
 
-**GitHub PR Review Example:**
+1. **Legacy mode**: Single filter + taskTemplate (for backward compatibility)
+2. **Rules-based mode**: Multiple rules with different filters triggering different resources
+
+**Multi-Rule Example (Recommended):**
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
 kind: WebhookTrigger
 metadata:
-  name: github-pr-review
+  name: github-events
   namespace: kubetask-system
 spec:
-  # Authentication (optional)
   auth:
     hmac:
       secretRef:
         name: github-webhook-secret
         key: secret
       signatureHeader: X-Hub-Signature-256
-      algorithm: sha256
 
-  # CEL filter expression (optional)
-  filter: |
-    body.action in ["opened", "synchronize"] &&
-    !body.pull_request.draft &&
-    body.repository.full_name == "myorg/myrepo"
+  matchPolicy: First  # First matching rule triggers (or All for multiple)
+  concurrencyPolicy: Allow  # Default for all rules
 
-  # Concurrency policy
-  concurrencyPolicy: Replace  # Stop existing task, create new one
+  rules:
+    # Rule 1: PR review -> Task
+    - name: pr-review
+      filter: |
+        headers["x-github-event"] == "pull_request" &&
+        body.action in ["opened", "synchronize"]
+      resourceTemplate:
+        task:
+          agentRef: code-review-agent
+          description: |
+            Review PR #{{ .pull_request.number }}
+            Repository: {{ .repository.full_name }}
 
-  # Task template with Go templating
-  taskTemplate:
-    agentRef: code-review-agent
-    description: |
-      Review Pull Request #{{ .pull_request.number }}
+    # Rule 2: Complex issue -> Workflow
+    - name: issue-workflow
+      filter: |
+        headers["x-github-event"] == "issues" &&
+        body.action == "opened" &&
+        body.issue.labels.exists(l, l.name == "needs-analysis")
+      resourceTemplate:
+        workflowRef: issue-analysis-workflow
 
-      Repository: {{ .repository.full_name }}
-      Title: {{ .pull_request.title }}
-      Author: {{ .pull_request.user.login }}
-      URL: {{ .pull_request.html_url }}
+    # Rule 3: Simple issue -> Task
+    - name: issue-triage
+      filter: |
+        headers["x-github-event"] == "issues" &&
+        body.action == "opened"
+      concurrencyPolicy: Forbid  # Per-rule override
+      resourceTemplate:
+        task:
+          agentRef: triage-agent
+          description: |
+            Triage Issue #{{ .issue.number }}
+
 status:
-  webhookURL: /webhooks/kubetask-system/github-pr-review
+  webhookURL: /webhooks/kubetask-system/github-events
   lastTriggeredTime: "2025-01-18T10:00:00Z"
   totalTriggered: 42
-  activeTasks:
-    - github-pr-review-abc123
+  activeResources:
+    - github-events-pr-review-abc123
+  ruleStatuses:
+    - name: pr-review
+      lastTriggeredTime: "2025-01-18T10:00:00Z"
+      totalTriggered: 30
+      activeResources:
+        - github-events-pr-review-abc123
+    - name: issue-workflow
+      totalTriggered: 5
+    - name: issue-triage
+      totalTriggered: 7
 ```
 
-**GitLab MR Example:**
+**Legacy Example (for backward compatibility):**
 
 ```yaml
 apiVersion: kubetask.io/v1alpha1
 kind: WebhookTrigger
 metadata:
-  name: gitlab-mr-review
+  name: github-pr-review
 spec:
   auth:
-    header:
-      name: X-Gitlab-Token
+    hmac:
       secretRef:
-        name: gitlab-webhook-secret
-        key: token
-  filter: 'body.object_kind == "merge_request" && body.object_attributes.action in ["open", "update"]'
+        name: github-webhook-secret
+        key: secret
+      signatureHeader: X-Hub-Signature-256
+  filter: 'body.action in ["opened", "synchronize"]'
+  concurrencyPolicy: Replace
   taskTemplate:
     agentRef: code-review-agent
     description: |
-      Review MR !{{ .object_attributes.iid }}
-      Project: {{ .project.path_with_namespace }}
+      Review PR #{{ .pull_request.number }}
 ```
 
 **Field Description:**
@@ -1020,9 +1089,17 @@ spec:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `spec.auth` | WebhookAuth | No | Authentication configuration (HMAC, Bearer, or Header) |
-| `spec.filter` | String | No | CEL expression that must evaluate to true |
-| `spec.concurrencyPolicy` | String | No | Allow (default), Forbid, or Replace |
-| `spec.taskTemplate` | WebhookTaskTemplate | Yes | Task template with Go templating support |
+| `spec.matchPolicy` | String | No | First (default) or All for rules-based mode |
+| `spec.rules` | []WebhookRule | No | Multiple filter-to-resourceTemplate mappings |
+| `spec.rules[].resourceTemplate.task` | WebhookTaskSpec | - | Create a Task |
+| `spec.rules[].resourceTemplate.workflowRef` | String | - | Reference Workflow, create WorkflowRun |
+| `spec.rules[].resourceTemplate.workflowRun` | WebhookWorkflowRunSpec | - | Inline WorkflowRun |
+| `spec.filter` | String | No | DEPRECATED: CEL expression (use rules[].filter) |
+| `spec.taskTemplate` | WebhookTaskTemplate | No | DEPRECATED: use resourceTemplate |
+
+**Resource Naming:**
+
+Created resources are named `{trigger-name}-{rule-name}-{random}` (e.g., `github-events-pr-review-abc123`).
 
 **Authentication Methods:**
 

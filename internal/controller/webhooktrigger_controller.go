@@ -18,8 +18,14 @@ import (
 )
 
 const (
-	// WebhookTriggerLabelKey is the label key used to identify Tasks created by a WebhookTrigger
+	// WebhookTriggerLabelKey is the label key used to identify resources created by a WebhookTrigger
 	WebhookTriggerLabelKey = "kubetask.io/webhook-trigger"
+
+	// WebhookRuleLabelKey is the label key used to identify resources created by a specific rule
+	WebhookRuleLabelKey = "kubetask.io/webhook-rule"
+
+	// ResourceKindLabelKey is the label key used to identify the type of resource created
+	ResourceKindLabelKey = "kubetask.io/resource-kind"
 )
 
 // WebhookTriggerReconciler reconciles a WebhookTrigger object
@@ -33,6 +39,7 @@ type WebhookTriggerReconciler struct {
 // +kubebuilder:rbac:groups=kubetask.io,resources=webhooktriggers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kubetask.io,resources=webhooktriggers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=kubetask.io,resources=tasks,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kubetask.io,resources=workflowruns,verbs=get;list;watch
 
 // Reconcile handles WebhookTrigger events
 func (r *WebhookTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -63,13 +70,25 @@ func (r *WebhookTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		trigger.Status.WebhookURL = webhookURL
 	}
 
-	// Update active tasks list by checking which tasks are still running
-	activeTasks, err := r.getActiveTasks(ctx, trigger)
+	// Update active resources list by checking which resources are still running
+	activeResources, err := r.getActiveResources(ctx, trigger)
 	if err != nil {
-		logger.Error(err, "Failed to get active tasks")
+		logger.Error(err, "Failed to get active resources")
 		// Don't fail the reconcile, just log the error
 	} else {
-		trigger.Status.ActiveTasks = activeTasks
+		trigger.Status.ActiveResources = activeResources
+		// Also update ActiveTasks for backward compatibility
+		trigger.Status.ActiveTasks = activeResources
+	}
+
+	// Update per-rule statuses if using rules-based trigger
+	if len(trigger.Spec.Rules) > 0 {
+		ruleStatuses, err := r.getRuleStatuses(ctx, trigger)
+		if err != nil {
+			logger.Error(err, "Failed to get rule statuses")
+		} else {
+			trigger.Status.RuleStatuses = ruleStatuses
+		}
 	}
 
 	// Set Ready condition
@@ -92,9 +111,11 @@ func (r *WebhookTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return ctrl.Result{}, nil
 }
 
-// getActiveTasks returns the list of tasks that are still running for this trigger.
-func (r *WebhookTriggerReconciler) getActiveTasks(ctx context.Context, trigger *kubetaskv1alpha1.WebhookTrigger) ([]string, error) {
-	// List tasks with the webhook trigger label
+// getActiveResources returns the list of resources (Tasks and WorkflowRuns) that are still running for this trigger.
+func (r *WebhookTriggerReconciler) getActiveResources(ctx context.Context, trigger *kubetaskv1alpha1.WebhookTrigger) ([]string, error) {
+	var activeResources []string
+
+	// List Tasks with the webhook trigger label
 	taskList := &kubetaskv1alpha1.TaskList{}
 	if err := r.List(ctx, taskList,
 		client.InNamespace(trigger.Namespace),
@@ -103,17 +124,113 @@ func (r *WebhookTriggerReconciler) getActiveTasks(ctx context.Context, trigger *
 		return nil, err
 	}
 
-	var activeTasks []string
 	for _, task := range taskList.Items {
 		// Include tasks that are still active (running, pending, queued, or newly created with empty phase)
 		// Exclude only completed or failed tasks
 		if task.Status.Phase != kubetaskv1alpha1.TaskPhaseCompleted &&
 			task.Status.Phase != kubetaskv1alpha1.TaskPhaseFailed {
-			activeTasks = append(activeTasks, task.Name)
+			activeResources = append(activeResources, task.Name)
 		}
 	}
 
-	return activeTasks, nil
+	// List WorkflowRuns with the webhook trigger label
+	workflowRunList := &kubetaskv1alpha1.WorkflowRunList{}
+	if err := r.List(ctx, workflowRunList,
+		client.InNamespace(trigger.Namespace),
+		client.MatchingLabels{WebhookTriggerLabelKey: trigger.Name},
+	); err != nil {
+		return nil, err
+	}
+
+	for _, wr := range workflowRunList.Items {
+		// Include workflow runs that are still active
+		if wr.Status.Phase != kubetaskv1alpha1.WorkflowPhaseCompleted &&
+			wr.Status.Phase != kubetaskv1alpha1.WorkflowPhaseFailed {
+			activeResources = append(activeResources, wr.Name)
+		}
+	}
+
+	return activeResources, nil
+}
+
+// getRuleStatuses returns the per-rule status information.
+func (r *WebhookTriggerReconciler) getRuleStatuses(ctx context.Context, trigger *kubetaskv1alpha1.WebhookTrigger) ([]kubetaskv1alpha1.WebhookRuleStatus, error) {
+	// Build a map of existing rule statuses to preserve LastTriggeredTime and TotalTriggered
+	existingStatuses := make(map[string]*kubetaskv1alpha1.WebhookRuleStatus)
+	for i := range trigger.Status.RuleStatuses {
+		existingStatuses[trigger.Status.RuleStatuses[i].Name] = &trigger.Status.RuleStatuses[i]
+	}
+
+	var ruleStatuses []kubetaskv1alpha1.WebhookRuleStatus
+
+	for _, rule := range trigger.Spec.Rules {
+		// Get active resources for this rule
+		activeResources, err := r.getActiveResourcesForRule(ctx, trigger, rule.Name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Build rule status
+		status := kubetaskv1alpha1.WebhookRuleStatus{
+			Name:            rule.Name,
+			ActiveResources: activeResources,
+		}
+
+		// Preserve existing counters if present
+		if existing, ok := existingStatuses[rule.Name]; ok {
+			status.LastTriggeredTime = existing.LastTriggeredTime
+			status.TotalTriggered = existing.TotalTriggered
+		}
+
+		ruleStatuses = append(ruleStatuses, status)
+	}
+
+	return ruleStatuses, nil
+}
+
+// getActiveResourcesForRule returns active resources for a specific rule.
+func (r *WebhookTriggerReconciler) getActiveResourcesForRule(ctx context.Context, trigger *kubetaskv1alpha1.WebhookTrigger, ruleName string) ([]string, error) {
+	var activeResources []string
+
+	// List Tasks for this rule
+	taskList := &kubetaskv1alpha1.TaskList{}
+	if err := r.List(ctx, taskList,
+		client.InNamespace(trigger.Namespace),
+		client.MatchingLabels{
+			WebhookTriggerLabelKey: trigger.Name,
+			WebhookRuleLabelKey:    ruleName,
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	for _, task := range taskList.Items {
+		if task.Status.Phase != kubetaskv1alpha1.TaskPhaseCompleted &&
+			task.Status.Phase != kubetaskv1alpha1.TaskPhaseFailed {
+			activeResources = append(activeResources, task.Name)
+		}
+	}
+
+	// List WorkflowRuns for this rule
+	workflowRunList := &kubetaskv1alpha1.WorkflowRunList{}
+	if err := r.List(ctx, workflowRunList,
+		client.InNamespace(trigger.Namespace),
+		client.MatchingLabels{
+			WebhookTriggerLabelKey: trigger.Name,
+			WebhookRuleLabelKey:    ruleName,
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	for _, wr := range workflowRunList.Items {
+		if wr.Status.Phase != kubetaskv1alpha1.WorkflowPhaseCompleted &&
+			wr.Status.Phase != kubetaskv1alpha1.WorkflowPhaseFailed {
+			activeResources = append(activeResources, wr.Name)
+		}
+	}
+
+	return activeResources, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
