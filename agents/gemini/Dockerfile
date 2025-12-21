@@ -22,9 +22,9 @@ RUN chmod +x /usr/local/bin/stream-json-reader
 
 USER agent
 
-# Pre-configure Gemini CLI settings (enable preview features)
+# Pre-configure Gemini CLI settings (enable preview features and Gemini 3 Pro)
 RUN mkdir -p ~/.gemini && \
-    echo '{"general.previewFeatures": true}' > ~/.gemini/settings.json
+    echo '{"model":{"name":"gemini-3-pro-preview"},"general":{"previewFeatures":true}}' > ~/.gemini/settings.json
 
 # Recommended command for Agent configuration:
 # command: ["sh", "-c", "gemini --output-format stream-json --yolo -p \"$(cat ${WORKSPACE_DIR}/task.md)\""]
