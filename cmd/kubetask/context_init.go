@@ -24,6 +24,7 @@ const (
 type FileMapping struct {
 	Key        string `json:"key"`
 	TargetPath string `json:"targetPath"`
+	FileMode   *int32 `json:"fileMode,omitempty"` // Optional file permission mode (e.g., 0755)
 }
 
 // DirMapping represents a mapping from source directory to target directory
@@ -83,11 +84,15 @@ func runContextInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  File mappings: %d\n", len(fileMappings))
 		for _, fm := range fileMappings {
 			srcPath := filepath.Join(configMapPath, fm.Key)
-			if err := copyFile(srcPath, fm.TargetPath); err != nil {
+			if err := copyFileWithMode(srcPath, fm.TargetPath, fm.FileMode); err != nil {
 				// Log warning but continue - some files might be optional
 				fmt.Printf("context-init: Warning: failed to copy %s to %s: %v\n", srcPath, fm.TargetPath, err)
 			} else {
-				fmt.Printf("context-init: Copied %s -> %s\n", fm.Key, fm.TargetPath)
+				modeStr := "0644"
+				if fm.FileMode != nil {
+					modeStr = fmt.Sprintf("%04o", *fm.FileMode)
+				}
+				fmt.Printf("context-init: Copied %s -> %s (mode: %s)\n", fm.Key, fm.TargetPath, modeStr)
 			}
 		}
 	}
@@ -122,6 +127,11 @@ func runContextInit(cmd *cobra.Command, args []string) error {
 
 // copyFile copies a file from src to dst, creating parent directories as needed
 func copyFile(src, dst string) error {
+	return copyFileWithMode(src, dst, nil)
+}
+
+// copyFileWithMode copies a file from src to dst with optional file mode
+func copyFileWithMode(src, dst string, fileMode *int32) error {
 	// Check if source file exists
 	srcInfo, err := os.Stat(src)
 	if err != nil {
@@ -158,8 +168,12 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("failed to copy content: %w", err)
 	}
 
-	// Set permissions (readable and writable by owner)
-	if err := os.Chmod(dst, 0644); err != nil {
+	// Set permissions - use provided fileMode or default to 0644
+	mode := os.FileMode(0644)
+	if fileMode != nil {
+		mode = os.FileMode(*fileMode)
+	}
+	if err := os.Chmod(dst, mode); err != nil {
 		return fmt.Errorf("failed to set permissions: %w", err)
 	}
 

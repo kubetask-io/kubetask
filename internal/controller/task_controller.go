@@ -672,7 +672,7 @@ func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubetaskv
 			// Context has explicit mountPath - create separate file
 			configMapKey := sanitizeConfigMapKey(rc.mountPath)
 			configMapData[configMapKey] = rc.content
-			fileMounts = append(fileMounts, fileMount{filePath: rc.mountPath})
+			fileMounts = append(fileMounts, fileMount{filePath: rc.mountPath, fileMode: rc.fileMode})
 		} else {
 			// No mountPath - append to task.md with XML tags
 			xmlTag := fmt.Sprintf("<context name=%q namespace=%q type=%q>\n%s\n</context>",
@@ -807,6 +807,7 @@ func (r *TaskReconciler) resolveContextRef(ctx context.Context, ref *kubetaskv1a
 		ctxType:   string(contextCR.Spec.Type),
 		content:   content,
 		mountPath: resolvedPath,
+		fileMode:  ref.FileMode,
 	}, nil, nil, nil
 }
 
@@ -863,6 +864,7 @@ func (r *TaskReconciler) resolveContextItem(ctx context.Context, item *kubetaskv
 		ctxType:   string(item.Type),
 		content:   content,
 		mountPath: resolvedPath,
+		fileMode:  item.FileMode,
 	}, nil, nil, nil
 }
 

@@ -142,6 +142,12 @@ type ContextMount struct {
 	// which the agent can parse and understand.
 	// +optional
 	MountPath string `json:"mountPath,omitempty"`
+
+	// FileMode is the file permission mode for the mounted file (e.g., 0755 for executable scripts).
+	// Only applicable when MountPath is specified.
+	// If not specified, defaults to 0644.
+	// +optional
+	FileMode *int32 `json:"fileMode,omitempty"`
 }
 
 // ContextSource represents a context that can be either a reference to a Context CRD
@@ -186,6 +192,12 @@ type ContextRef struct {
 	// in a structured XML format.
 	// +optional
 	MountPath string `json:"mountPath,omitempty"`
+
+	// FileMode is the file permission mode for the mounted file (e.g., 0755 for executable scripts).
+	// Only applicable when MountPath is specified.
+	// If not specified, defaults to 0644.
+	// +optional
+	FileMode *int32 `json:"fileMode,omitempty"`
 }
 
 // ContextItem defines inline context with content and mount path.
@@ -207,6 +219,12 @@ type ContextItem struct {
 	// appended to task.md.
 	// +optional
 	MountPath string `json:"mountPath,omitempty"`
+
+	// FileMode is the file permission mode for the mounted file (e.g., 0755 for executable scripts).
+	// Only applicable when MountPath is specified.
+	// If not specified, defaults to 0644.
+	// +optional
+	FileMode *int32 `json:"fileMode,omitempty"`
 
 	// Text is the text content (required when Type == "Text").
 	// Contains text content defined directly in YAML.

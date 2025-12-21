@@ -110,6 +110,13 @@ spec:
                           required:
                           - name
                           type: object
+                        fileMode:
+                          description: |-
+                            FileMode is the file permission mode for the mounted file (e.g., 0755 for executable scripts).
+                            Only applicable when MountPath is specified.
+                            If not specified, defaults to 0644.
+                          format: int32
+                          type: integer
                         git:
                           description: Git context (required when Type == "Git")
                           properties:
@@ -200,6 +207,13 @@ spec:
                         Ref references an existing Context CRD by name.
                         Use this for reusable contexts that are managed independently.
                       properties:
+                        fileMode:
+                          description: |-
+                            FileMode is the file permission mode for the mounted file (e.g., 0755 for executable scripts).
+                            Only applicable when MountPath is specified.
+                            If not specified, defaults to 0644.
+                          format: int32
+                          type: integer
                         mountPath:
                           description: |-
                             MountPath specifies where this context should be mounted in the agent pod.

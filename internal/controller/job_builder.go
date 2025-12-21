@@ -37,6 +37,7 @@ type sessionPVCConfig struct {
 // fileMount represents a file to be mounted at a specific path
 type fileMount struct {
 	filePath string
+	fileMode *int32 // Optional file permission mode (e.g., 0755 for executable)
 }
 
 // dirMount represents a directory to be mounted from a ConfigMap
@@ -64,6 +65,7 @@ type resolvedContext struct {
 	ctxType   string // Context type (for XML tag)
 	content   string // Resolved content
 	mountPath string // Mount path (empty = append to task.md)
+	fileMode  *int32 // Optional file permission mode (e.g., 0755 for executable)
 }
 
 // sanitizeConfigMapKey converts a file path to a valid ConfigMap key.
@@ -159,6 +161,7 @@ func buildGitInitContainer(gm gitMount, volumeName string, index int) corev1.Con
 type contextInitFileMapping struct {
 	Key        string `json:"key"`
 	TargetPath string `json:"targetPath"`
+	FileMode   *int32 `json:"fileMode,omitempty"` // Optional file permission mode (e.g., 0755)
 }
 
 // contextInitDirMapping represents a mapping from source directory to target directory.
@@ -184,6 +187,7 @@ func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirM
 			mappings = append(mappings, contextInitFileMapping{
 				Key:        sanitizeConfigMapKey(mount.filePath),
 				TargetPath: mount.filePath,
+				FileMode:   mount.fileMode,
 			})
 		}
 		mappingsJSON, _ := json.Marshal(mappings)
