@@ -77,6 +77,40 @@ func sanitizeConfigMapKey(filePath string) string {
 	return key
 }
 
+// getParentDir returns the parent directory of a file path.
+// For "/etc/github-app/script.sh", it returns "/etc/github-app".
+func getParentDir(filePath string) string {
+	lastSlash := strings.LastIndex(filePath, "/")
+	if lastSlash <= 0 {
+		return "/"
+	}
+	return filePath[:lastSlash]
+}
+
+// isUnderPath checks if filePath is under basePath.
+// For example, "/workspace/task.md" is under "/workspace".
+func isUnderPath(filePath, basePath string) bool {
+	// Normalize paths to ensure consistent comparison
+	basePath = strings.TrimSuffix(basePath, "/")
+	return filePath == basePath || strings.HasPrefix(filePath, basePath+"/")
+}
+
+// sanitizeVolumeName converts a directory path to a valid Kubernetes volume name.
+// Volume names must be lowercase alphanumeric, '-', '.', max 63 chars.
+func sanitizeVolumeName(dirPath string) string {
+	// Remove leading slash and replace slashes with dashes
+	name := strings.TrimPrefix(dirPath, "/")
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ToLower(name)
+	// Prepend "ctx-" to make it clear this is a context volume
+	name = "ctx-" + name
+	// Truncate to 63 chars max
+	if len(name) > 63 {
+		name = name[:63]
+	}
+	return name
+}
+
 // boolPtr returns a pointer to the given bool value
 func boolPtr(b bool) *bool {
 	return &b
@@ -428,6 +462,43 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 			Name:      "workspace",
 			MountPath: cfg.workspaceDir,
 		})
+
+		// For files outside /workspace, we need to create shared emptyDir volumes
+		// so that the context-init container can write files that persist to the agent container.
+		// Group files by their parent directory to minimize the number of volumes.
+		externalDirs := make(map[string]bool)
+		for _, fm := range fileMounts {
+			if !isUnderPath(fm.filePath, cfg.workspaceDir) {
+				parentDir := getParentDir(fm.filePath)
+				externalDirs[parentDir] = true
+			}
+		}
+
+		// Create emptyDir volumes for each unique external parent directory
+		for dir := range externalDirs {
+			volumeName := sanitizeVolumeName(dir)
+
+			// Add emptyDir volume for this external directory
+			volumes = append(volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			})
+
+			// Mount this volume in context-init container
+			contextInit.VolumeMounts = append(contextInit.VolumeMounts, corev1.VolumeMount{
+				Name:      volumeName,
+				MountPath: dir,
+			})
+
+			// Mount this volume in agent container
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      volumeName,
+				MountPath: dir,
+			})
+		}
+
 		initContainers = append(initContainers, contextInit)
 	}
 

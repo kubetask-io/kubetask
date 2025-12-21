@@ -5,6 +5,7 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +73,132 @@ func TestBoolPtr(t *testing.T) {
 	falseVal := boolPtr(false)
 	if falseVal == nil || *falseVal != false {
 		t.Errorf("boolPtr(false) = %v, want *false", falseVal)
+	}
+}
+
+func TestGetParentDir(t *testing.T) {
+	tests := []struct {
+		name     string
+		filePath string
+		want     string
+	}{
+		{
+			name:     "simple path",
+			filePath: "/etc/github-app/script.sh",
+			want:     "/etc/github-app",
+		},
+		{
+			name:     "nested path",
+			filePath: "/workspace/guides/standards.md",
+			want:     "/workspace/guides",
+		},
+		{
+			name:     "root level file",
+			filePath: "/task.md",
+			want:     "/",
+		},
+		{
+			name:     "single file without path",
+			filePath: "task.md",
+			want:     "/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getParentDir(tt.filePath)
+			if got != tt.want {
+				t.Errorf("getParentDir(%q) = %q, want %q", tt.filePath, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsUnderPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		filePath string
+		basePath string
+		want     bool
+	}{
+		{
+			name:     "file under workspace",
+			filePath: "/workspace/task.md",
+			basePath: "/workspace",
+			want:     true,
+		},
+		{
+			name:     "nested file under workspace",
+			filePath: "/workspace/guides/readme.md",
+			basePath: "/workspace",
+			want:     true,
+		},
+		{
+			name:     "file not under workspace",
+			filePath: "/etc/github-app/script.sh",
+			basePath: "/workspace",
+			want:     false,
+		},
+		{
+			name:     "similar prefix but different path",
+			filePath: "/workspace-foo/task.md",
+			basePath: "/workspace",
+			want:     false,
+		},
+		{
+			name:     "exact match",
+			filePath: "/workspace",
+			basePath: "/workspace",
+			want:     true,
+		},
+		{
+			name:     "basePath with trailing slash",
+			filePath: "/workspace/task.md",
+			basePath: "/workspace/",
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isUnderPath(tt.filePath, tt.basePath)
+			if got != tt.want {
+				t.Errorf("isUnderPath(%q, %q) = %v, want %v", tt.filePath, tt.basePath, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeVolumeName(t *testing.T) {
+	tests := []struct {
+		name    string
+		dirPath string
+		want    string
+	}{
+		{
+			name:    "simple path",
+			dirPath: "/etc/github-app",
+			want:    "ctx-etc-github-app",
+		},
+		{
+			name:    "nested path",
+			dirPath: "/home/user/.config",
+			want:    "ctx-home-user-.config",
+		},
+		{
+			name:    "uppercase path",
+			dirPath: "/ETC/Config",
+			want:    "ctx-etc-config",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeVolumeName(tt.dirPath)
+			if got != tt.want {
+				t.Errorf("sanitizeVolumeName(%q) = %q, want %q", tt.dirPath, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -1685,6 +1812,114 @@ func TestBuildContextInitContainer(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestBuildJob_WithExternalFileMounts tests that files mounted outside of /workspace
+// are properly handled by creating shared emptyDir volumes.
+func TestBuildJob_WithExternalFileMounts(t *testing.T) {
+	task := &kubetaskv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+	}
+	task.APIVersion = "kubetask.io/v1alpha1"
+	task.Kind = "Task"
+
+	cfg := agentConfig{
+		agentImage:         "test-agent:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
+	}
+
+	contextConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task-context",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			"workspace-task.md":                "# Test Task",
+			"etc-github-app-github-app-iat.sh": "#!/bin/bash\necho token",
+		},
+	}
+
+	// File mounts: one inside /workspace, one outside (in /etc/github-app)
+	fileMounts := []fileMount{
+		{filePath: "/workspace/task.md"},
+		{filePath: "/etc/github-app/github-app-iat.sh"},
+	}
+
+	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, nil, nil, nil)
+
+	// Verify workspace emptyDir volume exists
+	var foundWorkspaceVolume bool
+	for _, vol := range job.Spec.Template.Spec.Volumes {
+		if vol.Name == "workspace" && vol.EmptyDir != nil {
+			foundWorkspaceVolume = true
+		}
+	}
+	if !foundWorkspaceVolume {
+		t.Errorf("workspace volume not found")
+	}
+
+	// Verify external directory volume exists (for /etc/github-app)
+	var foundExternalVolume bool
+	var externalVolumeName string
+	for _, vol := range job.Spec.Template.Spec.Volumes {
+		if strings.HasPrefix(vol.Name, "ctx-") && vol.EmptyDir != nil {
+			foundExternalVolume = true
+			externalVolumeName = vol.Name
+		}
+	}
+	if !foundExternalVolume {
+		t.Errorf("external directory volume (ctx-*) not found for /etc/github-app")
+	}
+
+	// Verify context-init container has the external volume mounted
+	var contextInitContainer *corev1.Container
+	for i := range job.Spec.Template.Spec.InitContainers {
+		if job.Spec.Template.Spec.InitContainers[i].Name == "context-init" {
+			contextInitContainer = &job.Spec.Template.Spec.InitContainers[i]
+			break
+		}
+	}
+	if contextInitContainer == nil {
+		t.Fatalf("context-init container not found")
+	}
+
+	var contextInitHasExternalMount bool
+	for _, vm := range contextInitContainer.VolumeMounts {
+		if vm.Name == externalVolumeName && vm.MountPath == "/etc/github-app" {
+			contextInitHasExternalMount = true
+		}
+	}
+	if !contextInitHasExternalMount {
+		t.Errorf("context-init container does not have external volume mounted at /etc/github-app")
+	}
+
+	// Verify agent container has the external volume mounted
+	var agentContainer *corev1.Container
+	for i := range job.Spec.Template.Spec.Containers {
+		if job.Spec.Template.Spec.Containers[i].Name == "agent" {
+			agentContainer = &job.Spec.Template.Spec.Containers[i]
+			break
+		}
+	}
+	if agentContainer == nil {
+		t.Fatalf("agent container not found")
+	}
+
+	var agentHasExternalMount bool
+	for _, vm := range agentContainer.VolumeMounts {
+		if vm.Name == externalVolumeName && vm.MountPath == "/etc/github-app" {
+			agentHasExternalMount = true
+		}
+	}
+	if !agentHasExternalMount {
+		t.Errorf("agent container does not have external volume mounted at /etc/github-app")
 	}
 }
 
