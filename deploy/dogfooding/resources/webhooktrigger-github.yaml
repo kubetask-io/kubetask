@@ -224,8 +224,16 @@ spec:
 
             {{- if .discussion }}
             This is a discussion comment. For code change requests in discussions:
-            - Reply explaining that code changes should be made via a Pull Request
-            - Offer to help create a PR if the user describes what changes they want
+            1. Clone the repository and create a new branch
+            2. Make the requested changes
+            3. Commit with signoff: `git commit -s -m "fix: <description>"`
+            4. Push the branch and create a PR, then enable auto-merge:
+               ```bash
+               git push -u origin <branch-name>
+               gh pr create --title "<title>" --body "<description>"
+               gh pr merge --auto --squash
+               ```
+            5. Reply with the PR link
             {{- else if .pull_request }}
             If the user is requesting code changes on this PR review comment:
 
@@ -263,8 +271,16 @@ spec:
                - Reply explaining: "This PR is from a fork. I cannot directly push to fork PRs. Please make the changes locally, or a maintainer with write access to your fork can assist."
             {{ else }}
             This is an issue, not a PR. For code change requests on issues:
-            - Reply explaining that code changes should be made via a Pull Request
-            - Offer to help create a PR if the user describes what changes they want
+            1. Clone the repository and create a new branch
+            2. Make the requested changes
+            3. Commit with signoff: `git commit -s -m "fix: <description>"`
+            4. Push the branch and create a PR, then enable auto-merge:
+               ```bash
+               git push -u origin <branch-name>
+               gh pr create --title "<title>" --body "<description>"
+               gh pr merge --auto --squash
+               ```
+            5. Reply with the PR link
             {{ end }}
             {{- end }}
 
