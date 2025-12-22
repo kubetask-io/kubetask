@@ -94,6 +94,67 @@ spec:
 
             You are @kubetask-bot responding to a mention from a **privileged user** ({{ .comment.author_association }}).
 
+            ### Step 0: Gather Full Context (REQUIRED BEFORE RESPONDING)
+
+            Before analyzing the user's request, you MUST read the full context to understand the conversation history.
+
+            {{- if .issue }}
+            **For Issue/PR Comments:**
+            1. Clone the repository first
+            2. Get the full issue/PR description and all previous comments:
+               ```bash
+               gh {{ if .issue.pull_request }}pr{{ else }}issue{{ end }} view {{ .issue.number }} --comments
+               ```
+            3. If this is a PR, checkout the PR branch to access the code locally:
+               ```bash
+               gh pr checkout {{ .issue.number }}
+               ```
+            {{- else if .pull_request }}
+            **For PR Review Comments:**
+            1. Clone the repository and checkout the PR:
+               ```bash
+               gh pr checkout {{ .pull_request.number }}
+               ```
+            2. Get the full PR description and all issue-level comments:
+               ```bash
+               gh pr view {{ .pull_request.number }} --comments
+               ```
+            3. Get all review comments on this PR:
+               ```bash
+               gh api repos/{{ .repository.full_name }}/pulls/{{ .pull_request.number }}/comments --jq '.[] | "[\(.user.login) on \(.path):\(.line)] \(.body)"'
+               ```
+            {{- else if .discussion }}
+            **For Discussion Comments:**
+            1. Clone the repository first
+            2. Get the full discussion with all replies:
+               ```bash
+               gh api graphql -f query='
+                 query {
+                   repository(owner: "{{ .repository.owner.login }}", name: "{{ .repository.name }}") {
+                     discussion(number: {{ .discussion.number }}) {
+                       title
+                       body
+                       comments(first: 100) {
+                         nodes {
+                           author { login }
+                           body
+                           replies(first: 50) {
+                             nodes {
+                               author { login }
+                               body
+                             }
+                           }
+                         }
+                       }
+                     }
+                   }
+                 }
+               '
+               ```
+            {{- end }}
+
+            **IMPORTANT**: Read and understand the full context before proceeding to Step 1. Your response should demonstrate awareness of the entire conversation, not just the triggering comment.
+
             ### Step 1: Analyze Intent
 
             Read the comment carefully and determine what the user is asking:
@@ -288,6 +349,67 @@ spec:
             ## Instructions
 
             You are @kubetask-bot responding to a mention from a **non-privileged user** ({{ .comment.author_association }}).
+
+            ### Step 0: Gather Full Context (REQUIRED BEFORE RESPONDING)
+
+            Before analyzing the user's request, you MUST read the full context to understand the conversation history.
+
+            {{- if .issue }}
+            **For Issue/PR Comments:**
+            1. Clone the repository first
+            2. Get the full issue/PR description and all previous comments:
+               ```bash
+               gh {{ if .issue.pull_request }}pr{{ else }}issue{{ end }} view {{ .issue.number }} --comments
+               ```
+            3. If this is a PR, checkout the PR branch to access the code locally:
+               ```bash
+               gh pr checkout {{ .issue.number }}
+               ```
+            {{- else if .pull_request }}
+            **For PR Review Comments:**
+            1. Clone the repository and checkout the PR:
+               ```bash
+               gh pr checkout {{ .pull_request.number }}
+               ```
+            2. Get the full PR description and all issue-level comments:
+               ```bash
+               gh pr view {{ .pull_request.number }} --comments
+               ```
+            3. Get all review comments on this PR:
+               ```bash
+               gh api repos/{{ .repository.full_name }}/pulls/{{ .pull_request.number }}/comments --jq '.[] | "[\(.user.login) on \(.path):\(.line)] \(.body)"'
+               ```
+            {{- else if .discussion }}
+            **For Discussion Comments:**
+            1. Clone the repository first
+            2. Get the full discussion with all replies:
+               ```bash
+               gh api graphql -f query='
+                 query {
+                   repository(owner: "{{ .repository.owner.login }}", name: "{{ .repository.name }}") {
+                     discussion(number: {{ .discussion.number }}) {
+                       title
+                       body
+                       comments(first: 100) {
+                         nodes {
+                           author { login }
+                           body
+                           replies(first: 50) {
+                             nodes {
+                               author { login }
+                               body
+                             }
+                           }
+                         }
+                       }
+                     }
+                   }
+                 }
+               '
+               ```
+            {{- end }}
+
+            **IMPORTANT**: Read and understand the full context before proceeding to Step 1. Your response should demonstrate awareness of the entire conversation, not just the triggering comment.
 
             ### Step 1: Analyze Intent
 
