@@ -48,6 +48,7 @@ spec:
         headers["x-github-event"] in ["issue_comment", "pull_request_review_comment", "discussion_comment"] &&
         body.action == "created" &&
         body.comment.body.contains("@kubetask-bot") &&
+        body.comment.user.type != "Bot" &&
         body.comment.author_association in ["OWNER", "MEMBER", "CONTRIBUTOR", "COLLABORATOR"]
       resourceTemplate:
         task:
@@ -304,6 +305,7 @@ spec:
         headers["x-github-event"] in ["issue_comment", "pull_request_review_comment", "discussion_comment"] &&
         body.action == "created" &&
         body.comment.body.contains("@kubetask-bot") &&
+        body.comment.user.type != "Bot" &&
         body.comment.author_association in ["FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "NONE"]
       resourceTemplate:
         task:
