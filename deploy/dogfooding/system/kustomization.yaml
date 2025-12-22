@@ -8,3 +8,4 @@ namespace: kubetask-system
 resources:
   - deployment-smee-client.yaml
   - route-webhook.yaml
+  - configmap-smee.yaml
