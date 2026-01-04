@@ -1,4 +1,4 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2
