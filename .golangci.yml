@@ -1,4 +1,4 @@
-# golangci-lint configuration for KubeTask
+# golangci-lint configuration for KubeOpenCode
 # Using golangci-lint v2.6.2 with Go 1.25
 # Reference: https://golangci-lint.run/docs/usage/configuration/
 

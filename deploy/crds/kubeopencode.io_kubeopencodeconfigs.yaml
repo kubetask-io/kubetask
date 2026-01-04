@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: kubetaskconfigs.kubetask.io
+  name: kubeopencodeconfigs.kubeopencode.io
 spec:
-  group: kubetask.io
+  group: kubeopencode.io
   names:
-    kind: KubeTaskConfig
-    listKind: KubeTaskConfigList
-    plural: kubetaskconfigs
+    kind: KubeOpenCodeConfig
+    listKind: KubeOpenCodeConfigList
+    plural: kubeopencodeconfigs
     shortNames:
     - ktc
-    singular: kubetaskconfig
+    singular: kubeopencodeconfig
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -24,8 +24,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          KubeTaskConfig defines system-level configuration for KubeTask.
-          This CRD provides cluster or namespace-level settings for the KubeTask system.
+          KubeOpenCodeConfig defines system-level configuration for KubeOpenCode.
+          This CRD provides cluster or namespace-level settings for the KubeOpenCode system.
         properties:
           apiVersion:
             description: |-
@@ -45,19 +45,19 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the KubeTask configuration
+            description: Spec defines the KubeOpenCode configuration
             properties:
               systemImage:
                 description: |-
-                  SystemImage configures the KubeTask system image used for internal components
+                  SystemImage configures the KubeOpenCode system image used for internal components
                   such as git-init and context-init containers.
                   If not specified, uses the built-in default image with IfNotPresent policy.
                 properties:
                   image:
                     description: |-
-                      Image specifies the system image to use for internal KubeTask components.
-                      If not specified, defaults to the built-in DefaultKubeTaskImage.
-                      Example: "quay.io/kubetask/kubetask:v0.2.0"
+                      Image specifies the system image to use for internal KubeOpenCode components.
+                      If not specified, defaults to the built-in DefaultKubeOpenCodeImage.
+                      Example: "quay.io/kubeopencode/kubeopencode:v0.2.0"
                     type: string
                   imagePullPolicy:
                     description: |-

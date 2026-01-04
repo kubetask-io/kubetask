@@ -1,4 +1,4 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
 package controller
 
@@ -12,7 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	kubetaskv1alpha1 "github.com/kubetask/kubetask/api/v1alpha1"
+	kubeopenv1alpha1 "github.com/kubeopencode/kubeopencode/api/v1alpha1"
 )
 
 // agentConfig holds the resolved configuration from Agent
@@ -20,18 +20,18 @@ type agentConfig struct {
 	agentImage         string
 	command            []string
 	workspaceDir       string
-	contexts           []kubetaskv1alpha1.ContextItem
-	credentials        []kubetaskv1alpha1.Credential
-	podSpec            *kubetaskv1alpha1.AgentPodSpec
+	contexts           []kubeopenv1alpha1.ContextItem
+	credentials        []kubeopenv1alpha1.Credential
+	podSpec            *kubeopenv1alpha1.AgentPodSpec
 	serviceAccountName string
 	maxConcurrentTasks *int32
 }
 
-// systemConfig holds resolved system-level configuration from KubeTaskConfig.
-// This configures internal KubeTask components (git-init, context-init).
+// systemConfig holds resolved system-level configuration from KubeOpenCodeConfig.
+// This configures internal KubeOpenCode components (git-init, context-init).
 type systemConfig struct {
-	// systemImage is the container image for internal KubeTask components.
-	// Defaults to DefaultKubeTaskImage if not specified.
+	// systemImage is the container image for internal KubeOpenCode components.
+	// Defaults to DefaultKubeOpenCodeImage if not specified.
 	systemImage string
 	// systemImagePullPolicy is the image pull policy for system containers.
 	// Defaults to IfNotPresent if not specified.
@@ -126,9 +126,9 @@ func int32Ptr(i int32) *int32 {
 }
 
 const (
-	// DefaultKubeTaskImage is the default kubetask container image.
+	// DefaultKubeOpenCodeImage is the default kubeopencode container image.
 	// This unified image provides: controller, git-init (Git clone), etc.
-	DefaultKubeTaskImage = "quay.io/kubetask/kubetask:latest"
+	DefaultKubeOpenCodeImage = "quay.io/kubeopencode/kubeopencode:latest"
 )
 
 // buildGitInitContainer creates an init container that clones a Git repository.
@@ -188,14 +188,14 @@ func buildGitInitContainer(gm gitMount, volumeName string, index int, sysCfg sys
 		Name:            fmt.Sprintf("git-init-%d", index),
 		Image:           sysCfg.systemImage,
 		ImagePullPolicy: sysCfg.systemImagePullPolicy,
-		Command:         []string{"/kubetask", "git-init"},
+		Command:         []string{"/kubeopencode", "git-init"},
 		Env:             envVars,
 		VolumeMounts:    volumeMounts,
 	}
 }
 
 // contextInitFileMapping represents a mapping from ConfigMap key to target file path.
-// This mirrors the FileMapping struct in cmd/kubetask/context_init.go.
+// This mirrors the FileMapping struct in cmd/kubeopencode/context_init.go.
 type contextInitFileMapping struct {
 	Key        string `json:"key"`
 	TargetPath string `json:"targetPath"`
@@ -203,7 +203,7 @@ type contextInitFileMapping struct {
 }
 
 // contextInitDirMapping represents a mapping from source directory to target directory.
-// This mirrors the DirMapping struct in cmd/kubetask/context_init.go.
+// This mirrors the DirMapping struct in cmd/kubeopencode/context_init.go.
 type contextInitDirMapping struct {
 	SourcePath string `json:"sourcePath"`
 	TargetPath string `json:"targetPath"`
@@ -211,7 +211,7 @@ type contextInitDirMapping struct {
 
 // buildContextInitContainer creates an init container that copies ConfigMap content to the writable workspace.
 // This enables agents to create files in the workspace directory, which is not possible with direct ConfigMap mounts.
-// The init container uses /kubetask context-init command which reads configuration from environment variables.
+// The init container uses /kubeopencode context-init command which reads configuration from environment variables.
 func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirMounts []dirMount, sysCfg systemConfig) corev1.Container {
 	envVars := []corev1.EnvVar{
 		{Name: "WORKSPACE_DIR", Value: workspaceDir},
@@ -255,14 +255,14 @@ func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirM
 		Name:            "context-init",
 		Image:           sysCfg.systemImage,
 		ImagePullPolicy: sysCfg.systemImagePullPolicy,
-		Command:         []string{"/kubetask", "context-init"},
+		Command:         []string{"/kubeopencode", "context-init"},
 		Env:             envVars,
 		// VolumeMounts will be added by the caller
 	}
 }
 
 // buildJob creates a Job object for the task with context mounts
-func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, sysCfg systemConfig) *batchv1.Job {
+func buildJob(task *kubeopenv1alpha1.Task, jobName string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, sysCfg systemConfig) *batchv1.Job {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var envVars []corev1.EnvVar
@@ -535,8 +535,8 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 
 	// Build pod labels - start with base labels
 	podLabels := map[string]string{
-		"app":              "kubetask",
-		"kubetask.io/task": task.Name,
+		"app":              "kubeopencode",
+		"kubeopencode.io/task": task.Name,
 	}
 
 	// Add custom pod labels from Agent.PodSpec
@@ -595,8 +595,8 @@ func buildJob(task *kubetaskv1alpha1.Task, jobName string, cfg agentConfig, cont
 			Name:      jobName,
 			Namespace: task.Namespace,
 			Labels: map[string]string{
-				"app":              "kubetask",
-				"kubetask.io/task": task.Name,
+				"app":              "kubeopencode",
+				"kubeopencode.io/task": task.Name,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{

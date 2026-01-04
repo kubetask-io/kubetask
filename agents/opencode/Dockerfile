@@ -1,33 +1,72 @@
-# OpenCode Agent Image
+# OpenCode Tool Init Container
 #
-# This image extends the universal base with OpenCode CLI for AI-powered tasks.
-# OpenCode is an open-source AI coding agent supporting 75+ LLM providers.
+# This minimal image provides the OpenCode CLI binary for copying to shared volumes.
+# Used as an init container to provision OpenCode to work containers.
 #
-# Documentation:
-# - OpenCode: https://opencode.ai/docs
-# - CLI Reference: https://opencode.ai/docs/cli/
-# - Providers: https://opencode.ai/docs/providers
+# Architecture:
+#   Init Container (this image) → copies → /tools/opencode → Work Container uses it
 #
-# Environment Variables (set at runtime via KubeTask Agent secrets):
-# - ANTHROPIC_API_KEY: Anthropic API key (for Claude models)
-# - OPENAI_API_KEY: OpenAI API key
-# - GOOGLE_API_KEY: Google API key (for Gemini models)
-# - Other provider API keys as needed
+# Usage:
+#   # As init container in Kubernetes Pod:
+#   initContainers:
+#     - name: opencode-init
+#       image: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+#       volumeMounts:
+#         - name: tools
+#           mountPath: /tools
+#   containers:
+#     - name: agent
+#       image: quay.io/kubeopencode/kubeopencode-agent-common-dev:latest
+#       command: ["/tools/opencode", "run", "--format", "json", "..."]
+#       volumeMounts:
+#         - name: tools
+#           mountPath: /tools
 #
-ARG BASE_IMAGE=quay.io/kubetask/kubetask-agent-base:latest
-FROM ${BASE_IMAGE}
+# Binary Source:
+#   Downloaded from GitHub Releases: https://github.com/anomalyco/opencode/releases
+#   - Linux x64: opencode-linux-x64-musl.tar.gz
+#   - Linux arm64: opencode-linux-arm64-musl.tar.gz
+#
+# Note: Using musl variants for Alpine Linux compatibility.
+#
 
-# Install OpenCode CLI using npm (globally)
-USER root
-RUN npm install -g opencode-ai@latest
-USER agent
+FROM alpine:3.21
 
-# Recommended command for Agent configuration:
-# command: ["sh", "-c", "opencode run --format json \"$(cat ${WORKSPACE_DIR}/task.md)\""]
-#
-# Note: ENTRYPOINT is no longer used. Agent.spec.command is now required.
-# The command defines HOW the agent executes tasks, allowing users to customize
-# execution behavior (e.g., output format, provider settings) without modifying the image.
-#
-# Original ENTRYPOINT (kept as reference):
-# ENTRYPOINT ["sh", "-c", "opencode run --format json \"$(cat ${WORKSPACE_DIR}/task.md)\""]
+# Install runtime dependencies required by OpenCode binary
+# libstdc++ and libgcc are needed as the binary is dynamically linked
+RUN apk add --no-cache libstdc++ libgcc
+
+# Install curl for downloading (temporary)
+RUN apk add --no-cache curl tar
+
+# Detect architecture and download appropriate binary
+ARG TARGETARCH
+RUN set -ex; \
+    case "${TARGETARCH}" in \
+        amd64) ARCH="x64" ;; \
+        arm64) ARCH="arm64" ;; \
+        *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+    esac; \
+    FILENAME="opencode-linux-${ARCH}-musl.tar.gz"; \
+    URL="https://github.com/anomalyco/opencode/releases/latest/download/${FILENAME}"; \
+    echo "Downloading OpenCode from ${URL}..."; \
+    curl -fsSL "${URL}" -o /tmp/opencode.tar.gz; \
+    tar -xzf /tmp/opencode.tar.gz -C /tmp; \
+    mv /tmp/opencode /opencode; \
+    chmod +x /opencode; \
+    rm -f /tmp/opencode.tar.gz; \
+    # Verify the binary
+    /opencode --version
+
+# Remove curl to minimize image size (keep libstdc++ and libgcc)
+RUN apk del curl tar
+
+# Default environment variables
+ENV TOOLS_DIR=/tools
+ENV OPENCODE_BIN=opencode
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

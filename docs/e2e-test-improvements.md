@@ -1,6 +1,6 @@
 # E2E Test Improvements Roadmap
 
-This document tracks future improvements for KubeTask E2E tests.
+This document tracks future improvements for KubeOpenCode E2E tests.
 
 ## Current Coverage
 
@@ -14,7 +14,7 @@ The E2E test suite covers the following core functionality:
 | Context CRD (ConfigMap type) | task_test.go | Covered |
 | Context CRD (Git type) | task_test.go | Covered |
 | Agent contexts merge | task_test.go | Covered |
-| Stop annotation (kubetask.io/stop) | task_test.go | Covered |
+| Stop annotation (kubeopencode.io/stop) | task_test.go | Covered |
 | HumanInTheLoop Sidecar | task_test.go | Covered |
 | Session Persistence | session_test.go | Covered |
 | Agent podSpec.labels | agent_test.go | Covered |
@@ -145,12 +145,12 @@ Context("Agent with advanced scheduling", func() {
 
 #### 6. TTL Cleanup Test
 
-**Background**: `KubeTaskConfig.taskLifecycle.ttlSecondsAfterFinished` controls automatic cleanup.
+**Background**: `KubeOpenCodeConfig.taskLifecycle.ttlSecondsAfterFinished` controls automatic cleanup.
 
 **Suggested Test**:
 ```go
 It("should delete completed Task after TTL expires", func() {
-    // Create KubeTaskConfig with short TTL (e.g., 10 seconds)
+    // Create KubeOpenCodeConfig with short TTL (e.g., 10 seconds)
     // Create and complete a Task
     // Wait for TTL + buffer
     // Verify Task is deleted

@@ -6,13 +6,13 @@ Accepted (Updated 2025-12-10)
 
 ## Context
 
-When presenting KubeTask, two important design questions were raised:
+When presenting KubeOpenCode, two important design questions were raised:
 
 1. **Why use a declarative API for Task?** Task appears to be a one-off execution rather than a "desired state" that should be maintained. Traditional Kubernetes declarative resources (like Deployment) describe a state that controllers continuously reconcile toward. Task, however, represents a single execution - once completed, there's nothing to maintain.
 
 2. **Why not use Kubernetes Jobs directly?** Jobs are the native Kubernetes primitive for running tasks to completion. Why introduce an additional abstraction layer?
 
-These are fundamental questions about the design philosophy of KubeTask that deserve clear documentation.
+These are fundamental questions about the design philosophy of KubeOpenCode that deserve clear documentation.
 
 ## Decision
 
@@ -93,7 +93,7 @@ With raw Jobs, users would need to manually:
 Agent centralizes execution environment configuration:
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: default
@@ -108,7 +108,7 @@ spec:
   scheduling:
     nodeSelector:
       workload-type: ai-agent
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
 ```
 
 Multiple Tasks share this configuration without repetition. With raw Jobs, each Job would need complete environment specification.
@@ -121,7 +121,7 @@ For running the same task across multiple targets, use Helm, Kustomize, or other
 # Helm template example
 {{- range .Values.tasks }}
 ---
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: {{ .name }}
@@ -155,12 +155,12 @@ This approach:
 
 ### 4. Why We Removed Batch/BatchRun CRDs
 
-Initially, KubeTask included Batch and BatchRun CRDs for batch operations. We removed them because:
+Initially, KubeOpenCode included Batch and BatchRun CRDs for batch operations. We removed them because:
 
 1. **Kubernetes-native alternative exists**: Helm, Kustomize, and other templating tools already solve the "create multiple similar resources" problem
 2. **Reduced complexity**: Two fewer CRDs to maintain and document
 3. **Better tooling integration**: Works naturally with ArgoCD, Flux, and other GitOps tools
-4. **Separation of concerns**: KubeTask focuses on task execution, templating is handled by external tools
+4. **Separation of concerns**: KubeOpenCode focuses on task execution, templating is handled by external tools
 
 ## Consequences
 
@@ -190,4 +190,4 @@ Initially, KubeTask included Batch and BatchRun CRDs for batch operations. We re
 
 - [Kubernetes Jobs Documentation](https://kubernetes.io/docs/concepts/workloads/controllers/job/)
 - [Operator Pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
-- [KubeTask Architecture](../architecture.md)
+- [KubeOpenCode Architecture](../architecture.md)

@@ -1,7 +1,7 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: kubetask-dogfooding
+  name: kubeopencode-dogfooding
   labels:
-    app.kubernetes.io/part-of: kubetask-dogfooding
+    app.kubernetes.io/part-of: kubeopencode-dogfooding

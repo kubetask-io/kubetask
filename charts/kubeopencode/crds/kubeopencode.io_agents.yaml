@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: agents.kubetask.io
+  name: agents.kubeopencode.io
 spec:
-  group: kubetask.io
+  group: kubeopencode.io
   names:
     kind: Agent
     listKind: AgentList
@@ -59,7 +59,7 @@ spec:
                 description: |-
                   Agent container image to use for task execution.
                   The controller generates Jobs with this image.
-                  If not specified, defaults to "quay.io/kubetask/kubetask-agent:latest".
+                  If not specified, defaults to "quay.io/kubeopencode/kubeopencode-agent:latest".
                 type: string
               command:
                 description: |-
@@ -184,7 +184,7 @@ spec:
                     runtime:
                       description: |-
                         Runtime context (optional when Type == "Runtime")
-                        Enables KubeTask platform awareness. The controller injects a system prompt
+                        Enables KubeOpenCode platform awareness. The controller injects a system prompt
                         that explains the runtime environment to the agent.
                       type: object
                     text:

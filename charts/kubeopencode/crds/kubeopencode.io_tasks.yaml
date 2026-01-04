@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: tasks.kubetask.io
+  name: tasks.kubeopencode.io
 spec:
-  group: kubetask.io
+  group: kubeopencode.io
   names:
     kind: Task
     listKind: TaskList
@@ -172,7 +172,7 @@ spec:
                     runtime:
                       description: |-
                         Runtime context (optional when Type == "Runtime")
-                        Enables KubeTask platform awareness. The controller injects a system prompt
+                        Enables KubeOpenCode platform awareness. The controller injects a system prompt
                         that explains the runtime environment to the agent.
                       type: object
                     text:

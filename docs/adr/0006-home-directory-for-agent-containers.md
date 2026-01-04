@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-KubeTask agent containers run AI CLI tools (gemini-cli, claude-cli, etc.) that require write access to their home directory. These tools create configuration and cache directories like `~/.gemini`, `~/.claude`, etc.
+KubeOpenCode agent containers run AI CLI tools (gemini-cli, claude-cli, etc.) that require write access to their home directory. These tools create configuration and cache directories like `~/.gemini`, `~/.claude`, etc.
 
 When running on Kubernetes clusters with Security Context Constraints (SCC) or similar security policies (e.g., OpenShift, hardened clusters), containers are forced to run with random UIDs that have no entry in `/etc/passwd`. This causes several issues:
 

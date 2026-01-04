@@ -1,4 +1,4 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 SHELL := /bin/bash
 
 all: build
@@ -11,8 +11,8 @@ BUILD_DATE := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
 # Image URL to use for building/pushing image targets
 IMG_REGISTRY ?= quay.io
-IMG_ORG ?= kubetask
-IMG_NAME ?= kubetask
+IMG_ORG ?= kubeopencode
+IMG_NAME ?= kubeopencode
 IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME):$(VERSION)
 
 # PLATFORMS defines the target platforms for multi-arch build
@@ -81,14 +81,14 @@ update-crds: controller-gen
 		paths="./api/v1alpha1" \
 		output:crd:dir=./deploy/crds
 	@echo "Copying CRDs to Helm chart..."
-	@mkdir -p ./charts/kubetask/crds
-	@cp -f ./deploy/crds/*.yaml ./charts/kubetask/crds/
+	@mkdir -p ./charts/kubeopencode/crds
+	@cp -f ./deploy/crds/*.yaml ./charts/kubeopencode/crds/
 	@echo "CRDs updated successfully in both locations"
 .PHONY: update-crds
 
-# Build unified kubetask binary
+# Build unified kubeopencode binary
 build:
-	go build -o bin/kubetask ./cmd/kubetask
+	go build -o bin/kubeopencode ./cmd/kubeopencode
 .PHONY: build
 
 # Test runs unit tests only.
@@ -146,7 +146,7 @@ docker-push:
 
 # Build and push docker image for multiple architectures
 docker-buildx:
-	docker buildx create --use --name=kubetask-builder || true
+	docker buildx create --use --name=kubeopencode-builder || true
 	docker buildx build \
 		--platform=$(PLATFORMS) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
@@ -160,13 +160,13 @@ docker-buildx:
 
 # Package helm chart
 helm-package:
-	helm package charts/kubetask -d dist/
+	helm package charts/kubeopencode -d dist/
 .PHONY: helm-package
 
 # Install helm chart
 helm-install:
-	helm install kubetask charts/kubetask \
-		--namespace kubetask-system \
+	helm install kubeopencode charts/kubeopencode \
+		--namespace kubeopencode-system \
 		--create-namespace \
 		--set controller.image.repository=$(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME) \
 		--set controller.image.tag=$(VERSION)
@@ -174,28 +174,28 @@ helm-install:
 
 # Upgrade helm chart
 helm-upgrade:
-	helm upgrade kubetask charts/kubetask \
-		--namespace kubetask-system \
+	helm upgrade kubeopencode charts/kubeopencode \
+		--namespace kubeopencode-system \
 		--set controller.image.repository=$(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME) \
 		--set controller.image.tag=$(VERSION)
 .PHONY: helm-upgrade
 
 # Uninstall helm chart
 helm-uninstall:
-	helm uninstall kubetask --namespace kubetask-system
+	helm uninstall kubeopencode --namespace kubeopencode-system
 .PHONY: helm-uninstall
 
 # Template helm chart (dry-run)
 helm-template:
-	helm template kubetask charts/kubetask \
-		--namespace kubetask-system \
+	helm template kubeopencode charts/kubeopencode \
+		--namespace kubeopencode-system \
 		--set controller.image.repository=$(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME) \
 		--set controller.image.tag=$(VERSION)
 .PHONY: helm-template
 
 # Chart registry settings
 CHART_REGISTRY ?= oci://$(IMG_REGISTRY)/$(IMG_ORG)/helm-charts
-CHART_NAME ?= kubetask
+CHART_NAME ?= kubeopencode
 
 # Login to helm registry
 helm-login: ## Login to helm OCI registry
@@ -211,12 +211,12 @@ helm-push: helm-package ## Push helm chart to OCI registry
 
 # Run controller locally
 run:
-	go run ./cmd/kubetask controller
+	go run ./cmd/kubeopencode controller
 .PHONY: run
 
 # Run webhook server locally
 run-webhook:
-	go run ./cmd/kubetask webhook
+	go run ./cmd/kubeopencode webhook
 .PHONY: run-webhook
 
 # Format code
@@ -232,7 +232,7 @@ lint: golangci-lint
 ##@ E2E Testing
 
 # Kind cluster name for e2e testing
-E2E_CLUSTER_NAME ?= kubetask-e2e
+E2E_CLUSTER_NAME ?= kubeopencode-e2e
 E2E_IMG_TAG ?= dev
 
 # Create kind cluster for e2e testing
@@ -277,9 +277,9 @@ e2e-verify-image: ## Verify image is loaded in kind cluster
 # Using uninstall + install instead of upgrade to ensure CRDs are properly installed
 # Webhook is exposed as NodePort for E2E testing
 e2e-deploy: ## Deploy controller and CRDs to kind cluster using Helm
-	@helm uninstall kubetask --namespace kubetask-system 2>/dev/null || true
-	helm install kubetask charts/kubetask \
-		--namespace kubetask-system \
+	@helm uninstall kubeopencode --namespace kubeopencode-system 2>/dev/null || true
+	helm install kubeopencode charts/kubeopencode \
+		--namespace kubeopencode-system \
 		--create-namespace \
 		--set controller.image.repository=$(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME) \
 		--set controller.image.tag=$(E2E_IMG_TAG) \
@@ -292,8 +292,8 @@ e2e-deploy: ## Deploy controller and CRDs to kind cluster using Helm
 
 # Undeploy controller from kind cluster (CRDs will be removed by Helm)
 e2e-undeploy: ## Undeploy controller and CRDs from kind cluster
-	helm uninstall kubetask --namespace kubetask-system || true
-	kubectl delete namespace kubetask-system --ignore-not-found=true
+	helm uninstall kubeopencode --namespace kubeopencode-system || true
+	kubectl delete namespace kubeopencode-system --ignore-not-found=true
 .PHONY: e2e-undeploy
 
 # Setup e2e environment (create cluster, build images, load images, and deploy)
@@ -309,34 +309,34 @@ e2e-teardown: e2e-undeploy e2e-kind-delete ## Teardown e2e environment
 # Rebuild and reload controller image (for iterative development)
 e2e-reload: e2e-docker-build e2e-kind-load e2e-verify-image ## Rebuild and reload controller image
 	@echo "Restarting controller pods..."
-	@kubectl rollout restart deployment -n kubetask-system || true
+	@kubectl rollout restart deployment -n kubeopencode-system || true
 	@echo "Controller image reloaded successfully"
 .PHONY: e2e-reload
 
 # Build echo agent image for e2e testing
 e2e-agent-build: ## Build echo agent image for e2e testing
-	docker build -t quay.io/kubetask/kubetask-agent-echo:latest agents/echo/
+	docker build -t quay.io/kubeopencode/kubeopencode-agent-echo:latest agents/echo/
 .PHONY: e2e-agent-build
 
 # Load echo agent image into kind cluster
 e2e-agent-load: ## Load echo agent image into kind cluster
-	kind load docker-image quay.io/kubetask/kubetask-agent-echo:latest --name $(E2E_CLUSTER_NAME)
+	kind load docker-image quay.io/kubeopencode/kubeopencode-agent-echo:latest --name $(E2E_CLUSTER_NAME)
 .PHONY: e2e-agent-load
 
 
 # Run e2e tests
 e2e-test: ## Run e2e tests
 	@echo "Running e2e tests..."
-	E2E_TEST_NAMESPACE=kubetask-e2e-test \
-	E2E_ECHO_IMAGE=quay.io/kubetask/kubetask-agent-echo:latest \
+	E2E_TEST_NAMESPACE=kubeopencode-e2e-test \
+	E2E_ECHO_IMAGE=quay.io/kubeopencode/kubeopencode-agent-echo:latest \
 	go test -v ./e2e/... -timeout 30m -ginkgo.v
 .PHONY: e2e-test
 
 # Run specific e2e test by focus string
 e2e-test-focus: ## Run specific e2e test (usage: make e2e-test-focus FOCUS="Task")
 	@echo "Running focused e2e tests..."
-	E2E_TEST_NAMESPACE=kubetask-e2e-test \
-	E2E_ECHO_IMAGE=quay.io/kubetask/kubetask-agent-echo:latest \
+	E2E_TEST_NAMESPACE=kubeopencode-e2e-test \
+	E2E_ECHO_IMAGE=quay.io/kubeopencode/kubeopencode-agent-echo:latest \
 	go test -v ./e2e/... -timeout 30m -ginkgo.v -ginkgo.focus="$(FOCUS)"
 .PHONY: e2e-test-focus
 
@@ -348,8 +348,8 @@ e2e-test-focus: ## Run specific e2e test (usage: make e2e-test-focus FOCUS="Task
 #   make e2e-test-label LABEL="!cronworkflow"
 e2e-test-label: ## Run e2e tests by label (usage: make e2e-test-label LABEL="workflow")
 	@echo "Running e2e tests with label: $(LABEL)..."
-	E2E_TEST_NAMESPACE=kubetask-e2e-test \
-	E2E_ECHO_IMAGE=quay.io/kubetask/kubetask-agent-echo:latest \
+	E2E_TEST_NAMESPACE=kubeopencode-e2e-test \
+	E2E_ECHO_IMAGE=quay.io/kubeopencode/kubeopencode-agent-echo:latest \
 	go test -v ./e2e/... -timeout 30m -ginkgo.v -ginkgo.label-filter="$(LABEL)"
 .PHONY: e2e-test-label
 

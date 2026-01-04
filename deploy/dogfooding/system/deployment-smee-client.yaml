@@ -1,4 +1,4 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 # Smee.io client for forwarding GitHub webhooks to the internal webhook server.
 # This is needed because GitHub requires trusted SSL certificates, but OpenShift
 # uses self-signed certificates by default.
@@ -10,7 +10,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: smee-client
-  namespace: kubetask-system
+  namespace: kubeopencode-system
   labels:
     app.kubernetes.io/name: smee-client
     app.kubernetes.io/component: webhook-proxy

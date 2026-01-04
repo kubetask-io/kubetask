@@ -1,11 +1,11 @@
-# Copyright Contributors to the KubeTask project
-# Sensor that creates KubeTask Tasks in response to GitHub events.
+# Copyright Contributors to the KubeOpenCode project
+# Sensor that creates KubeOpenCode Tasks in response to GitHub events.
 # This replaces the WebhookTrigger CRD functionality.
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
 metadata:
   name: github-tasks
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   eventBusName: default
   template:
@@ -13,7 +13,7 @@ spec:
   dependencies:
     - name: github-event
       eventSourceName: github
-      eventName: kubetask
+      eventName: kubeopencode
   triggers:
     # Rule 1: PR opened - auto review
     - template:
@@ -23,11 +23,11 @@ spec:
           operation: create
           source:
             resource:
-              apiVersion: kubetask.io/v1alpha1
+              apiVersion: kubeopencode.io/v1alpha1
               kind: Task
               metadata:
                 generateName: github-pr-opened-
-                namespace: kubetask-system
+                namespace: kubeopencode-system
               spec:
                 agentRef: default
                 description: ""
@@ -56,7 +56,7 @@ spec:
                   4. Post your review as a PR comment.
               dest: spec.description
 
-    # Rule 2: @kubetask-bot mention from privileged users (OWNER, MEMBER, CONTRIBUTOR, COLLABORATOR)
+    # Rule 2: @kubeopencode-bot mention from privileged users (OWNER, MEMBER, CONTRIBUTOR, COLLABORATOR)
     - template:
         name: comment-privileged
         conditions: comment-privileged-condition
@@ -64,11 +64,11 @@ spec:
           operation: create
           source:
             resource:
-              apiVersion: kubetask.io/v1alpha1
+              apiVersion: kubeopencode.io/v1alpha1
               kind: Task
               metadata:
                 generateName: github-comment-privileged-
-                namespace: kubetask-system
+                namespace: kubeopencode-system
               spec:
                 agentRef: default
                 description: ""
@@ -76,7 +76,7 @@ spec:
             - src:
                 dependencyName: github-event
                 dataTemplate: |
-                  # @kubetask-bot Mention Handler (Privileged User)
+                  # @kubeopencode-bot Mention Handler (Privileged User)
 
                   ## Event Details
 
@@ -115,7 +115,7 @@ spec:
 
                   ## Instructions
 
-                  You are @kubetask-bot responding to a mention from a **privileged user** ({{ .Input.body.comment.author_association }}).
+                  You are @kubeopencode-bot responding to a mention from a **privileged user** ({{ .Input.body.comment.author_association }}).
 
                   ### Step 0: Gather Full Context (REQUIRED BEFORE RESPONDING)
 
@@ -183,9 +183,9 @@ spec:
                   Read the comment carefully and determine what the user is asking:
                   - **Question**: User is asking about the code, seeking explanation, or asking for help
                   - **Code Change Request**: User is EXPLICITLY asking you to modify, fix, add, update, or remove code (must contain clear action words like "please fix", "can you update", "add X to Y", etc.)
-                  - **No Clear Request**: User just mentioned @kubetask-bot without a specific question or request
+                  - **No Clear Request**: User just mentioned @kubeopencode-bot without a specific question or request
 
-                  **IMPORTANT**: If the comment only contains "@kubetask-bot" or a simple greeting without a clear ask, treat it as "No Clear Request". Do NOT assume the user wants code changes.
+                  **IMPORTANT**: If the comment only contains "@kubeopencode-bot" or a simple greeting without a clear ask, treat it as "No Clear Request". Do NOT assume the user wants code changes.
 
                   ### Step 2: For Questions
 
@@ -337,7 +337,7 @@ spec:
                   **IMPORTANT**: Do not just print the response to stdout. You MUST use the `gh` command to actually post the comment to GitHub.
               dest: spec.description
 
-    # Rule 3: @kubetask-bot mention from non-privileged users (FIRST_TIME_CONTRIBUTOR, FIRST_TIMER, NONE)
+    # Rule 3: @kubeopencode-bot mention from non-privileged users (FIRST_TIME_CONTRIBUTOR, FIRST_TIMER, NONE)
     - template:
         name: comment-unprivileged
         conditions: comment-unprivileged-condition
@@ -345,11 +345,11 @@ spec:
           operation: create
           source:
             resource:
-              apiVersion: kubetask.io/v1alpha1
+              apiVersion: kubeopencode.io/v1alpha1
               kind: Task
               metadata:
                 generateName: github-comment-unprivileged-
-                namespace: kubetask-system
+                namespace: kubeopencode-system
               spec:
                 agentRef: default
                 description: ""
@@ -357,7 +357,7 @@ spec:
             - src:
                 dependencyName: github-event
                 dataTemplate: |
-                  # @kubetask-bot Mention Handler (Non-Privileged User)
+                  # @kubeopencode-bot Mention Handler (Non-Privileged User)
 
                   ## Event Details
 
@@ -396,7 +396,7 @@ spec:
 
                   ## Instructions
 
-                  You are @kubetask-bot responding to a mention from a **non-privileged user** ({{ .Input.body.comment.author_association }}).
+                  You are @kubeopencode-bot responding to a mention from a **non-privileged user** ({{ .Input.body.comment.author_association }}).
 
                   ### Step 0: Gather Full Context (REQUIRED BEFORE RESPONDING)
 
@@ -464,9 +464,9 @@ spec:
                   Read the comment carefully and determine what the user is asking:
                   - **Question**: User is asking about the code or seeking help
                   - **Code Change Request**: User is EXPLICITLY asking you to modify code
-                  - **No Clear Request**: User just mentioned @kubetask-bot without a specific question or request
+                  - **No Clear Request**: User just mentioned @kubeopencode-bot without a specific question or request
 
-                  **IMPORTANT**: If the comment only contains "@kubetask-bot" or a simple greeting without a clear ask, treat it as "No Clear Request". Do NOT assume the user wants code changes.
+                  **IMPORTANT**: If the comment only contains "@kubeopencode-bot" or a simple greeting without a clear ask, treat it as "No Clear Request". Do NOT assume the user wants code changes.
 
                   ### Step 2: For Questions
 
@@ -523,7 +523,7 @@ spec:
 
                   Reply with something like:
                   ```
-                  Thank you for your suggestion! Code change requests via @kubetask-bot are currently only available to repository maintainers, members, and contributors.
+                  Thank you for your suggestion! Code change requests via @kubeopencode-bot are currently only available to repository maintainers, members, and contributors.
 
                   If you'd like to see this change implemented:
                   1. You can submit a Pull Request with the changes yourself
@@ -582,7 +582,7 @@ spec:
          Input.headers["X-Github-Event"] == "pull_request_review_comment" ||
          Input.headers["X-Github-Event"] == "discussion_comment") &&
         Input.body.action == "created" &&
-        contains(Input.body.comment.body, "@kubetask-bot") &&
+        contains(Input.body.comment.body, "@kubeopencode-bot") &&
         Input.body.comment.user.type != "Bot" &&
         (Input.body.comment.author_association == "OWNER" ||
          Input.body.comment.author_association == "MEMBER" ||
@@ -596,7 +596,7 @@ spec:
          Input.headers["X-Github-Event"] == "pull_request_review_comment" ||
          Input.headers["X-Github-Event"] == "discussion_comment") &&
         Input.body.action == "created" &&
-        contains(Input.body.comment.body, "@kubetask-bot") &&
+        contains(Input.body.comment.body, "@kubeopencode-bot") &&
         Input.body.comment.user.type != "Bot" &&
         (Input.body.comment.author_association == "FIRST_TIME_CONTRIBUTOR" ||
          Input.body.comment.author_association == "FIRST_TIMER" ||

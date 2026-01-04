@@ -1,5 +1,5 @@
 apiVersion: v2
-name: kubetask
+name: kubeopencode
 description: A Kubernetes-native system for executing AI agent tasks across multiple repositories
 type: application
 version: 0.1.0
@@ -10,7 +10,7 @@ keywords:
   - batch-processing
   - kubernetes-native
 maintainers:
-  - name: KubeTask Team
-home: https://github.com/kubetask/kubetask
+  - name: KubeOpenCode Team
+home: https://github.com/kubeopencode/kubeopencode
 sources:
-  - https://github.com/kubetask/kubetask
+  - https://github.com/kubeopencode/kubeopencode

@@ -1,4 +1,4 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
 //go:build !integration
 
@@ -12,13 +12,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	kubetaskv1alpha1 "github.com/kubetask/kubetask/api/v1alpha1"
+	kubeopenv1alpha1 "github.com/kubeopencode/kubeopencode/api/v1alpha1"
 )
 
 // defaultSystemConfig returns a systemConfig with default values for testing.
 func defaultSystemConfig() systemConfig {
 	return systemConfig{
-		systemImage:           DefaultKubeTaskImage,
+		systemImage:           DefaultKubeOpenCodeImage,
 		systemImagePullPolicy: corev1.PullIfNotPresent,
 	}
 }
@@ -210,14 +210,14 @@ func TestSanitizeVolumeName(t *testing.T) {
 }
 
 func TestBuildJob_BasicTask(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       types.UID("test-uid"),
 		},
 	}
-	task.APIVersion = "kubetask.io/v1alpha1"
+	task.APIVersion = "kubeopencode.io/v1alpha1"
 	task.Kind = "Task"
 
 	cfg := agentConfig{
@@ -238,11 +238,11 @@ func TestBuildJob_BasicTask(t *testing.T) {
 	}
 
 	// Verify labels
-	if job.Labels["app"] != "kubetask" {
-		t.Errorf("Job.Labels[app] = %q, want %q", job.Labels["app"], "kubetask")
+	if job.Labels["app"] != "kubeopencode" {
+		t.Errorf("Job.Labels[app] = %q, want %q", job.Labels["app"], "kubeopencode")
 	}
-	if job.Labels["kubetask.io/task"] != "test-task" {
-		t.Errorf("Job.Labels[kubetask.io/task] = %q, want %q", job.Labels["kubetask.io/task"], "test-task")
+	if job.Labels["kubeopencode.io/task"] != "test-task" {
+		t.Errorf("Job.Labels[kubeopencode.io/task] = %q, want %q", job.Labels["kubeopencode.io/task"], "test-task")
 	}
 
 	// Verify owner reference
@@ -306,14 +306,14 @@ func stringPtr(s string) *string {
 }
 
 func TestBuildJob_WithCredentials(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       types.UID("test-uid"),
 		},
 	}
-	task.APIVersion = "kubetask.io/v1alpha1"
+	task.APIVersion = "kubeopencode.io/v1alpha1"
 	task.Kind = "Task"
 
 	envName := "API_TOKEN"
@@ -324,10 +324,10 @@ func TestBuildJob_WithCredentials(t *testing.T) {
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
-		credentials: []kubetaskv1alpha1.Credential{
+		credentials: []kubeopenv1alpha1.Credential{
 			{
 				Name: "api-token",
-				SecretRef: kubetaskv1alpha1.SecretReference{
+				SecretRef: kubeopenv1alpha1.SecretReference{
 					Name: "my-secret",
 					Key:  stringPtr("token"),
 				},
@@ -335,7 +335,7 @@ func TestBuildJob_WithCredentials(t *testing.T) {
 			},
 			{
 				Name: "ssh-key",
-				SecretRef: kubetaskv1alpha1.SecretReference{
+				SecretRef: kubeopenv1alpha1.SecretReference{
 					Name: "ssh-secret",
 					Key:  stringPtr("private-key"),
 				},
@@ -393,14 +393,14 @@ func TestBuildJob_WithCredentials(t *testing.T) {
 }
 
 func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       types.UID("test-uid"),
 		},
 	}
-	task.APIVersion = "kubetask.io/v1alpha1"
+	task.APIVersion = "kubeopencode.io/v1alpha1"
 	task.Kind = "Task"
 
 	cfg := agentConfig{
@@ -408,11 +408,11 @@ func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
-		credentials: []kubetaskv1alpha1.Credential{
+		credentials: []kubeopenv1alpha1.Credential{
 			{
 				// No Key specified - mount entire secret as env vars
 				Name: "api-keys",
-				SecretRef: kubetaskv1alpha1.SecretReference{
+				SecretRef: kubeopenv1alpha1.SecretReference{
 					Name: "api-credentials",
 					// Key is nil - entire secret should be mounted
 				},
@@ -438,14 +438,14 @@ func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
 }
 
 func TestBuildJob_WithMixedCredentials(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       types.UID("test-uid"),
 		},
 	}
-	task.APIVersion = "kubetask.io/v1alpha1"
+	task.APIVersion = "kubeopencode.io/v1alpha1"
 	task.Kind = "Task"
 
 	envName := "GITHUB_TOKEN"
@@ -455,18 +455,18 @@ func TestBuildJob_WithMixedCredentials(t *testing.T) {
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
-		credentials: []kubetaskv1alpha1.Credential{
+		credentials: []kubeopenv1alpha1.Credential{
 			{
 				// Entire secret mount (no key)
 				Name: "all-api-keys",
-				SecretRef: kubetaskv1alpha1.SecretReference{
+				SecretRef: kubeopenv1alpha1.SecretReference{
 					Name: "api-credentials",
 				},
 			},
 			{
 				// Single key mount with env rename
 				Name: "github-token",
-				SecretRef: kubetaskv1alpha1.SecretReference{
+				SecretRef: kubeopenv1alpha1.SecretReference{
 					Name: "github-secret",
 					Key:  stringPtr("token"),
 				},
@@ -510,14 +510,14 @@ func TestBuildJob_WithMixedCredentials(t *testing.T) {
 }
 
 func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       types.UID("test-uid"),
 		},
 	}
-	task.APIVersion = "kubetask.io/v1alpha1"
+	task.APIVersion = "kubeopencode.io/v1alpha1"
 	task.Kind = "Task"
 
 	mountPath := "/etc/ssl/certs"
@@ -528,11 +528,11 @@ func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
-		credentials: []kubetaskv1alpha1.Credential{
+		credentials: []kubeopenv1alpha1.Credential{
 			{
 				// No Key specified + MountPath = mount entire secret as directory
 				Name: "tls-certs",
-				SecretRef: kubetaskv1alpha1.SecretReference{
+				SecretRef: kubeopenv1alpha1.SecretReference{
 					Name: "tls-certificates",
 					// Key is nil - entire secret should be mounted as directory
 				},
@@ -597,14 +597,14 @@ func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
 }
 
 func TestBuildJob_WithPodScheduling(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       types.UID("test-uid"),
 		},
 	}
-	task.APIVersion = "kubetask.io/v1alpha1"
+	task.APIVersion = "kubeopencode.io/v1alpha1"
 	task.Kind = "Task"
 
 	runtimeClass := "gvisor"
@@ -613,11 +613,11 @@ func TestBuildJob_WithPodScheduling(t *testing.T) {
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
-		podSpec: &kubetaskv1alpha1.AgentPodSpec{
+		podSpec: &kubeopenv1alpha1.AgentPodSpec{
 			Labels: map[string]string{
 				"custom-label": "custom-value",
 			},
-			Scheduling: &kubetaskv1alpha1.PodScheduling{
+			Scheduling: &kubeopenv1alpha1.PodScheduling{
 				NodeSelector: map[string]string{
 					"node-type": "gpu",
 				},
@@ -662,20 +662,20 @@ func TestBuildJob_WithPodScheduling(t *testing.T) {
 		t.Errorf("PodLabels[custom-label] = %q, want %q", podLabels["custom-label"], "custom-value")
 	}
 	// Verify base labels are still present
-	if podLabels["app"] != "kubetask" {
-		t.Errorf("PodLabels[app] = %q, want %q", podLabels["app"], "kubetask")
+	if podLabels["app"] != "kubeopencode" {
+		t.Errorf("PodLabels[app] = %q, want %q", podLabels["app"], "kubeopencode")
 	}
 }
 
 func TestBuildJob_WithContextConfigMap(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       types.UID("test-uid"),
 		},
 	}
-	task.APIVersion = "kubetask.io/v1alpha1"
+	task.APIVersion = "kubeopencode.io/v1alpha1"
 	task.Kind = "Task"
 
 	cfg := agentConfig{
@@ -769,14 +769,14 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 }
 
 func TestBuildJob_WithDirMounts(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       types.UID("test-uid"),
 		},
 	}
-	task.APIVersion = "kubetask.io/v1alpha1"
+	task.APIVersion = "kubeopencode.io/v1alpha1"
 	task.Kind = "Task"
 
 	cfg := agentConfig{
@@ -860,14 +860,14 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 }
 
 func TestBuildJob_WithGitMounts(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       "test-uid",
 		},
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "kubetask.io/v1alpha1",
+			APIVersion: "kubeopencode.io/v1alpha1",
 			Kind:       "Task",
 		},
 	}
@@ -902,8 +902,8 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 	if initContainer.Name != "git-init-0" {
 		t.Errorf("Init container name = %q, want %q", initContainer.Name, "git-init-0")
 	}
-	if initContainer.Image != DefaultKubeTaskImage {
-		t.Errorf("Init container image = %q, want %q", initContainer.Image, DefaultKubeTaskImage)
+	if initContainer.Image != DefaultKubeOpenCodeImage {
+		t.Errorf("Init container image = %q, want %q", initContainer.Image, DefaultKubeOpenCodeImage)
 	}
 
 	// Verify environment variables
@@ -950,14 +950,14 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 }
 
 func TestBuildJob_WithGitMountsAndAuth(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       "test-uid",
 		},
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "kubetask.io/v1alpha1",
+			APIVersion: "kubeopencode.io/v1alpha1",
 			Kind:       "Task",
 		},
 	}
@@ -1038,8 +1038,8 @@ func TestBuildGitInitContainer(t *testing.T) {
 		t.Errorf("Container name = %q, want %q", container.Name, "git-init-0")
 	}
 
-	if container.Image != DefaultKubeTaskImage {
-		t.Errorf("Container image = %q, want %q", container.Image, DefaultKubeTaskImage)
+	if container.Image != DefaultKubeOpenCodeImage {
+		t.Errorf("Container image = %q, want %q", container.Image, DefaultKubeOpenCodeImage)
 	}
 
 	// Check env vars
@@ -1149,16 +1149,16 @@ func TestBuildContextInitContainer(t *testing.T) {
 			}
 
 			// Verify image
-			if container.Image != DefaultKubeTaskImage {
-				t.Errorf("Container.Image = %q, want %q", container.Image, DefaultKubeTaskImage)
+			if container.Image != DefaultKubeOpenCodeImage {
+				t.Errorf("Container.Image = %q, want %q", container.Image, DefaultKubeOpenCodeImage)
 			}
 
-			// Verify command uses /kubetask context-init
+			// Verify command uses /kubeopencode context-init
 			if len(container.Command) != 2 {
 				t.Fatalf("len(Container.Command) = %d, want 2", len(container.Command))
 			}
-			if container.Command[0] != "/kubetask" {
-				t.Errorf("Container.Command[0] = %q, want %q", container.Command[0], "/kubetask")
+			if container.Command[0] != "/kubeopencode" {
+				t.Errorf("Container.Command[0] = %q, want %q", container.Command[0], "/kubeopencode")
 			}
 			if container.Command[1] != "context-init" {
 				t.Errorf("Container.Command[1] = %q, want %q", container.Command[1], "context-init")
@@ -1199,14 +1199,14 @@ func TestBuildContextInitContainer(t *testing.T) {
 // TestBuildJob_WithExternalFileMounts tests that files mounted outside of /workspace
 // are properly handled by creating shared emptyDir volumes.
 func TestBuildJob_WithExternalFileMounts(t *testing.T) {
-	task := &kubetaskv1alpha1.Task{
+	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
 			Namespace: "default",
 			UID:       types.UID("test-uid"),
 		},
 	}
-	task.APIVersion = "kubetask.io/v1alpha1"
+	task.APIVersion = "kubeopencode.io/v1alpha1"
 	task.Kind = "Task"
 
 	cfg := agentConfig{

@@ -1,13 +1,13 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 # Kustomization for Argo Events resources.
-# These resources replace the KubeTask WebhookTrigger functionality.
+# These resources replace the KubeOpenCode WebhookTrigger functionality.
 #
 # Prerequisites:
 # 1. Install Argo Events: https://argoproj.github.io/argo-events/installation/
 # 2. Ensure the EventBus controller is running
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: kubetask-system
+namespace: kubeopencode-system
 resources:
   - eventbus.yaml
   - rbac.yaml

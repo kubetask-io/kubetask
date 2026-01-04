@@ -1,4 +1,4 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 # ConfigMap containing GitHub App scripts
 # - github-app-iat.sh: Generate Installation Access Token (for custom gh commands)
 # - github.sh: High-level operations (push, PR creation)
@@ -7,7 +7,7 @@ kind: ConfigMap
 metadata:
   name: github-scripts
   labels:
-    app.kubernetes.io/name: kubetask
+    app.kubernetes.io/name: kubeopencode
 data:
   # Script 1: Generate GitHub App Installation Access Token
   # Usage: github-app-iat.sh <client_id> <private_key_file> <installation_id>
@@ -163,7 +163,7 @@ data:
     do_pr() {
         local branch="$1"
         local title="$2"
-        local body="${3:-Created by KubeTask Agent}"
+        local body="${3:-Created by KubeOpenCode Agent}"
 
         [ -z "$branch" ] || [ -z "$title" ] && { log_error "Usage: $0 pr <branch> <title> [body]"; exit 1; }
 
@@ -189,7 +189,7 @@ data:
     do_push_and_pr() {
         local branch="$1"
         local title="$2"
-        local body="${3:-Created by KubeTask Agent}"
+        local body="${3:-Created by KubeOpenCode Agent}"
 
         [ -z "$branch" ] || [ -z "$title" ] && { log_error "Usage: $0 push-and-pr <branch> <title> [body]"; exit 1; }
 

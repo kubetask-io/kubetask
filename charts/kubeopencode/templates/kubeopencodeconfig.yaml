@@ -1,19 +1,19 @@
-{{- if .Values.kubetaskConfig.create }}
-apiVersion: kubetask.io/v1alpha1
-kind: KubeTaskConfig
+{{- if .Values.kubeopencodeConfig.create }}
+apiVersion: kubeopencode.io/v1alpha1
+kind: KubeOpenCodeConfig
 metadata:
   name: default
-  namespace: {{ include "kubetask.namespace" . }}
+  namespace: {{ include "kubeopencode.namespace" . }}
   labels:
-    {{- include "kubetask.labels" . | nindent 4 }}
+    {{- include "kubeopencode.labels" . | nindent 4 }}
 spec:
-  {{- if .Values.kubetaskConfig.systemImage }}
+  {{- if .Values.kubeopencodeConfig.systemImage }}
   systemImage:
-    {{- if .Values.kubetaskConfig.systemImage.image }}
-    image: {{ .Values.kubetaskConfig.systemImage.image | quote }}
+    {{- if .Values.kubeopencodeConfig.systemImage.image }}
+    image: {{ .Values.kubeopencodeConfig.systemImage.image | quote }}
     {{- end }}
-    {{- if .Values.kubetaskConfig.systemImage.imagePullPolicy }}
-    imagePullPolicy: {{ .Values.kubetaskConfig.systemImage.imagePullPolicy }}
+    {{- if .Values.kubeopencodeConfig.systemImage.imagePullPolicy }}
+    imagePullPolicy: {{ .Values.kubeopencodeConfig.systemImage.imagePullPolicy }}
     {{- end }}
   {{- end }}
 {{- end }}

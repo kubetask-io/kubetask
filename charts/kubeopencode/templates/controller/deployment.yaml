@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "kubetask.fullname" . }}-controller
-  namespace: {{ include "kubetask.namespace" . }}
+  name: {{ include "kubeopencode.fullname" . }}-controller
+  namespace: {{ include "kubeopencode.namespace" . }}
   labels:
-    {{- include "kubetask.controller.labels" . | nindent 4 }}
+    {{- include "kubeopencode.controller.labels" . | nindent 4 }}
   {{- with .Values.commonAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -13,11 +13,11 @@ spec:
   replicas: {{ .Values.controller.replicas }}
   selector:
     matchLabels:
-      {{- include "kubetask.controller.selectorLabels" . | nindent 6 }}
+      {{- include "kubeopencode.controller.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "kubetask.controller.selectorLabels" . | nindent 8 }}
+        {{- include "kubeopencode.controller.selectorLabels" . | nindent 8 }}
       annotations:
         kubectl.kubernetes.io/default-container: controller
     spec:
@@ -25,15 +25,15 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "kubetask.controller.serviceAccountName" . }}
+      serviceAccountName: {{ include "kubeopencode.controller.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.controller.podSecurityContext | nindent 8 }}
       containers:
       - name: controller
-        image: {{ include "kubetask.controller.image" . }}
+        image: {{ include "kubeopencode.controller.image" . }}
         imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
         command:
-        - /kubetask
+        - /kubeopencode
         - controller
         args:
         - --leader-elect

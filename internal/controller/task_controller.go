@@ -1,6 +1,6 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
-// Package controller implements Kubernetes controllers for KubeTask resources
+// Package controller implements Kubernetes controllers for KubeOpenCode resources
 package controller
 
 import (
@@ -21,30 +21,30 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kubetaskv1alpha1 "github.com/kubetask/kubetask/api/v1alpha1"
+	kubeopenv1alpha1 "github.com/kubeopencode/kubeopencode/api/v1alpha1"
 )
 
 const (
 	// DefaultAgentImage is the default agent container image
-	DefaultAgentImage = "quay.io/kubetask/kubetask-agent-gemini:latest"
+	DefaultAgentImage = "quay.io/kubeopencode/kubeopencode-agent-gemini:latest"
 
 	// ContextConfigMapSuffix is the suffix for ConfigMap names created for context
 	ContextConfigMapSuffix = "-context"
 
 	// AgentLabelKey is the label key used to identify which Agent a Task uses
-	AgentLabelKey = "kubetask.io/agent"
+	AgentLabelKey = "kubeopencode.io/agent"
 
 	// DefaultQueuedRequeueDelay is the default delay for requeuing queued Tasks
 	DefaultQueuedRequeueDelay = 10 * time.Second
 
 	// AnnotationStop is the annotation key for user-initiated task stop
-	AnnotationStop = "kubetask.io/stop"
+	AnnotationStop = "kubeopencode.io/stop"
 
 	// RuntimeSystemPrompt is the system prompt injected when Runtime context is enabled.
-	// It provides KubeTask platform awareness to the agent.
-	RuntimeSystemPrompt = `## KubeTask Runtime Context
+	// It provides KubeOpenCode platform awareness to the agent.
+	RuntimeSystemPrompt = `## KubeOpenCode Runtime Context
 
-You are running as an AI agent inside a Kubernetes Pod, managed by KubeTask.
+You are running as an AI agent inside a Kubernetes Pod, managed by KubeOpenCode.
 
 ### Environment Variables
 - TASK_NAME: Name of the current Task CR
@@ -62,7 +62,7 @@ To get Task status:
 - ${WORKSPACE_DIR}/task.md: Your task instructions (this file)
 - Additional contexts may be mounted as separate files or appended below
 
-### KubeTask Concepts
+### KubeOpenCode Concepts
 - Task: Single AI task execution (what you're running now)
 - Agent: Configuration for how tasks are executed (image, credentials, etc.)
 `
@@ -74,12 +74,12 @@ type TaskReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=kubetask.io,resources=tasks,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=kubetask.io,resources=tasks/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=kubetask.io,resources=tasks/finalizers,verbs=update
-// +kubebuilder:rbac:groups=kubetask.io,resources=agents,verbs=get;list;watch
-// +kubebuilder:rbac:groups=kubetask.io,resources=contexts,verbs=get;list;watch
-// +kubebuilder:rbac:groups=kubetask.io,resources=kubetaskconfigs,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kubeopencode.io,resources=tasks,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=kubeopencode.io,resources=tasks/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=kubeopencode.io,resources=tasks/finalizers,verbs=update
+// +kubebuilder:rbac:groups=kubeopencode.io,resources=agents,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kubeopencode.io,resources=contexts,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kubeopencode.io,resources=kubeopencodeconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
@@ -90,7 +90,7 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	log := log.FromContext(ctx)
 
 	// Get Task CR
-	task := &kubetaskv1alpha1.Task{}
+	task := &kubeopenv1alpha1.Task{}
 	if err := r.Get(ctx, req.NamespacedName, task); err != nil {
 		if errors.IsNotFound(err) {
 			// Task deleted, nothing to do
@@ -106,18 +106,18 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	// If queued, check if capacity is available
-	if task.Status.Phase == kubetaskv1alpha1.TaskPhaseQueued {
+	if task.Status.Phase == kubeopenv1alpha1.TaskPhaseQueued {
 		return r.handleQueuedTask(ctx, task)
 	}
 
 	// If completed/failed, nothing to do
-	if task.Status.Phase == kubetaskv1alpha1.TaskPhaseCompleted ||
-		task.Status.Phase == kubetaskv1alpha1.TaskPhaseFailed {
+	if task.Status.Phase == kubeopenv1alpha1.TaskPhaseCompleted ||
+		task.Status.Phase == kubeopenv1alpha1.TaskPhaseFailed {
 		return ctrl.Result{}, nil
 	}
 
 	// Check for user-initiated stop (only for Running tasks)
-	if task.Status.Phase == kubetaskv1alpha1.TaskPhaseRunning {
+	if task.Status.Phase == kubeopenv1alpha1.TaskPhaseRunning {
 		if task.Annotations != nil && task.Annotations[AnnotationStop] == "true" {
 			return r.handleStop(ctx, task)
 		}
@@ -133,7 +133,7 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 }
 
 // initializeTask initializes a new Task and creates its Job
-func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
+func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// Get agent configuration with name
@@ -142,7 +142,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		log.Error(err, "unable to get Agent")
 		// Update task status to Failed
 		task.Status.ObservedGeneration = task.Generation
-		task.Status.Phase = kubetaskv1alpha1.TaskPhaseFailed
+		task.Status.Phase = kubeopenv1alpha1.TaskPhaseFailed
 		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
 			Type:    "Ready",
 			Status:  metav1.ConditionFalse,
@@ -188,7 +188,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 			log.Info("agent at capacity, queueing task", "agent", agentName, "maxConcurrent", *agentConfig.maxConcurrentTasks)
 
 			task.Status.ObservedGeneration = task.Generation
-			task.Status.Phase = kubetaskv1alpha1.TaskPhaseQueued
+			task.Status.Phase = kubeopenv1alpha1.TaskPhaseQueued
 
 			meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
 				Type:    "Queued",
@@ -217,7 +217,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		// Job already exists, update status
 		task.Status.ObservedGeneration = task.Generation
 		task.Status.JobName = jobName
-		task.Status.Phase = kubetaskv1alpha1.TaskPhaseRunning
+		task.Status.Phase = kubeopenv1alpha1.TaskPhaseRunning
 		now := metav1.Now()
 		task.Status.StartTime = &now
 		return ctrl.Result{}, r.Status().Update(ctx, task)
@@ -233,7 +233,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 		log.Error(err, "unable to process contexts")
 		// Update task status to Failed - context errors are user configuration issues
 		task.Status.ObservedGeneration = task.Generation
-		task.Status.Phase = kubetaskv1alpha1.TaskPhaseFailed
+		task.Status.Phase = kubeopenv1alpha1.TaskPhaseFailed
 		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
 			Type:    "Ready",
 			Status:  metav1.ConditionFalse,
@@ -271,7 +271,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 	// Update status
 	task.Status.ObservedGeneration = task.Generation
 	task.Status.JobName = jobName
-	task.Status.Phase = kubetaskv1alpha1.TaskPhaseRunning
+	task.Status.Phase = kubeopenv1alpha1.TaskPhaseRunning
 	now := metav1.Now()
 	task.Status.StartTime = &now
 
@@ -285,7 +285,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubetaskv1alp
 }
 
 // updateTaskStatusFromJob syncs task status from Job status
-func (r *TaskReconciler) updateTaskStatusFromJob(ctx context.Context, task *kubetaskv1alpha1.Task) error {
+func (r *TaskReconciler) updateTaskStatusFromJob(ctx context.Context, task *kubeopenv1alpha1.Task) error {
 	log := log.FromContext(ctx)
 
 	if task.Status.JobName == "" {
@@ -306,14 +306,14 @@ func (r *TaskReconciler) updateTaskStatusFromJob(ctx context.Context, task *kube
 	// Check Job completion
 	if job.Status.Succeeded > 0 {
 		task.Status.ObservedGeneration = task.Generation
-		task.Status.Phase = kubetaskv1alpha1.TaskPhaseCompleted
+		task.Status.Phase = kubeopenv1alpha1.TaskPhaseCompleted
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
 		log.Info("task completed", "job", task.Status.JobName)
 		return r.Status().Update(ctx, task)
 	} else if job.Status.Failed > 0 {
 		task.Status.ObservedGeneration = task.Generation
-		task.Status.Phase = kubetaskv1alpha1.TaskPhaseFailed
+		task.Status.Phase = kubeopenv1alpha1.TaskPhaseFailed
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
 		log.Info("task failed", "job", task.Status.JobName)
@@ -326,14 +326,14 @@ func (r *TaskReconciler) updateTaskStatusFromJob(ctx context.Context, task *kube
 // SetupWithManager sets up the controller with the Manager
 func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kubetaskv1alpha1.Task{}).
+		For(&kubeopenv1alpha1.Task{}).
 		Owns(&batchv1.Job{}).
 		Complete(r)
 }
 
 // getAgentConfigWithName retrieves the agent configuration and returns the agent name.
 // This is useful when we need to track which agent a task is using.
-func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubetaskv1alpha1.Task) (agentConfig, string, error) {
+func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubeopenv1alpha1.Task) (agentConfig, string, error) {
 	log := log.FromContext(ctx)
 
 	// Determine which Agent to use
@@ -343,7 +343,7 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubet
 	}
 
 	// Get Agent
-	agent := &kubetaskv1alpha1.Agent{}
+	agent := &kubeopenv1alpha1.Agent{}
 	agentKey := types.NamespacedName{
 		Name:      agentName,
 		Namespace: task.Namespace,
@@ -387,7 +387,7 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubet
 //  1. Task.description (appears first in task.md)
 //  2. Agent.contexts (Agent-level contexts)
 //  3. Task.contexts (Task-specific contexts, appears last)
-func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubetaskv1alpha1.Task, cfg agentConfig) (*corev1.ConfigMap, []fileMount, []dirMount, []gitMount, error) {
+func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubeopenv1alpha1.Task, cfg agentConfig) (*corev1.ConfigMap, []fileMount, []dirMount, []gitMount, error) {
 	var resolved []resolvedContext
 	var dirMounts []dirMount
 	var gitMounts []gitMount
@@ -474,8 +474,8 @@ func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubetaskv
 				Name:      configMapName,
 				Namespace: task.Namespace,
 				Labels: map[string]string{
-					"app":              "kubetask",
-					"kubetask.io/task": task.Name,
+					"app":              "kubeopencode",
+					"kubeopencode.io/task": task.Name,
 				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
@@ -531,24 +531,24 @@ func validateMountPathConflicts(fileMounts []fileMount, dirMounts []dirMount, gi
 }
 
 // resolveContextItem resolves a ContextItem to its content, directory mount, or git mount.
-func (r *TaskReconciler) resolveContextItem(ctx context.Context, item *kubetaskv1alpha1.ContextItem, defaultNS, workspaceDir string) (*resolvedContext, *dirMount, *gitMount, error) {
+func (r *TaskReconciler) resolveContextItem(ctx context.Context, item *kubeopenv1alpha1.ContextItem, defaultNS, workspaceDir string) (*resolvedContext, *dirMount, *gitMount, error) {
 	// Validate: Git context requires mountPath to be specified
 	// Without mountPath, multiple Git contexts would conflict with the default "git-context" path.
-	if item.Type == kubetaskv1alpha1.ContextTypeGit && item.MountPath == "" {
+	if item.Type == kubeopenv1alpha1.ContextTypeGit && item.MountPath == "" {
 		return nil, nil, nil, fmt.Errorf("Git context requires mountPath to be specified")
 	}
 
 	// Use a generated name for contexts
 	// For Runtime context, use "runtime" as a more descriptive name
 	name := "context"
-	if item.Type == kubetaskv1alpha1.ContextTypeRuntime {
+	if item.Type == kubeopenv1alpha1.ContextTypeRuntime {
 		name = "runtime"
 	}
 
 	// Resolve mountPath: relative paths are prefixed with workspaceDir
 	// Note: For Runtime context, mountPath is ignored - content is always appended to task.md
 	resolvedPath := resolveMountPath(item.MountPath, workspaceDir)
-	if item.Type == kubetaskv1alpha1.ContextTypeRuntime {
+	if item.Type == kubeopenv1alpha1.ContextTypeRuntime {
 		resolvedPath = "" // Force empty to ensure content is appended to task.md
 	}
 
@@ -592,15 +592,15 @@ func resolveMountPath(mountPath, workspaceDir string) string {
 
 // resolveContextContent resolves content from a ContextItem.
 // Returns: content string, dirMount pointer, gitMount pointer, error
-func (r *TaskReconciler) resolveContextContent(ctx context.Context, namespace, name, workspaceDir string, item *kubetaskv1alpha1.ContextItem, mountPath string) (string, *dirMount, *gitMount, error) {
+func (r *TaskReconciler) resolveContextContent(ctx context.Context, namespace, name, workspaceDir string, item *kubeopenv1alpha1.ContextItem, mountPath string) (string, *dirMount, *gitMount, error) {
 	switch item.Type {
-	case kubetaskv1alpha1.ContextTypeText:
+	case kubeopenv1alpha1.ContextTypeText:
 		if item.Text == "" {
 			return "", nil, nil, nil
 		}
 		return item.Text, nil, nil, nil
 
-	case kubetaskv1alpha1.ContextTypeConfigMap:
+	case kubeopenv1alpha1.ContextTypeConfigMap:
 		if item.ConfigMap == nil {
 			return "", nil, nil, nil
 		}
@@ -629,7 +629,7 @@ func (r *TaskReconciler) resolveContextContent(ctx context.Context, namespace, n
 		content, err := r.getConfigMapAllKeys(ctx, namespace, cm.Name, cm.Optional)
 		return content, nil, nil, err
 
-	case kubetaskv1alpha1.ContextTypeGit:
+	case kubeopenv1alpha1.ContextTypeGit:
 		if item.Git == nil {
 			return "", nil, nil, nil
 		}
@@ -669,7 +669,7 @@ func (r *TaskReconciler) resolveContextContent(ctx context.Context, namespace, n
 			secretName:  secretName,
 		}, nil
 
-	case kubetaskv1alpha1.ContextTypeRuntime:
+	case kubeopenv1alpha1.ContextTypeRuntime:
 		// Runtime context returns the hardcoded system prompt
 		// MountPath is ignored for Runtime context - content is always appended to task.md
 		return RuntimeSystemPrompt, nil, nil, nil
@@ -731,7 +731,7 @@ func (r *TaskReconciler) checkAgentCapacity(ctx context.Context, namespace, agen
 	log := log.FromContext(ctx)
 
 	// List all Tasks for this Agent using label selector
-	taskList := &kubetaskv1alpha1.TaskList{}
+	taskList := &kubeopenv1alpha1.TaskList{}
 	listOpts := []client.ListOption{
 		client.InNamespace(namespace),
 		client.MatchingLabels{AgentLabelKey: agentName},
@@ -746,7 +746,7 @@ func (r *TaskReconciler) checkAgentCapacity(ctx context.Context, namespace, agen
 	for i := range taskList.Items {
 		task := &taskList.Items[i]
 		// Count tasks that are Running
-		if task.Status.Phase == kubetaskv1alpha1.TaskPhaseRunning {
+		if task.Status.Phase == kubeopenv1alpha1.TaskPhaseRunning {
 			runningCount++
 		}
 	}
@@ -757,7 +757,7 @@ func (r *TaskReconciler) checkAgentCapacity(ctx context.Context, namespace, agen
 }
 
 // handleQueuedTask checks if a queued task can now be started
-func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
+func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubeopenv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// Get agent configuration with name
@@ -765,7 +765,7 @@ func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubetaskv1a
 	if err != nil {
 		log.Error(err, "unable to get Agent for queued task")
 		// Agent might be deleted, fail the task
-		task.Status.Phase = kubetaskv1alpha1.TaskPhaseFailed
+		task.Status.Phase = kubeopenv1alpha1.TaskPhaseFailed
 		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
 			Type:    "Ready",
 			Status:  metav1.ConditionFalse,
@@ -831,7 +831,7 @@ func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubetaskv1a
 // handleStop handles user-initiated task stop via annotation.
 // It suspends the Job which triggers graceful termination of running Pods via SIGTERM.
 // The Job and Pod are preserved (not deleted) so logs remain accessible.
-func (r *TaskReconciler) handleStop(ctx context.Context, task *kubetaskv1alpha1.Task) (ctrl.Result, error) {
+func (r *TaskReconciler) handleStop(ctx context.Context, task *kubeopenv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	log.Info("user-initiated stop detected", "task", task.Name)
 
@@ -856,7 +856,7 @@ func (r *TaskReconciler) handleStop(ctx context.Context, task *kubetaskv1alpha1.
 	}
 
 	// Update Task status to Completed with Stopped condition
-	task.Status.Phase = kubetaskv1alpha1.TaskPhaseCompleted
+	task.Status.Phase = kubeopenv1alpha1.TaskPhaseCompleted
 	task.Status.ObservedGeneration = task.Generation
 	now := metav1.Now()
 	task.Status.CompletionTime = &now
@@ -865,7 +865,7 @@ func (r *TaskReconciler) handleStop(ctx context.Context, task *kubetaskv1alpha1.
 		Type:    "Stopped",
 		Status:  metav1.ConditionTrue,
 		Reason:  "UserStopped",
-		Message: "Task stopped by user via kubetask.io/stop annotation",
+		Message: "Task stopped by user via kubeopencode.io/stop annotation",
 	})
 
 	if err := r.Status().Update(ctx, task); err != nil {
@@ -876,25 +876,25 @@ func (r *TaskReconciler) handleStop(ctx context.Context, task *kubetaskv1alpha1.
 	return ctrl.Result{}, nil
 }
 
-// getSystemConfig retrieves the system configuration from KubeTaskConfig.
-// It looks for config in KubeTaskConfig named "default" in the task's namespace.
+// getSystemConfig retrieves the system configuration from KubeOpenCodeConfig.
+// It looks for config in KubeOpenCodeConfig named "default" in the task's namespace.
 // Returns a systemConfig with defaults if no config is found.
 func (r *TaskReconciler) getSystemConfig(ctx context.Context, namespace string) systemConfig {
 	log := log.FromContext(ctx)
 
 	// Default configuration
 	cfg := systemConfig{
-		systemImage:           DefaultKubeTaskImage,
+		systemImage:           DefaultKubeOpenCodeImage,
 		systemImagePullPolicy: corev1.PullIfNotPresent,
 	}
 
-	// Try to get KubeTaskConfig from the task's namespace
-	config := &kubetaskv1alpha1.KubeTaskConfig{}
+	// Try to get KubeOpenCodeConfig from the task's namespace
+	config := &kubeopenv1alpha1.KubeOpenCodeConfig{}
 	configKey := types.NamespacedName{Name: "default", Namespace: namespace}
 
 	if err := r.Get(ctx, configKey, config); err != nil {
 		if !errors.IsNotFound(err) {
-			log.Error(err, "unable to get KubeTaskConfig for system config, using defaults")
+			log.Error(err, "unable to get KubeOpenCodeConfig for system config, using defaults")
 		}
 		// Config not found, use defaults
 		return cfg

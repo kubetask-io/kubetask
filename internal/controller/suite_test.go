@@ -1,4 +1,4 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
 //go:build integration
 
@@ -12,7 +12,7 @@
 // Alternative approaches like placing tests in a separate directory (e.g., test/integration/)
 // would separate tests from the code they test, making maintenance harder.
 
-// Package controller implements Kubernetes controllers for KubeTask resources
+// Package controller implements Kubernetes controllers for KubeOpenCode resources
 package controller
 
 import (
@@ -34,7 +34,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	kubetaskv1alpha1 "github.com/kubetask/kubetask/api/v1alpha1"
+	kubeopenv1alpha1 "github.com/kubeopencode/kubeopencode/api/v1alpha1"
 )
 
 var (
@@ -73,7 +73,7 @@ var _ = BeforeSuite(func() {
 	Expect(cfg).NotTo(BeNil())
 
 	scheme = runtime.NewScheme()
-	err = kubetaskv1alpha1.AddToScheme(scheme)
+	err = kubeopenv1alpha1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = corev1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -104,12 +104,12 @@ var _ = BeforeSuite(func() {
 
 	// Create default Agent for tests that don't specify one
 	By("Creating default Agent")
-	defaultAgent := &kubetaskv1alpha1.Agent{
+	defaultAgent := &kubeopenv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "default",
 			Namespace: "default",
 		},
-		Spec: kubetaskv1alpha1.AgentSpec{
+		Spec: kubeopenv1alpha1.AgentSpec{
 			ServiceAccountName: "test-agent",
 			WorkspaceDir:       "/workspace",
 			Command:            []string{"sh", "-c", "echo 'default agent'"},

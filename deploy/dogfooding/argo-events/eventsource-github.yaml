@@ -1,23 +1,23 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 # EventSource for receiving GitHub webhooks.
 # GitHub sends webhooks to this endpoint, which are then published to the EventBus.
 apiVersion: argoproj.io/v1alpha1
 kind: EventSource
 metadata:
   name: github
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   service:
     ports:
       - port: 12000
         targetPort: 12000
   github:
-    kubetask:
+    kubeopencode:
       # Repository configuration
       repositories:
-        - owner: kubetask
+        - owner: kubeopencode
           names:
-            - kubetask
+            - kubeopencode
       # Webhook endpoint configuration
       webhook:
         endpoint: /webhooks/github

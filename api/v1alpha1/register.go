@@ -1,8 +1,8 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
-// Package v1alpha1 contains API Schema definitions for the kubetask v1alpha1 API group
+// Package v1alpha1 contains API Schema definitions for the kubeopencode v1alpha1 API group
 // +kubebuilder:object:generate=true
-// +groupName=kubetask.io
+// +groupName=kubeopencode.io
 package v1alpha1
 
 import (
@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	// GroupName is the group name for the kubetask API
-	GroupName = "kubetask.io"
+	// GroupName is the group name for the kubeopencode API
+	GroupName = "kubeopencode.io"
 	// GroupVersion is group version used to register these objects
 	GroupVersion  = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 	schemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
@@ -41,8 +41,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&TaskList{},
 		&Agent{},
 		&AgentList{},
-		&KubeTaskConfig{},
-		&KubeTaskConfigList{},
+		&KubeOpenCodeConfig{},
+		&KubeOpenCodeConfigList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

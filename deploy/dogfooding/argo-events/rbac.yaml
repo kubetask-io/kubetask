@@ -1,18 +1,18 @@
-# Copyright Contributors to the KubeTask project
-# RBAC for Argo Events Sensor to create KubeTask Tasks.
+# Copyright Contributors to the KubeOpenCode project
+# RBAC for Argo Events Sensor to create KubeOpenCode Tasks.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: argo-events-sensor
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: kubetask-task-creator
-  namespace: kubetask-system
+  name: kubeopencode-task-creator
+  namespace: kubeopencode-system
 rules:
-  - apiGroups: ["kubetask.io"]
+  - apiGroups: ["kubeopencode.io"]
     resources: ["tasks"]
     verbs: ["create", "get", "list", "watch"]
 ---
@@ -20,12 +20,12 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: argo-events-sensor-task-creator
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: kubetask-task-creator
+  name: kubeopencode-task-creator
 subjects:
   - kind: ServiceAccount
     name: argo-events-sensor
-    namespace: kubetask-system
+    namespace: kubeopencode-system

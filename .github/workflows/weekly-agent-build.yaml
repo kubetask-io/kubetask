@@ -1,4 +1,4 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 name: Weekly Agent Build
 
 on:
@@ -10,138 +10,17 @@ on:
 
 env:
   IMG_REGISTRY: quay.io
-  IMG_ORG: kubetask
+  IMG_ORG: kubeopencode
 
 jobs:
-  # Build and push base agent image first (other agents depend on it)
   # Note: All builds use no-cache to ensure fresh installation of CLI tools.
   # This is necessary because agent Dockerfiles use dynamic installation methods
   # (e.g., curl | bash, npm install without version) that don't trigger cache
   # invalidation when upstream packages are updated.
-  build-agent-base:
-    name: Build Agent Base
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Quay.io
-        uses: docker/login-action@v3
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_ROBOT_ACCOUNT }}
-          password: ${{ secrets.QUAY_TOKEN }}
-
-      - name: Build and push base agent image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./agents/base
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-base:latest
-          no-cache: true
-
-  # Build all agent images in parallel after base is ready
-  build-agent-gemini:
-    name: Build Agent Gemini
-    runs-on: ubuntu-latest
-    needs: [build-agent-base]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Quay.io
-        uses: docker/login-action@v3
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_ROBOT_ACCOUNT }}
-          password: ${{ secrets.QUAY_TOKEN }}
-
-      - name: Build and push gemini agent
-        uses: docker/build-push-action@v6
-        with:
-          context: ./agents/gemini
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-gemini:latest
-          no-cache: true
-
-  build-agent-echo:
-    name: Build Agent Echo
-    runs-on: ubuntu-latest
-    needs: [build-agent-base]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Quay.io
-        uses: docker/login-action@v3
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_ROBOT_ACCOUNT }}
-          password: ${{ secrets.QUAY_TOKEN }}
-
-      - name: Build and push echo agent
-        uses: docker/build-push-action@v6
-        with:
-          context: ./agents/echo
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-echo:latest
-          no-cache: true
-
-  build-agent-claude:
-    name: Build Agent Claude
-    runs-on: ubuntu-latest
-    needs: [build-agent-base]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Quay.io
-        uses: docker/login-action@v3
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_ROBOT_ACCOUNT }}
-          password: ${{ secrets.QUAY_TOKEN }}
-
-      - name: Build and push claude agent
-        uses: docker/build-push-action@v6
-        with:
-          context: ./agents/claude
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-claude:latest
-          no-cache: true
 
   build-agent-opencode:
     name: Build Agent OpenCode
     runs-on: ubuntu-latest
-    needs: [build-agent-base]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -165,13 +44,42 @@ jobs:
           context: ./agents/opencode
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-opencode:latest
+          tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubeopencode-agent-opencode:latest
+          no-cache: true
+
+  build-agent-devbox:
+    name: Build Agent Devbox
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_ROBOT_ACCOUNT }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Build and push devbox agent
+        uses: docker/build-push-action@v6
+        with:
+          context: ./agents/devbox
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubeopencode-agent-devbox:latest
           no-cache: true
 
   build-agent-code-server:
     name: Build Agent Code-Server
     runs-on: ubuntu-latest
-    needs: [build-agent-base]
+    needs: [build-agent-devbox]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -195,5 +103,5 @@ jobs:
           context: ./agents/code-server
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubetask-agent-code-server:latest
+          tags: ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubeopencode-agent-code-server:latest
           no-cache: true

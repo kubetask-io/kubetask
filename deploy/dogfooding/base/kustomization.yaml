@@ -1,14 +1,14 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: kubetask-dogfooding
+namespace: kubeopencode-dogfooding
 
 resources:
   - namespace.yaml
   - rbac.yaml
   - secrets.yaml
-  - kubetaskconfig.yaml
+  - kubeopencodeconfig.yaml
   - agent-default.yaml
   - configmap-github-scripts.yaml
 

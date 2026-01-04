@@ -1,12 +1,12 @@
-# Default values for kubetask
+# Default values for kubeopencode
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
 # Controller configuration
 controller:
-  # Container image for kubetask (unified image with controller, git-init)
+  # Container image for kubeopencode (unified image with controller, git-init)
   image:
-    repository: quay.io/kubetask/kubetask
+    repository: quay.io/kubeopencode/kubeopencode
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
@@ -58,7 +58,7 @@ controller:
 agent:
   # Default container image for the agent (used when Agent.agentImage is not set)
   image:
-    repository: quay.io/kubetask/kubetask-agent-gemini
+    repository: quay.io/kubeopencode/kubeopencode-agent-gemini
     pullPolicy: IfNotPresent
     tag: "latest"
 
@@ -74,10 +74,10 @@ commonLabels: {}
 # Additional annotations for all resources
 commonAnnotations: {}
 
-# KubeTaskConfig - system-level configuration
-# This creates a default KubeTaskConfig in the release namespace
-kubetaskConfig:
-  # Whether to create the default KubeTaskConfig
+# KubeOpenCodeConfig - system-level configuration
+# This creates a default KubeOpenCodeConfig in the release namespace
+kubeopencodeConfig:
+  # Whether to create the default KubeOpenCodeConfig
   create: true
   # System image configuration for internal components (git-init, context-init)
   systemImage:

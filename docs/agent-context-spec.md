@@ -4,7 +4,7 @@ This document defines how context is mounted and provided to AI agents in Kubern
 
 ## Overview
 
-KubeTask uses a Context CRD to provide reusable, shareable context to AI agents during task execution. The Context CRD supports three source types:
+KubeOpenCode uses a Context CRD to provide reusable, shareable context to AI agents during task execution. The Context CRD supports three source types:
 
 1. **Inline**: Content directly in the YAML
 2. **ConfigMap**: Reference to a ConfigMap (single key or entire ConfigMap as directory)
@@ -27,7 +27,7 @@ Higher priority contexts take precedence. When contexts have empty `mountPath`, 
 Content is provided directly in the Context YAML:
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Context
 metadata:
   name: coding-standards
@@ -45,7 +45,7 @@ spec:
 Content from a specific key in a ConfigMap:
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Context
 metadata:
   name: security-policy
@@ -61,7 +61,7 @@ spec:
 When no `key` is specified, the entire ConfigMap is mounted as a directory (requires `mountPath` in ContextMount):
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Context
 metadata:
   name: project-configs
@@ -76,7 +76,7 @@ spec:
 Content from a Git repository:
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Context
 metadata:
   name: repo-context
@@ -146,7 +146,7 @@ This enables multiple contexts to be aggregated into a single file that the agen
 ### Example 1: Simple Task with Description
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: update-deps
@@ -163,7 +163,7 @@ Result: `/workspace/task.md` contains the description.
 
 ```yaml
 # Reusable Context
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Context
 metadata:
   name: coding-standards
@@ -174,7 +174,7 @@ spec:
     Follow Go conventions.
 ---
 # Task referencing the Context
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: code-review
@@ -195,7 +195,7 @@ Result:
 When contexts don't specify `mountPath`, they are aggregated into task.md:
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: code-review
@@ -229,13 +229,13 @@ All code must be reviewed.
 Agent provides organization-wide defaults that are merged with Task contexts:
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: default
 spec:
   agentImage: quay.io/myorg/claude-agent:v1.0
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
   contexts:
     # Organization coding standards - applied to all tasks
     - name: org-coding-standards
@@ -243,7 +243,7 @@ spec:
     - name: org-security-policy
       # No mountPath - appended to task.md
 ---
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: update-service
@@ -266,13 +266,13 @@ Agent supports credentials for providing secrets to agents. Credentials can be e
 ### Credential Configuration
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: default
 spec:
   agentImage: quay.io/myorg/claude-agent:v1.0
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
   credentials:
     # GitHub token as environment variable
     - name: github-token

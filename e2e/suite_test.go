@@ -1,6 +1,6 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
-// Package e2e contains end-to-end tests for KubeTask
+// Package e2e contains end-to-end tests for KubeOpenCode
 package e2e
 
 import (
@@ -22,7 +22,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	kubetaskv1alpha1 "github.com/kubetask/kubetask/api/v1alpha1"
+	kubeopenv1alpha1 "github.com/kubeopencode/kubeopencode/api/v1alpha1"
 )
 
 var (
@@ -43,13 +43,13 @@ const (
 	interval = time.Second * 2
 
 	// Default test namespace
-	defaultTestNS = "kubetask-e2e-test"
+	defaultTestNS = "kubeopencode-e2e-test"
 
 	// Default echo agent image
-	defaultEchoImage = "quay.io/kubetask/kubetask-agent-echo:latest"
+	defaultEchoImage = "quay.io/kubeopencode/kubeopencode-agent-echo:latest"
 
 	// Test ServiceAccount name for e2e tests
-	testServiceAccount = "kubetask-e2e-agent"
+	testServiceAccount = "kubeopencode-e2e-agent"
 )
 
 // Test labels for selective execution
@@ -61,7 +61,7 @@ const (
 
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "KubeTask E2E Suite")
+	RunSpecs(t, "KubeOpenCode E2E Suite")
 }
 
 var _ = BeforeSuite(func() {
@@ -101,7 +101,7 @@ var _ = BeforeSuite(func() {
 
 	// Create scheme with all required types
 	scheme = runtime.NewScheme()
-	err = kubetaskv1alpha1.AddToScheme(scheme)
+	err = kubeopenv1alpha1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = corev1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -138,8 +138,8 @@ var _ = BeforeSuite(func() {
 	// Check that the controller deployment exists and is ready
 	Eventually(func() bool {
 		pods := &corev1.PodList{}
-		err := k8sClient.List(ctx, pods, client.InNamespace("kubetask-system"), client.MatchingLabels{
-			"app.kubernetes.io/name":      "kubetask",
+		err := k8sClient.List(ctx, pods, client.InNamespace("kubeopencode-system"), client.MatchingLabels{
+			"app.kubernetes.io/name":      "kubeopencode",
 			"app.kubernetes.io/component": "controller",
 		})
 		if err != nil {
@@ -160,7 +160,7 @@ var _ = AfterSuite(func() {
 	By("Cleaning up test namespace")
 
 	// Delete all Tasks in test namespace
-	tasks := &kubetaskv1alpha1.TaskList{}
+	tasks := &kubeopenv1alpha1.TaskList{}
 	if err := k8sClient.List(ctx, tasks, client.InNamespace(testNS)); err == nil {
 		for _, task := range tasks.Items {
 			_ = k8sClient.Delete(ctx, &task)
@@ -168,7 +168,7 @@ var _ = AfterSuite(func() {
 	}
 
 	// Delete all Agents in test namespace
-	agents := &kubetaskv1alpha1.AgentList{}
+	agents := &kubeopenv1alpha1.AgentList{}
 	if err := k8sClient.List(ctx, agents, client.InNamespace(testNS)); err == nil {
 		for _, a := range agents.Items {
 			_ = k8sClient.Delete(ctx, &a)

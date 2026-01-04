@@ -3,17 +3,14 @@
 ## 1. Create Robot Account on Quay.io (Organization Level)
 
 1. Login to [quay.io](https://quay.io)
-2. Go to **Organizations** → **kubetask** → **Robot Accounts** → **Create Robot Account**
+2. Go to **Organizations** → **kubeopencode** → **Robot Accounts** → **Create Robot Account**
 3. Name it (e.g., `github_actions`)
 4. Grant **Write** permission to all repositories:
-   - `kubetask/kubetask` (unified binary: controller, git-init, save-session, webhook)
-   - `kubetask/kubetask-agent-base`
-   - `kubetask/kubetask-agent-gemini`
-   - `kubetask/kubetask-agent-claude`
-   - `kubetask/kubetask-agent-opencode`
-   - `kubetask/kubetask-agent-code-server`
-   - `kubetask/kubetask-agent-echo`
-   - `kubetask/helm-charts/kubetask` (Helm chart OCI)
+   - `kubeopencode/kubeopencode` (unified binary: controller, git-init, context-init)
+   - `kubeopencode/kubeopencode-agent-opencode` (OpenCode CLI init container)
+   - `kubeopencode/kubeopencode-agent-devbox` (Universal development environment)
+   - `kubeopencode/kubeopencode-agent-code-server` (Browser-based VSCode IDE)
+   - `kubeopencode/helm-charts/kubeopencode` (Helm chart OCI)
 
 ## 2. Add GitHub Secrets
 
@@ -21,7 +18,7 @@ Go to GitHub org → **Settings** → **Secrets and variables** → **Actions** 
 
 | Name | Value |
 |------|-------|
-| `QUAY_ROBOT_ACCOUNT` | `kubetask+github_actions` |
+| `QUAY_ROBOT_ACCOUNT` | `kubeopencode+github_actions` |
 | `QUAY_TOKEN` | Robot token from step 1 |
 
 **Note**: Using org-level secrets allows all repositories under the org to share the same credentials.

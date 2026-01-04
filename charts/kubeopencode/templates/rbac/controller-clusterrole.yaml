@@ -1,18 +1,18 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "kubetask.fullname" . }}-controller
+  name: {{ include "kubeopencode.fullname" . }}-controller
   labels:
-    {{- include "kubetask.controller.labels" . | nindent 4 }}
+    {{- include "kubeopencode.controller.labels" . | nindent 4 }}
 rules:
-# KubeTask CRs
+# KubeOpenCode CRs
 - apiGroups:
-  - kubetask.io
+  - kubeopencode.io
   resources:
   - agents
   - contexts
   - cronworkflows
-  - kubetaskconfigs
+  - kubeopencodeconfigs
   - tasks
   - webhooktriggers
   - workflows
@@ -25,14 +25,14 @@ rules:
   - update
   - patch
   - delete
-# KubeTask CR status
+# KubeOpenCode CR status
 - apiGroups:
-  - kubetask.io
+  - kubeopencode.io
   resources:
   - agents/status
   - contexts/status
   - cronworkflows/status
-  - kubetaskconfigs/status
+  - kubeopencodeconfigs/status
   - tasks/status
   - webhooktriggers/status
   - workflows/status

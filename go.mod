@@ -1,4 +1,4 @@
-module github.com/kubetask/kubetask
+module github.com/kubeopencode/kubeopencode
 
 go 1.25
 

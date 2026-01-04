@@ -1,4 +1,4 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
 // Package v1alpha1 contains the v1alpha1 API definitions
 package v1alpha1
@@ -22,7 +22,7 @@ const (
 	// ContextTypeGit represents content from a Git repository
 	ContextTypeGit ContextType = "Git"
 
-	// ContextTypeRuntime represents KubeTask platform awareness context.
+	// ContextTypeRuntime represents KubeOpenCode platform awareness context.
 	// When enabled, the controller injects a system prompt that explains
 	// the runtime environment to the agent.
 	ContextTypeRuntime ContextType = "Runtime"
@@ -91,9 +91,9 @@ type GitSecretReference struct {
 	Name string `json:"name"`
 }
 
-// RuntimeContext enables KubeTask platform awareness for agents.
+// RuntimeContext enables KubeOpenCode platform awareness for agents.
 // When enabled, the controller injects a system prompt that explains:
-//   - The agent is running in a Kubernetes environment as a KubeTask Task
+//   - The agent is running in a Kubernetes environment as a KubeOpenCode Task
 //   - Available environment variables (TASK_NAME, TASK_NAMESPACE, WORKSPACE_DIR)
 //   - How to query Task/Workflow information via kubectl
 //   - Understanding of task.md structure and context mounting
@@ -144,7 +144,7 @@ type ContextItem struct {
 	Git *GitContext `json:"git,omitempty"`
 
 	// Runtime context (optional when Type == "Runtime")
-	// Enables KubeTask platform awareness. The controller injects a system prompt
+	// Enables KubeOpenCode platform awareness. The controller injects a system prompt
 	// that explains the runtime environment to the agent.
 	// +optional
 	Runtime *RuntimeContext `json:"runtime,omitempty"`
@@ -297,7 +297,7 @@ type Agent struct {
 type AgentSpec struct {
 	// Agent container image to use for task execution.
 	// The controller generates Jobs with this image.
-	// If not specified, defaults to "quay.io/kubetask/kubetask-agent:latest".
+	// If not specified, defaults to "quay.io/kubeopencode/kubeopencode-agent:latest".
 	// +optional
 	AgentImage string `json:"agentImage,omitempty"`
 
@@ -575,31 +575,31 @@ type AgentList struct {
 // +kubebuilder:resource:scope="Namespaced",shortName=ktc
 // +kubebuilder:printcolumn:JSONPath=`.metadata.creationTimestamp`,name="Age",type=date
 
-// KubeTaskConfig defines system-level configuration for KubeTask.
-// This CRD provides cluster or namespace-level settings for the KubeTask system.
-type KubeTaskConfig struct {
+// KubeOpenCodeConfig defines system-level configuration for KubeOpenCode.
+// This CRD provides cluster or namespace-level settings for the KubeOpenCode system.
+type KubeOpenCodeConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the KubeTask configuration
-	Spec KubeTaskConfigSpec `json:"spec"`
+	// Spec defines the KubeOpenCode configuration
+	Spec KubeOpenCodeConfigSpec `json:"spec"`
 }
 
-// KubeTaskConfigSpec defines the system-level configuration
-type KubeTaskConfigSpec struct {
-	// SystemImage configures the KubeTask system image used for internal components
+// KubeOpenCodeConfigSpec defines the system-level configuration
+type KubeOpenCodeConfigSpec struct {
+	// SystemImage configures the KubeOpenCode system image used for internal components
 	// such as git-init and context-init containers.
 	// If not specified, uses the built-in default image with IfNotPresent policy.
 	// +optional
 	SystemImage *SystemImageConfig `json:"systemImage,omitempty"`
 }
 
-// SystemImageConfig configures the KubeTask system image used for internal components
+// SystemImageConfig configures the KubeOpenCode system image used for internal components
 // such as git-init and context-init containers.
 type SystemImageConfig struct {
-	// Image specifies the system image to use for internal KubeTask components.
-	// If not specified, defaults to the built-in DefaultKubeTaskImage.
-	// Example: "quay.io/kubetask/kubetask:v0.2.0"
+	// Image specifies the system image to use for internal KubeOpenCode components.
+	// If not specified, defaults to the built-in DefaultKubeOpenCodeImage.
+	// Example: "quay.io/kubeopencode/kubeopencode:v0.2.0"
 	// +optional
 	Image string `json:"image,omitempty"`
 
@@ -612,9 +612,9 @@ type SystemImageConfig struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// KubeTaskConfigList contains a list of KubeTaskConfig
-type KubeTaskConfigList struct {
+// KubeOpenCodeConfigList contains a list of KubeOpenCodeConfig
+type KubeOpenCodeConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []KubeTaskConfig `json:"items"`
+	Items           []KubeOpenCodeConfig `json:"items"`
 }

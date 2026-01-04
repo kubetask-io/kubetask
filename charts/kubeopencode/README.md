@@ -1,6 +1,6 @@
-# KubeTask Helm Chart
+# KubeOpenCode Helm Chart
 
-This Helm chart deploys KubeTask, a Kubernetes-native system for executing AI-powered tasks.
+This Helm chart deploys KubeOpenCode, a Kubernetes-native system for executing AI-powered tasks.
 
 ## Prerequisites
 
@@ -15,15 +15,15 @@ This Helm chart deploys KubeTask, a Kubernetes-native system for executing AI-po
 
 ```bash
 # Create namespace
-kubectl create namespace kubetask-system
+kubectl create namespace kubeopencode-system
 
 # Install from OCI registry
-helm install kubetask oci://quay.io/kubetask/helm-charts/kubetask \
-  --namespace kubetask-system
+helm install kubeopencode oci://quay.io/kubeopencode/helm-charts/kubeopencode \
+  --namespace kubeopencode-system
 
 # Or install from local chart (for development)
-helm install kubetask ./charts/kubetask \
-  --namespace kubetask-system
+helm install kubeopencode ./charts/kubeopencode \
+  --namespace kubeopencode-system
 ```
 
 ### Production Installation
@@ -33,7 +33,7 @@ helm install kubetask ./charts/kubetask \
 cat > my-values.yaml <<EOF
 controller:
   image:
-    repository: quay.io/kubetask/kubetask
+    repository: quay.io/kubeopencode/kubeopencode
     tag: latest
 
   resources:
@@ -51,20 +51,20 @@ cleanup:
 EOF
 
 # Install the chart
-helm install kubetask ./charts/kubetask \
-  --namespace kubetask-system \
+helm install kubeopencode ./charts/kubeopencode \
+  --namespace kubeopencode-system \
   --values my-values.yaml
 ```
 
 ## Configuration
 
-The following table lists the configurable parameters of the KubeTask chart and their default values.
+The following table lists the configurable parameters of the KubeOpenCode chart and their default values.
 
 ### Controller Configuration
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `controller.image.repository` | Controller image repository | `quay.io/kubetask/kubetask` |
+| `controller.image.repository` | Controller image repository | `quay.io/kubeopencode/kubeopencode` |
 | `controller.image.tag` | Controller image tag | `""` (uses chart appVersion) |
 | `controller.image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `controller.replicas` | Number of controller replicas | `1` |
@@ -77,7 +77,7 @@ The following table lists the configurable parameters of the KubeTask chart and 
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `agent.image.repository` | Agent image repository | `quay.io/kubetask/kubetask-agent-gemini` |
+| `agent.image.repository` | Agent image repository | `quay.io/kubeopencode/kubeopencode-agent-gemini` |
 | `agent.image.tag` | Agent image tag | `latest` |
 
 ### Cleanup Configuration
@@ -94,14 +94,14 @@ The following table lists the configurable parameters of the KubeTask chart and 
 ### Creating an Agent
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: default
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   agentImage: quay.io/myorg/claude-agent:v1.0
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
   credentials:
     - name: anthropic-api-key
       secretRef:
@@ -118,11 +118,11 @@ spec:
 ### Creating a Task
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: update-deps
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   contexts:
     # Task description
@@ -169,7 +169,7 @@ tasks:
 # templates/tasks.yaml
 {{- range .Values.tasks }}
 ---
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: {{ .name }}
@@ -192,28 +192,28 @@ helm template my-tasks ./chart | kubectl apply -f -
 
 ```bash
 # Watch Task status
-kubectl get tasks -n kubetask-system -w
+kubectl get tasks -n kubeopencode-system -w
 
 # View detailed status
-kubectl describe task update-deps -n kubetask-system
+kubectl describe task update-deps -n kubeopencode-system
 
 # Check Jobs
-kubectl get jobs -n kubetask-system -l kubetask.io/task=update-deps
+kubectl get jobs -n kubeopencode-system -l kubeopencode.io/task=update-deps
 
 # View task logs
-kubectl logs job/$(kubectl get task update-deps -o jsonpath='{.status.jobName}') -n kubetask-system
+kubectl logs job/$(kubectl get task update-deps -o jsonpath='{.status.jobName}') -n kubeopencode-system
 ```
 
 ## Uninstalling the Chart
 
 ```bash
-helm uninstall kubetask --namespace kubetask-system
+helm uninstall kubeopencode --namespace kubeopencode-system
 ```
 
 To also delete the namespace:
 
 ```bash
-kubectl delete namespace kubetask-system
+kubectl delete namespace kubeopencode-system
 ```
 
 ## Security Considerations
@@ -237,23 +237,23 @@ kubectl delete namespace kubetask-system
 
 ```bash
 # Check controller logs
-kubectl logs -n kubetask-system deployment/kubetask-controller
+kubectl logs -n kubeopencode-system deployment/kubeopencode-controller
 
 # Check RBAC permissions
-kubectl auth can-i create tasks --as=system:serviceaccount:kubetask-system:kubetask-controller -n kubetask-system
+kubectl auth can-i create tasks --as=system:serviceaccount:kubeopencode-system:kubeopencode-controller -n kubeopencode-system
 ```
 
 ### Jobs failing
 
 ```bash
 # List failed Jobs
-kubectl get jobs -n kubetask-system --field-selector status.successful=0
+kubectl get jobs -n kubeopencode-system --field-selector status.successful=0
 
 # Check Job logs
-kubectl logs job/<job-name> -n kubetask-system
+kubectl logs job/<job-name> -n kubeopencode-system
 
 # Describe job for events
-kubectl describe job/<job-name> -n kubetask-system
+kubectl describe job/<job-name> -n kubeopencode-system
 ```
 
 ## Contributing
@@ -262,4 +262,4 @@ See the main project [README](../../README.md) for contribution guidelines.
 
 ## License
 
-Copyright Contributors to the KubeTask project. Licensed under the Apache License 2.0.
+Copyright Contributors to the KubeOpenCode project. Licensed under the Apache License 2.0.

@@ -1,6 +1,6 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
-// kubetask is the unified binary for KubeTask, providing both controller
+// kubeopencode is the unified binary for KubeOpenCode, providing both controller
 // and infrastructure tool functionality in a single image.
 //
 // Available commands:
@@ -16,9 +16,9 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "kubetask",
-	Short: "KubeTask - Kubernetes-native AI task execution",
-	Long: `KubeTask is a Kubernetes-native system for executing AI-powered tasks.
+	Use:   "kubeopencode",
+	Short: "KubeOpenCode - Kubernetes-native AI task execution",
+	Long: `KubeOpenCode is a Kubernetes-native system for executing AI-powered tasks.
 
 This unified binary provides:
   controller      Start the Kubernetes controller
@@ -26,10 +26,10 @@ This unified binary provides:
 
 Examples:
   # Start the controller
-  kubetask controller --metrics-bind-address=:8080
+  kubeopencode controller --metrics-bind-address=:8080
 
   # Clone a Git repository (used in init containers)
-  kubetask git-init`,
+  kubeopencode git-init`,
 }
 
 func main() {

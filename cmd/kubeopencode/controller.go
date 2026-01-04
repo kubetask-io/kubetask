@@ -1,4 +1,4 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
 package main
 
@@ -17,8 +17,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	kubetaskv1alpha1 "github.com/kubetask/kubetask/api/v1alpha1"
-	"github.com/kubetask/kubetask/internal/controller"
+	kubeopenv1alpha1 "github.com/kubeopencode/kubeopencode/api/v1alpha1"
+	"github.com/kubeopencode/kubeopencode/internal/controller"
 )
 
 var (
@@ -28,21 +28,21 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(kubetaskv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kubeopenv1alpha1.AddToScheme(scheme))
 
 	rootCmd.AddCommand(controllerCmd)
 }
 
 var controllerCmd = &cobra.Command{
 	Use:   "controller",
-	Short: "Start the KubeTask controller",
-	Long: `Start the KubeTask Kubernetes controller.
+	Short: "Start the KubeOpenCode controller",
+	Long: `Start the KubeOpenCode Kubernetes controller.
 
 The controller watches for Task resources and manages their execution
 as Kubernetes Jobs using the referenced Agent configuration.
 
 Example:
-  kubetask controller --metrics-bind-address=:8080 --health-probe-bind-address=:8081`,
+  kubeopencode controller --metrics-bind-address=:8080 --health-probe-bind-address=:8081`,
 	RunE: runController,
 }
 
@@ -105,7 +105,7 @@ func runController(cmd *cobra.Command, args []string) error {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "kubetask.io",
+		LeaderElectionID:       "kubeopencode.io",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

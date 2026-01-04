@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "kubetask.name" -}}
+{{- define "kubeopencode.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "kubetask.fullname" -}}
+{{- define "kubeopencode.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,16 +24,16 @@ Create a default fully qualified app name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "kubetask.chart" -}}
+{{- define "kubeopencode.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "kubetask.labels" -}}
-helm.sh/chart: {{ include "kubetask.chart" . }}
-{{ include "kubetask.selectorLabels" . }}
+{{- define "kubeopencode.labels" -}}
+helm.sh/chart: {{ include "kubeopencode.chart" . }}
+{{ include "kubeopencode.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -46,42 +46,42 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "kubetask.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "kubetask.name" . }}
+{{- define "kubeopencode.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "kubeopencode.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Controller labels
 */}}
-{{- define "kubetask.controller.labels" -}}
-{{ include "kubetask.labels" . }}
+{{- define "kubeopencode.controller.labels" -}}
+{{ include "kubeopencode.labels" . }}
 app.kubernetes.io/component: controller
 {{- end }}
 
 {{/*
 Controller selector labels
 */}}
-{{- define "kubetask.controller.selectorLabels" -}}
-{{ include "kubetask.selectorLabels" . }}
+{{- define "kubeopencode.controller.selectorLabels" -}}
+{{ include "kubeopencode.selectorLabels" . }}
 app.kubernetes.io/component: controller
 {{- end }}
 
 {{/*
 Create the name of the controller service account to use
 */}}
-{{- define "kubetask.controller.serviceAccountName" -}}
+{{- define "kubeopencode.controller.serviceAccountName" -}}
 {{- if .Values.controller.serviceAccount.name }}
 {{- .Values.controller.serviceAccount.name }}
 {{- else }}
-{{- printf "%s-controller" (include "kubetask.fullname" .) }}
+{{- printf "%s-controller" (include "kubeopencode.fullname" .) }}
 {{- end }}
 {{- end }}
 
 {{/*
 Controller image
 */}}
-{{- define "kubetask.controller.image" -}}
+{{- define "kubeopencode.controller.image" -}}
 {{- $tag := .Values.controller.image.tag | default .Chart.AppVersion }}
 {{- printf "%s:%s" .Values.controller.image.repository $tag }}
 {{- end }}
@@ -89,29 +89,29 @@ Controller image
 {{/*
 Agent image
 */}}
-{{- define "kubetask.agent.image" -}}
+{{- define "kubeopencode.agent.image" -}}
 {{- printf "%s:%s" .Values.agent.image.repository .Values.agent.image.tag }}
 {{- end }}
 
 {{/*
 Namespace
 */}}
-{{- define "kubetask.namespace" -}}
+{{- define "kubeopencode.namespace" -}}
 {{- default .Release.Namespace .Values.namespaceOverride }}
 {{- end }}
 
 {{/*
 Webhook labels
 */}}
-{{- define "kubetask.webhook.labels" -}}
-{{ include "kubetask.labels" . }}
+{{- define "kubeopencode.webhook.labels" -}}
+{{ include "kubeopencode.labels" . }}
 app.kubernetes.io/component: webhook
 {{- end }}
 
 {{/*
 Webhook selector labels
 */}}
-{{- define "kubetask.webhook.selectorLabels" -}}
-{{ include "kubetask.selectorLabels" . }}
+{{- define "kubeopencode.webhook.selectorLabels" -}}
+{{ include "kubeopencode.selectorLabels" . }}
 app.kubernetes.io/component: webhook
 {{- end }}

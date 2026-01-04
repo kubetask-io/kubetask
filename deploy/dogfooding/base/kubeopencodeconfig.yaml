@@ -1,14 +1,14 @@
-# Copyright Contributors to the KubeTask project
-# KubeTaskConfig for dogfooding environment
+# Copyright Contributors to the KubeOpenCode project
+# KubeOpenCodeConfig for dogfooding environment
 #
 # This configuration has been simplified - it now only supports systemImage settings.
 # Session persistence, task lifecycle, and agent image pull policies have been removed.
-apiVersion: kubetask.io/v1alpha1
-kind: KubeTaskConfig
+apiVersion: kubeopencode.io/v1alpha1
+kind: KubeOpenCodeConfig
 metadata:
   name: default
 spec:
-  # System image configuration for internal KubeTask components (git-init, context-init)
+  # System image configuration for internal KubeOpenCode components (git-init, context-init)
   # Use Always to ensure fresh images are pulled, avoiding stale cached images on nodes
   systemImage:
     imagePullPolicy: Always

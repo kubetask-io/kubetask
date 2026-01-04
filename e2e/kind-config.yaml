@@ -1,4 +1,4 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 # Kind cluster configuration for E2E testing
 # Exposes NodePort 30082 for webhook server access
 kind: Cluster

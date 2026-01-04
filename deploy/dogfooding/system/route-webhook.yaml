@@ -1,13 +1,13 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 # Apply separately: kubectl apply -f route-webhook.yaml
 #
 # This route exposes the Argo Events EventSource service for GitHub webhooks.
-# Previously this pointed to the KubeTask webhook server, now migrated to Argo Events.
+# Previously this pointed to the KubeOpenCode webhook server, now migrated to Argo Events.
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: github-eventsource
-  namespace: kubetask-system
+  namespace: kubeopencode-system
   labels:
     app.kubernetes.io/component: eventsource
     app.kubernetes.io/name: argo-events

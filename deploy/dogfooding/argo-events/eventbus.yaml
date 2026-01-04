@@ -1,11 +1,11 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 # EventBus provides the event transport layer for Argo Events.
 # This uses NATS JetStream for reliable event delivery.
 apiVersion: argoproj.io/v1alpha1
 kind: EventBus
 metadata:
   name: default
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   nats:
     native:

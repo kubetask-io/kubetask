@@ -1,4 +1,4 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
 package main
 
@@ -55,7 +55,7 @@ Environment variables:
 Example:
   FILE_MAPPINGS='[{"key":"workspace-task.md","targetPath":"/workspace/task.md"}]'
   DIR_MAPPINGS='[{"sourcePath":"/configmap-dir-0","targetPath":"/workspace/guides"}]'
-  /kubetask context-init`,
+  /kubeopencode context-init`,
 	RunE: runContextInit,
 }
 

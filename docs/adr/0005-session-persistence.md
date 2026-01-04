@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-AI agents executing Tasks often need human involvement for review, debugging, or manual intervention. KubeTask needs to support Human-in-the-Loop (HITL) scenarios where users can interact with the agent's workspace after task completion.
+AI agents executing Tasks often need human involvement for review, debugging, or manual intervention. KubeOpenCode needs to support Human-in-the-Loop (HITL) scenarios where users can interact with the agent's workspace after task completion.
 
 ### Requirements
 
@@ -111,7 +111,7 @@ The two strategies are configured in the same Agent resource but can be enabled 
 |----------|----------------------|-----------|
 | Session Sidecar | `Agent.spec.humanInTheLoop.sidecar.enabled` | Ephemeral session for immediate access |
 | Session Persistence | `Agent.spec.humanInTheLoop.persistence.enabled` | Durable workspace saved to PVC |
-| PVC Infrastructure | `KubeTaskConfig.spec.sessionPVC` | System-level PVC configuration |
+| PVC Infrastructure | `KubeOpenCodeConfig.spec.sessionPVC` | System-level PVC configuration |
 
 ### Combined Behavior Matrix
 
@@ -133,15 +133,15 @@ When both are enabled:
 ### Session Sidecar (Agent Configuration)
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: dev-agent
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-gemini:latest
   command: ["sh", "-c", "gemini -p \"$(cat /workspace/task.md)\""]
   workspaceDir: /workspace
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
   humanInTheLoop:
     # Shared configuration (used by both sidecar and resumed session Pod)
     image: ""             # Optional: defaults to agentImage
@@ -171,19 +171,19 @@ spec:
 | `sidecar.duration` | Duration | 1h | How long sidecar runs (ignored if command is set) |
 | `persistence.enabled` | bool | false | Enable workspace persistence to PVC |
 
-### Session PVC Configuration (KubeTaskConfig)
+### Session PVC Configuration (KubeOpenCodeConfig)
 
-KubeTaskConfig provides the **PVC infrastructure** for session persistence. Whether persistence is enabled is controlled per-Agent via `humanInTheLoop.persistence.enabled`.
+KubeOpenCodeConfig provides the **PVC infrastructure** for session persistence. Whether persistence is enabled is controlled per-Agent via `humanInTheLoop.persistence.enabled`.
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
-kind: KubeTaskConfig
+apiVersion: kubeopencode.io/v1alpha1
+kind: KubeOpenCodeConfig
 metadata:
   name: default
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   sessionPVC:
-    name: kubetask-session-data    # PVC name
+    name: kubeopencode-session-data    # PVC name
     storageClassName: ""           # Empty = cluster default
     storageSize: "50Gi"
     retentionPolicy:
@@ -194,7 +194,7 @@ spec:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `name` | string | kubetask-session-data | Name of shared PVC |
+| `name` | string | kubeopencode-session-data | Name of shared PVC |
 | `storageClassName` | string | "" | StorageClass for PVC (empty = default) |
 | `storageSize` | string | 10Gi | Size of PVC |
 | `retentionPolicy.ttlSecondsAfterTaskDeletion` | int32 | 604800 | How long to keep session data after Task deletion |
@@ -203,7 +203,7 @@ spec:
 
 ### Save Mechanism
 
-When `persistence.enabled` is true and `sessionPVC` is configured in KubeTaskConfig, a `save-session` sidecar is added to the Pod:
+When `persistence.enabled` is true and `sessionPVC` is configured in KubeOpenCodeConfig, a `save-session` sidecar is added to the Pod:
 
 1. Agent command is wrapped to create `/signal/.agent-done` on exit
 2. save-session sidecar waits for this signal file
@@ -216,12 +216,12 @@ To resume a session:
 
 ```bash
 # Trigger resume via annotation
-kubectl annotate task my-task kubetask.io/resume-session=true
+kubectl annotate task my-task kubeopencode.io/resume-session=true
 ```
 
 Controller creates a session Pod:
 - Name: `<task-name>-session`
-- Labels: `kubetask.io/session-task=<task-name>`, `kubetask.io/component=session`
+- Labels: `kubeopencode.io/session-task=<task-name>`, `kubeopencode.io/component=session`
 - OwnerReference: Points to Task (garbage collected with Task)
 - Workspace: Mounted from PVC subdirectory
 
@@ -269,13 +269,13 @@ status:
 
 ```yaml
 # Agent with short session duration
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: debug-agent
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
-  serviceAccountName: kubetask-agent
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-gemini:latest
+  serviceAccountName: kubeopencode-agent
   humanInTheLoop:
     sidecar:
       enabled: true
@@ -292,24 +292,24 @@ kubectl exec -it <pod-name> -c session -- /bin/bash
 ### Scenario 2: Persistence Only (No Sidecar)
 
 ```yaml
-# KubeTaskConfig with PVC configuration
-apiVersion: kubetask.io/v1alpha1
-kind: KubeTaskConfig
+# KubeOpenCodeConfig with PVC configuration
+apiVersion: kubeopencode.io/v1alpha1
+kind: KubeOpenCodeConfig
 metadata:
   name: default
 spec:
   sessionPVC:
-    name: kubetask-session-data
+    name: kubeopencode-session-data
     storageSize: "50Gi"
 ---
 # Agent with persistence only (no sidecar)
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: persist-agent
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
-  serviceAccountName: kubetask-agent
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-gemini:latest
+  serviceAccountName: kubeopencode-agent
   humanInTheLoop:
     persistence:
       enabled: true
@@ -319,7 +319,7 @@ spec:
 ```bash
 # Task completes, workspace is saved to PVC
 # Resume later via annotation
-kubectl annotate task my-task kubetask.io/resume-session=true
+kubectl annotate task my-task kubeopencode.io/resume-session=true
 
 # Access session Pod
 kubectl exec -it my-task-session -c session -- /bin/bash
@@ -328,23 +328,23 @@ kubectl exec -it my-task-session -c session -- /bin/bash
 ### Scenario 3: Long-term Development (Both Strategies)
 
 ```yaml
-# KubeTaskConfig with PVC configuration
-apiVersion: kubetask.io/v1alpha1
-kind: KubeTaskConfig
+# KubeOpenCodeConfig with PVC configuration
+apiVersion: kubeopencode.io/v1alpha1
+kind: KubeOpenCodeConfig
 metadata:
   name: default
 spec:
   sessionPVC:
-    name: kubetask-session-data
+    name: kubeopencode-session-data
 ---
 # Agent with both sidecar and persistence
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: dev-agent
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
-  serviceAccountName: kubetask-agent
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-gemini:latest
+  serviceAccountName: kubeopencode-agent
   humanInTheLoop:
     sidecar:
       enabled: true
@@ -359,28 +359,28 @@ kubectl exec -it <pod-name> -c session -- /bin/bash
 # ... do work, leave for the day
 
 # Day 2: Resume via annotation
-kubectl annotate task my-task kubetask.io/resume-session=true
+kubectl annotate task my-task kubeopencode.io/resume-session=true
 
 # Access new session Pod
 kubectl exec -it my-task-session -c session -- /bin/bash
 
 # When completely done, stop the session
-kubectl annotate task my-task kubetask.io/stop=true
+kubectl annotate task my-task kubeopencode.io/stop=true
 ```
 
 ### Scenario 4: Code-Server with Persistence
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: codeserver-agent
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
-  serviceAccountName: kubetask-agent
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-gemini:latest
+  serviceAccountName: kubeopencode-agent
   humanInTheLoop:
     # Shared config for both sidecar and resumed session
-    image: quay.io/kubetask/kubetask-agent-code-server:latest
+    image: quay.io/kubeopencode/kubeopencode-agent-code-server:latest
     command:
       - sh
       - -c
@@ -400,7 +400,7 @@ spec:
 kubectl port-forward <pod-name> 8080:8080
 
 # After timeout, resume with same workspace
-kubectl annotate task my-task kubetask.io/resume-session=true
+kubectl annotate task my-task kubeopencode.io/resume-session=true
 kubectl port-forward my-task-session 8080:8080
 ```
 
@@ -413,6 +413,6 @@ kubectl port-forward my-task-session 8080:8080
 
 ## References
 
-- [KubeTask Architecture - Human-in-the-Loop](../architecture.md#human-in-the-loop)
+- [KubeOpenCode Architecture - Human-in-the-Loop](../architecture.md#human-in-the-loop)
 - [Kubernetes Jobs - Suspending a Job](https://kubernetes.io/docs/concepts/workloads/controllers/job/#suspending-a-job)
 - [Kubernetes PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)

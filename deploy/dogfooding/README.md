@@ -1,11 +1,11 @@
-# KubeTask Dogfooding Environment
+# KubeOpenCode Dogfooding Environment
 
-This directory contains resources for running KubeTask in a dogfooding environment, where KubeTask is used to automate tasks on its own repository.
+This directory contains resources for running KubeOpenCode in a dogfooding environment, where KubeOpenCode is used to automate tasks on its own repository.
 
 ## Architecture
 
 ```
-GitHub (kubetask-io/kubetask)
+GitHub (kubeopencode/kubeopencode)
     │
     │ Webhook events (PR opened, issue comments, etc.)
     │
@@ -15,17 +15,17 @@ smee.io (https://smee.io/YOUR_CHANNEL_ID)
     │ Forwards webhooks (trusted SSL)
     │
     ▼
-smee-client (Pod in kubetask-system)
+smee-client (Pod in kubeopencode-system)
     │
     │ HTTP to internal service
     │
     ▼
-kubetask-webhook (Service in kubetask-system)
+kubeopencode-webhook (Service in kubeopencode-system)
     │
     │ Matches rules, creates Tasks
     │
     ▼
-WebhookTrigger (kubetask-dogfooding/github)
+WebhookTrigger (kubeopencode-dogfooding/github)
     │
     ▼
 Task → Job → Agent Pod
@@ -46,14 +46,14 @@ tls: failed to verify certificate: x509: certificate signed by unknown authority
 ```
 deploy/dogfooding/
 ├── README.md                 # This file
-├── base/                     # Resources for kubetask-dogfooding namespace
+├── base/                     # Resources for kubeopencode-dogfooding namespace
 │   ├── kustomization.yaml
 │   ├── namespace.yaml
 │   ├── rbac.yaml
 │   ├── secrets.yaml          # Contains github-webhook-secret
 │   ├── agent-default.yaml    # Default Agent configuration
 │   └── context-*.yaml        # Context resources
-├── system/                   # Resources for kubetask-system namespace
+├── system/                   # Resources for kubeopencode-system namespace
 │   ├── kustomization.yaml
 │   ├── deployment-smee-client.yaml  # Smee.io webhook proxy
 │   └── route-webhook.yaml    # OpenShift Route (optional)
@@ -66,10 +66,10 @@ deploy/dogfooding/
 
 ### Prerequisites
 
-1. KubeTask installed in `kubetask-system` namespace with webhook enabled:
+1. KubeOpenCode installed in `kubeopencode-system` namespace with webhook enabled:
    ```bash
-   helm install kubetask ./charts/kubetask \
-     --namespace kubetask-system \
+   helm install kubeopencode ./charts/kubeopencode \
+     --namespace kubeopencode-system \
      --set webhook.enabled=true
    ```
 
@@ -78,10 +78,10 @@ deploy/dogfooding/
 ### Deploy Dogfooding Resources
 
 ```bash
-# Apply base resources (kubetask-dogfooding namespace)
+# Apply base resources (kubeopencode-dogfooding namespace)
 kubectl apply -k deploy/dogfooding/base
 
-# Apply system resources (kubetask-system namespace)
+# Apply system resources (kubeopencode-system namespace)
 kubectl apply -k deploy/dogfooding/system
 
 # Apply WebhookTrigger
@@ -92,13 +92,13 @@ kubectl apply -f deploy/dogfooding/resources/webhooktrigger-github.yaml
 
 ```bash
 # Check smee-client is running
-kubectl get pods -n kubetask-system -l app.kubernetes.io/name=smee-client
+kubectl get pods -n kubeopencode-system -l app.kubernetes.io/name=smee-client
 
 # Check smee-client logs
-kubectl logs -n kubetask-system -l app.kubernetes.io/name=smee-client
+kubectl logs -n kubeopencode-system -l app.kubernetes.io/name=smee-client
 
 # Check webhook server registered the trigger
-kubectl logs -n kubetask-system -l app.kubernetes.io/component=webhook | grep "Registered"
+kubectl logs -n kubeopencode-system -l app.kubernetes.io/component=webhook | grep "Registered"
 ```
 
 ## GitHub App Setup
@@ -107,8 +107,8 @@ kubectl logs -n kubetask-system -l app.kubernetes.io/component=webhook | grep "R
 
 1. Go to GitHub Settings → Developer settings → GitHub Apps → New GitHub App
 2. Configure:
-   - **App name**: `kubetask-bot`
-   - **Homepage URL**: `https://github.com/kubetask-io/kubetask`
+   - **App name**: `kubeopencode-bot`
+   - **Homepage URL**: `https://github.com/kubeopencode/kubeopencode`
    - **Webhook URL**: `https://smee.io/YOUR_CHANNEL_ID` (from your smee.io channel)
    - **Webhook secret**: Same as `hmacKey` in `github-webhook-secret`
    - **Permissions**:
@@ -117,14 +117,14 @@ kubectl logs -n kubetask-system -l app.kubernetes.io/component=webhook | grep "R
 
 ### 2. Install the App
 
-Install the GitHub App on the `kubetask-io/kubetask` repository.
+Install the GitHub App on the `kubeopencode/kubeopencode` repository.
 
 ### 3. Configure Secrets
 
 Create the webhook secret:
 ```bash
 kubectl create secret generic github-webhook-secret \
-  --namespace kubetask-dogfooding \
+  --namespace kubeopencode-dogfooding \
   --from-literal=hmacKey=<your-webhook-secret>
 ```
 
@@ -147,8 +147,8 @@ The `github` WebhookTrigger in `resources/webhooktrigger-github.yaml` defines:
 | Rule | Event | Trigger Condition |
 |------|-------|-------------------|
 | `pr-opened` | `pull_request` | PR is opened |
-| `comment-privileged` | `issue_comment` | `@kubetask-bot` mention from OWNER/MEMBER/CONTRIBUTOR/COLLABORATOR |
-| `comment-unprivileged` | `issue_comment` | `@kubetask-bot` mention from other users |
+| `comment-privileged` | `issue_comment` | `@kubeopencode-bot` mention from OWNER/MEMBER/CONTRIBUTOR/COLLABORATOR |
+| `comment-unprivileged` | `issue_comment` | `@kubeopencode-bot` mention from other users |
 
 ## Troubleshooting
 
@@ -156,12 +156,12 @@ The `github` WebhookTrigger in `resources/webhooktrigger-github.yaml` defines:
 
 1. **Check smee-client logs**:
    ```bash
-   kubectl logs -n kubetask-system -l app.kubernetes.io/name=smee-client -f
+   kubectl logs -n kubeopencode-system -l app.kubernetes.io/name=smee-client -f
    ```
 
 2. **Check webhook server logs**:
    ```bash
-   kubectl logs -n kubetask-system -l app.kubernetes.io/component=webhook -f
+   kubectl logs -n kubeopencode-system -l app.kubernetes.io/component=webhook -f
    ```
 
 3. **Check GitHub App delivery history**:
@@ -171,13 +171,13 @@ The `github` WebhookTrigger in `resources/webhooktrigger-github.yaml` defines:
 
 If you see `Authentication failed` in webhook logs:
 - Verify the `hmacKey` in `github-webhook-secret` matches the GitHub App's webhook secret
-- Ensure the secret is in the correct namespace (`kubetask-dogfooding`)
+- Ensure the secret is in the correct namespace (`kubeopencode-dogfooding`)
 
 ### No Tasks created
 
 Check the WebhookTrigger status:
 ```bash
-kubectl get webhooktrigger -n kubetask-dogfooding github -o yaml
+kubectl get webhooktrigger -n kubeopencode-dogfooding github -o yaml
 ```
 
 Check if the filter conditions match your event.

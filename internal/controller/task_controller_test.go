@@ -1,4 +1,4 @@
-// Copyright Contributors to the KubeTask project
+// Copyright Contributors to the KubeOpenCode project
 
 //go:build integration
 
@@ -18,7 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	kubetaskv1alpha1 "github.com/kubetask/kubetask/api/v1alpha1"
+	kubeopenv1alpha1 "github.com/kubeopencode/kubeopencode/api/v1alpha1"
 )
 
 var _ = Describe("TaskController", func() {
@@ -31,12 +31,12 @@ var _ = Describe("TaskController", func() {
 			taskName := "test-task-description"
 			description := "# Test Task\n\nThis is a test task."
 
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
 				},
 			}
@@ -46,13 +46,13 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking Task status is updated to Running")
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
-			createdTask := &kubetaskv1alpha1.Task{}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
 				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
 					return ""
 				}
 				return createdTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Checking Job is created")
 			jobName := fmt.Sprintf("%s-job", taskName)
@@ -63,8 +63,8 @@ var _ = Describe("TaskController", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Verifying Job has correct labels")
-			Expect(createdJob.Labels).Should(HaveKeyWithValue("app", "kubetask"))
-			Expect(createdJob.Labels).Should(HaveKeyWithValue("kubetask.io/task", taskName))
+			Expect(createdJob.Labels).Should(HaveKeyWithValue("app", "kubeopencode"))
+			Expect(createdJob.Labels).Should(HaveKeyWithValue("kubeopencode.io/task", taskName))
 
 			By("Verifying Job has owner reference to Task")
 			Expect(createdJob.OwnerReferences).Should(HaveLen(1))
@@ -101,12 +101,12 @@ var _ = Describe("TaskController", func() {
 			description := "# Test with Agent"
 
 			By("Creating Agent")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentConfigName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					AgentImage:         customAgentImage,
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
@@ -116,12 +116,12 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task with Agent reference")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentConfigName,
 					Description: &description,
 				},
@@ -171,17 +171,17 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
 			By("Creating Agent with credentials")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
-					Credentials: []kubetaskv1alpha1.Credential{
+					Credentials: []kubeopenv1alpha1.Credential{
 						{
 							Name: "api-token",
-							SecretRef: kubetaskv1alpha1.SecretReference{
+							SecretRef: kubeopenv1alpha1.SecretReference{
 								Name: secretName,
 								Key:  stringPtr("token"),
 							},
@@ -189,7 +189,7 @@ var _ = Describe("TaskController", func() {
 						},
 						{
 							Name: "ssh-key",
-							SecretRef: kubetaskv1alpha1.SecretReference{
+							SecretRef: kubeopenv1alpha1.SecretReference{
 								Name: secretName,
 								Key:  stringPtr("key"),
 							},
@@ -203,12 +203,12 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description,
 				},
@@ -262,16 +262,16 @@ var _ = Describe("TaskController", func() {
 			description := "# Test with podSpec.labels"
 
 			By("Creating Agent with podSpec.labels")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo test"},
-					PodSpec: &kubetaskv1alpha1.AgentPodSpec{
+					PodSpec: &kubeopenv1alpha1.AgentPodSpec{
 						Labels: map[string]string{
 							"network-policy": "agent-restricted",
 							"team":           "platform",
@@ -282,12 +282,12 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description,
 				},
@@ -308,7 +308,7 @@ var _ = Describe("TaskController", func() {
 			Expect(createdJob.Spec.Template.Labels).Should(HaveKeyWithValue("network-policy", "agent-restricted"))
 			Expect(createdJob.Spec.Template.Labels).Should(HaveKeyWithValue("team", "platform"))
 			// Also verify base labels are still present
-			Expect(createdJob.Spec.Template.Labels).Should(HaveKeyWithValue("app", "kubetask"))
+			Expect(createdJob.Spec.Template.Labels).Should(HaveKeyWithValue("app", "kubeopencode"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -323,17 +323,17 @@ var _ = Describe("TaskController", func() {
 			description := "# Test with podSpec.scheduling"
 
 			By("Creating Agent with podSpec.scheduling")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo test"},
-					PodSpec: &kubetaskv1alpha1.AgentPodSpec{
-						Scheduling: &kubetaskv1alpha1.PodScheduling{
+					PodSpec: &kubeopenv1alpha1.AgentPodSpec{
+						Scheduling: &kubeopenv1alpha1.PodScheduling{
 							NodeSelector: map[string]string{
 								"kubernetes.io/os": "linux",
 								"node-type":        "gpu",
@@ -353,12 +353,12 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description,
 				},
@@ -398,16 +398,16 @@ var _ = Describe("TaskController", func() {
 			description := "# Test with podSpec.runtimeClassName"
 
 			By("Creating Agent with podSpec.runtimeClassName")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo test"},
-					PodSpec: &kubetaskv1alpha1.AgentPodSpec{
+					PodSpec: &kubeopenv1alpha1.AgentPodSpec{
 						RuntimeClassName: &runtimeClassName,
 					},
 				},
@@ -415,12 +415,12 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description,
 				},
@@ -453,16 +453,16 @@ var _ = Describe("TaskController", func() {
 			description := "Review the code"
 
 			By("Creating Task with inline context")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextItem{
+					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
-							Type:      kubetaskv1alpha1.ContextTypeText,
+							Type:      kubeopenv1alpha1.ContextTypeText,
 							Text:      contextContent,
 							MountPath: "/workspace/guides/standards.md",
 						},
@@ -509,17 +509,17 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, guidesConfigMap)).Should(Succeed())
 
 			By("Creating Task with inline ConfigMap context (no mountPath)")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextItem{
+					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
-							Type: kubetaskv1alpha1.ContextTypeConfigMap,
-							ConfigMap: &kubetaskv1alpha1.ConfigMapContext{
+							Type: kubeopenv1alpha1.ContextTypeConfigMap,
+							ConfigMap: &kubeopenv1alpha1.ConfigMapContext{
 								Name: configMapName,
 								// No Key specified - should aggregate all keys
 							},
@@ -564,16 +564,16 @@ var _ = Describe("TaskController", func() {
 			description := "Review security compliance"
 
 			By("Creating Task with inline Text context (no mountPath)")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextItem{
+					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
-							Type: kubetaskv1alpha1.ContextTypeText,
+							Type: kubeopenv1alpha1.ContextTypeText,
 							Text: contextContent,
 							// No MountPath - should be appended to task.md
 						},
@@ -610,18 +610,18 @@ var _ = Describe("TaskController", func() {
 			description := "Do the task"
 
 			By("Creating Agent with inline context")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo test"},
-					Contexts: []kubetaskv1alpha1.ContextItem{
+					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
-							Type: kubetaskv1alpha1.ContextTypeText,
+							Type: kubeopenv1alpha1.ContextTypeText,
 							Text: agentContextContent,
 							// No mountPath - should be appended to task.md
 						},
@@ -631,17 +631,17 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task with inline context")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description,
-					Contexts: []kubetaskv1alpha1.ContextItem{
+					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
-							Type: kubetaskv1alpha1.ContextTypeText,
+							Type: kubeopenv1alpha1.ContextTypeText,
 							Text: taskContextContent,
 							// No mountPath - should be appended to task.md
 						},
@@ -677,12 +677,12 @@ var _ = Describe("TaskController", func() {
 			description := "# Success test"
 
 			By("Creating Task")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
 				},
 			}
@@ -702,16 +702,16 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking Task status is Completed")
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseCompleted))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Checking CompletionTime is set")
-			finalTask := &kubetaskv1alpha1.Task{}
+			finalTask := &kubeopenv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, taskLookupKey, finalTask)).Should(Succeed())
 			Expect(finalTask.Status.CompletionTime).ShouldNot(BeNil())
 
@@ -726,12 +726,12 @@ var _ = Describe("TaskController", func() {
 			description := "# Failure test"
 
 			By("Creating Task")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
 				},
 			}
@@ -751,13 +751,13 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking Task status is Failed")
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseFailed))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseFailed))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -772,12 +772,12 @@ var _ = Describe("TaskController", func() {
 			description2 := "# Task 2"
 
 			By("Creating Agent with maxConcurrentTasks=1")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo test"},
@@ -787,12 +787,12 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating first Task")
-			task1 := &kubetaskv1alpha1.Task{
+			task1 := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-task-concurrent-1",
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description1,
 				},
@@ -801,26 +801,26 @@ var _ = Describe("TaskController", func() {
 
 			By("Waiting for first Task to be Running")
 			task1LookupKey := types.NamespacedName{Name: "test-task-concurrent-1", Namespace: taskNamespace}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, task1LookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Verifying first Task has agent label")
-			task1Updated := &kubetaskv1alpha1.Task{}
+			task1Updated := &kubeopenv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, task1LookupKey, task1Updated)).Should(Succeed())
 			Expect(task1Updated.Labels).Should(HaveKeyWithValue(AgentLabelKey, agentName))
 
 			By("Creating second Task")
-			task2 := &kubetaskv1alpha1.Task{
+			task2 := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-task-concurrent-2",
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description2,
 				},
@@ -829,16 +829,16 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking second Task is Queued")
 			task2LookupKey := types.NamespacedName{Name: "test-task-concurrent-2", Namespace: taskNamespace}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, task2LookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseQueued))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseQueued))
 
 			By("Verifying second Task has Queued condition")
-			task2Updated := &kubetaskv1alpha1.Task{}
+			task2Updated := &kubeopenv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, task2LookupKey, task2Updated)).Should(Succeed())
 			Expect(task2Updated.Labels).Should(HaveKeyWithValue(AgentLabelKey, agentName))
 
@@ -863,22 +863,22 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Status().Update(ctx, job1)).Should(Succeed())
 
 			By("Waiting for first Task to complete")
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, task1LookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseCompleted))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Checking second Task transitions to Running")
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, task2LookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task1)).Should(Succeed())
@@ -893,12 +893,12 @@ var _ = Describe("TaskController", func() {
 			description2 := "# Task 2"
 
 			By("Creating Agent with maxConcurrentTasks=0 (unlimited)")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo test"},
@@ -908,12 +908,12 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating first Task")
-			task1 := &kubetaskv1alpha1.Task{
+			task1 := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-task-unlimited-1",
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description1,
 				},
@@ -922,21 +922,21 @@ var _ = Describe("TaskController", func() {
 
 			By("Waiting for first Task to be Running")
 			task1LookupKey := types.NamespacedName{Name: "test-task-unlimited-1", Namespace: taskNamespace}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, task1LookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Creating second Task")
-			task2 := &kubetaskv1alpha1.Task{
+			task2 := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-task-unlimited-2",
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description2,
 				},
@@ -945,13 +945,13 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking second Task is also Running (not Queued)")
 			task2LookupKey := types.NamespacedName{Name: "test-task-unlimited-2", Namespace: taskNamespace}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, task2LookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task1)).Should(Succeed())
@@ -965,12 +965,12 @@ var _ = Describe("TaskController", func() {
 			description2 := "# Task 2"
 
 			By("Creating Agent without maxConcurrentTasks (nil)")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo test"},
@@ -980,12 +980,12 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating first Task")
-			task1 := &kubetaskv1alpha1.Task{
+			task1 := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-task-nolimit-1",
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description1,
 				},
@@ -994,21 +994,21 @@ var _ = Describe("TaskController", func() {
 
 			By("Waiting for first Task to be Running")
 			task1LookupKey := types.NamespacedName{Name: "test-task-nolimit-1", Namespace: taskNamespace}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, task1LookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Creating second Task")
-			task2 := &kubetaskv1alpha1.Task{
+			task2 := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-task-nolimit-2",
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description2,
 				},
@@ -1017,13 +1017,13 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking second Task is also Running (not Queued)")
 			task2LookupKey := types.NamespacedName{Name: "test-task-nolimit-2", Namespace: taskNamespace}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, task2LookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task1)).Should(Succeed())
@@ -1039,12 +1039,12 @@ var _ = Describe("TaskController", func() {
 			description := "# Stop test"
 
 			By("Creating Agent")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "sleep 3600"},
@@ -1053,12 +1053,12 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    agentName,
 					Description: &description,
 				},
@@ -1067,13 +1067,13 @@ var _ = Describe("TaskController", func() {
 
 			By("Waiting for Task to be Running")
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Checking Job is created")
 			jobName := fmt.Sprintf("%s-job", taskName)
@@ -1084,7 +1084,7 @@ var _ = Describe("TaskController", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Adding stop annotation to Task")
-			currentTask := &kubetaskv1alpha1.Task{}
+			currentTask := &kubeopenv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, taskLookupKey, currentTask)).Should(Succeed())
 			if currentTask.Annotations == nil {
 				currentTask.Annotations = make(map[string]string)
@@ -1093,13 +1093,13 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Update(ctx, currentTask)).Should(Succeed())
 
 			By("Checking Task status is Completed")
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
-				updatedTask := &kubetaskv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				updatedTask := &kubeopenv1alpha1.Task{}
 				if err := k8sClient.Get(ctx, taskLookupKey, updatedTask); err != nil {
 					return ""
 				}
 				return updatedTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseCompleted))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Checking Job still exists and is suspended")
 			suspendedJob := &batchv1.Job{}
@@ -1108,7 +1108,7 @@ var _ = Describe("TaskController", func() {
 			Expect(*suspendedJob.Spec.Suspend).Should(BeTrue())
 
 			By("Checking Task has Stopped condition")
-			finalTask := &kubetaskv1alpha1.Task{}
+			finalTask := &kubeopenv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, taskLookupKey, finalTask)).Should(Succeed())
 
 			var stoppedCondition *metav1.Condition
@@ -1137,12 +1137,12 @@ var _ = Describe("TaskController", func() {
 			description := "Test inline Git validation"
 
 			By("Creating Agent")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "agent-inline-git-validation",
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					AgentImage:         "test-agent:v1.0.0",
 					Command:            []string{"echo", "test"},
 					WorkspaceDir:       "/workspace",
@@ -1152,18 +1152,18 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task with inline Git context without mountPath")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
 					AgentRef:    agent.Name,
-					Contexts: []kubetaskv1alpha1.ContextItem{
+					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
-							Type: kubetaskv1alpha1.ContextTypeGit,
-							Git: &kubetaskv1alpha1.GitContext{
+							Type: kubeopenv1alpha1.ContextTypeGit,
+							Git: &kubeopenv1alpha1.GitContext{
 								Repository: "https://github.com/example/repo",
 							},
 							// No MountPath - should fail validation
@@ -1175,13 +1175,13 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking Task status is Failed with validation error")
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
-			createdTask := &kubetaskv1alpha1.Task{}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
 				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
 					return ""
 				}
 				return createdTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseFailed))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseFailed))
 
 			By("Verifying error message mentions mountPath requirement")
 			var readyCondition *metav1.Condition
@@ -1205,12 +1205,12 @@ var _ = Describe("TaskController", func() {
 			conflictPath := "/workspace/config.yaml"
 
 			By("Creating Agent")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "agent-mountpath-conflict",
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					AgentImage:         "test-agent:v1.0.0",
 					Command:            []string{"echo", "test"},
 					WorkspaceDir:       "/workspace",
@@ -1220,22 +1220,22 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task with two inline contexts with same mountPath")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
 					AgentRef:    agent.Name,
-					Contexts: []kubetaskv1alpha1.ContextItem{
+					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
-							Type:      kubetaskv1alpha1.ContextTypeText,
+							Type:      kubeopenv1alpha1.ContextTypeText,
 							Text:      "content from context 1",
 							MountPath: conflictPath,
 						},
 						{
-							Type:      kubetaskv1alpha1.ContextTypeText,
+							Type:      kubeopenv1alpha1.ContextTypeText,
 							Text:      "content from context 2",
 							MountPath: conflictPath, // Same path - should fail
 						},
@@ -1246,13 +1246,13 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking Task status is Failed with conflict error")
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
-			createdTask := &kubetaskv1alpha1.Task{}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
 				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
 					return ""
 				}
 				return createdTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseFailed))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseFailed))
 
 			By("Verifying error message mentions mount path conflict")
 			var readyCondition *metav1.Condition
@@ -1275,12 +1275,12 @@ var _ = Describe("TaskController", func() {
 			description := "Test inline Git with mountPath"
 
 			By("Creating Agent")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "agent-inline-git-valid",
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					AgentImage:         "test-agent:v1.0.0",
 					Command:            []string{"echo", "test"},
 					WorkspaceDir:       "/workspace",
@@ -1290,18 +1290,18 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task with inline Git context with mountPath")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
 					AgentRef:    agent.Name,
-					Contexts: []kubetaskv1alpha1.ContextItem{
+					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
-							Type: kubetaskv1alpha1.ContextTypeGit,
-							Git: &kubetaskv1alpha1.GitContext{
+							Type: kubeopenv1alpha1.ContextTypeGit,
+							Git: &kubeopenv1alpha1.GitContext{
 								Repository: "https://github.com/example/repo",
 							},
 							MountPath: "/workspace/my-repo", // Has mountPath - should succeed
@@ -1313,13 +1313,13 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking Task status is Running (not Failed)")
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
-			createdTask := &kubetaskv1alpha1.Task{}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
 				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
 					return ""
 				}
 				return createdTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -1336,12 +1336,12 @@ var _ = Describe("TaskController", func() {
 			description := "Test task with Runtime context"
 
 			By("Creating Agent")
-			agent := &kubetaskv1alpha1.Agent{
+			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.AgentSpec{
+				Spec: kubeopenv1alpha1.AgentSpec{
 					AgentImage:         "test-agent:v1.0.0",
 					Command:            []string{"echo", "test"},
 					WorkspaceDir:       "/workspace",
@@ -1351,18 +1351,18 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
 			By("Creating Task with inline Runtime context")
-			task := &kubetaskv1alpha1.Task{
+			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
 					Namespace: taskNamespace,
 				},
-				Spec: kubetaskv1alpha1.TaskSpec{
+				Spec: kubeopenv1alpha1.TaskSpec{
 					Description: &description,
 					AgentRef:    agentName,
-					Contexts: []kubetaskv1alpha1.ContextItem{
+					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
-							Type:    kubetaskv1alpha1.ContextTypeRuntime,
-							Runtime: &kubetaskv1alpha1.RuntimeContext{},
+							Type:    kubeopenv1alpha1.ContextTypeRuntime,
+							Runtime: &kubeopenv1alpha1.RuntimeContext{},
 						},
 					},
 				},
@@ -1371,13 +1371,13 @@ var _ = Describe("TaskController", func() {
 
 			By("Checking Task transitions to Running phase")
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
-			createdTask := &kubetaskv1alpha1.Task{}
-			Eventually(func() kubetaskv1alpha1.TaskPhase {
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
 				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
 					return ""
 				}
 				return createdTask.Status.Phase
-			}, timeout, interval).Should(Equal(kubetaskv1alpha1.TaskPhaseRunning))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Checking context ConfigMap contains RuntimeSystemPrompt")
 			cmName := taskName + "-context"
@@ -1394,7 +1394,7 @@ var _ = Describe("TaskController", func() {
 			// Key is "workspace-task.md" because workspaceDir is "/workspace" and it's sanitized
 			taskMdContent, exists := cm.Data["workspace-task.md"]
 			Expect(exists).To(BeTrue(), "workspace-task.md key should exist in ConfigMap")
-			Expect(taskMdContent).To(ContainSubstring("KubeTask Runtime Context"))
+			Expect(taskMdContent).To(ContainSubstring("KubeOpenCode Runtime Context"))
 			Expect(taskMdContent).To(ContainSubstring("TASK_NAME"))
 			Expect(taskMdContent).To(ContainSubstring("TASK_NAMESPACE"))
 			Expect(taskMdContent).To(ContainSubstring("kubectl get task"))

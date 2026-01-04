@@ -59,7 +59,7 @@ Context CRD supports three source types:
 - **Git**: Content from a Git repository (future)
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Context
 metadata:
   name: coding-standards
@@ -153,7 +153,7 @@ When resolving contexts, lower priority content appears first in task.md:
 ### Simple Task with Description
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: update-deps
@@ -165,7 +165,7 @@ spec:
 ### Reusable Context with Text Content
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Context
 metadata:
   name: coding-standards
@@ -177,7 +177,7 @@ spec:
     - Write unit tests for all functions
     - Follow Go conventions
 ---
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: code-review
@@ -192,7 +192,7 @@ spec:
 ### Context from ConfigMap
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Context
 metadata:
   name: security-policy
@@ -206,7 +206,7 @@ spec:
 ### Context Aggregation (Empty MountPath)
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: comprehensive-review
@@ -234,13 +234,13 @@ Perform comprehensive code review
 ### Agent with Default Contexts
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: claude-coder
 spec:
   agentImage: quay.io/myorg/claude-agent:v1.0
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
   contexts:
     - name: org-coding-standards  # Applied to all tasks using this agent
     - name: org-security-policy   # Applied to all tasks using this agent
@@ -256,4 +256,4 @@ spec:
 ## References
 
 - [ADR 0003: Context Embedding vs Standalone CRD](0003-context-embedding-vs-standalone-crd.md) (superseded)
-- [KubeTask Architecture](../architecture.md)
+- [KubeOpenCode Architecture](../architecture.md)

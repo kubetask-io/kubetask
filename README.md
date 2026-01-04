@@ -1,33 +1,33 @@
 <p align="center">
-  <img src="docs/images/logo.png" alt="KubeTask Logo" width="400">
+  <img src="docs/images/logo.png" alt="KubeOpenCode Logo" width="400">
 </p>
 
-<h1 align="center">KubeTask</h1>
+<h1 align="center">KubeOpenCode</h1>
 
 <p align="center">
   A Kubernetes-native system for executing AI-powered tasks.
 </p>
 
+> **Note**: This project uses [OpenCode](https://opencode.ai) as its AI coding agent. KubeOpenCode is not built by or affiliated with the OpenCode team.
+
 <p align="center">
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://goreportcard.com/report/github.com/kubetask-io/kubetask"><img src="https://goreportcard.com/badge/github.com/kubetask-io/kubetask" alt="Go Report Card"></a>
+  <a href="https://goreportcard.com/report/github.com/kubeopencode/kubeopencode"><img src="https://goreportcard.com/badge/github.com/kubeopencode/kubeopencode" alt="Go Report Card"></a>
 </p>
 
 ## Overview
 
-KubeTask enables you to execute AI agent tasks (like Claude, Gemini) using Kubernetes Custom Resources. It provides a simple, declarative, GitOps-friendly approach to running AI agents as Kubernetes Jobs.
+KubeOpenCode enables you to execute AI agent tasks (like Claude, Gemini) using Kubernetes Custom Resources. It provides a simple, declarative, GitOps-friendly approach to running AI agents as Kubernetes Jobs.
 
 **Key Features:**
 
 - **Kubernetes-Native**: Built on CRDs and the Operator pattern
-- **Simple API**: Core CRDs - Task, Workflow, WorkflowRun, CronWorkflow, WebhookTrigger, Agent, and Context
+- **Simple API**: Task (WHAT to do) + Agent (HOW to execute)
 - **AI-Agnostic**: Works with any AI agent (Claude, Gemini, OpenCode, etc.)
 - **No External Dependencies**: Uses etcd for state, Jobs for execution
 - **GitOps Ready**: Fully declarative resource definitions
 - **Flexible Context System**: Support for inline content, ConfigMaps, and Git repositories
-- **Scheduled Workflows**: CronWorkflow for recurring AI-powered operations
-- **Webhook Triggers**: WebhookTrigger for event-driven Tasks from GitHub, GitLab, or custom systems
-- **Human-in-the-Loop**: Session sidecar for debugging + session persistence for resumable work
+- **Event-Driven**: Integrates with Argo Events for webhook-triggered Tasks
 - **Batch Operations**: Use Helm/Kustomize for multiple Tasks (Kubernetes-native approach)
 
 ## Architecture
@@ -41,7 +41,7 @@ KubeTask enables you to execute AI agent tasks (like Claude, Gemini) using Kuber
                   │
                   ▼
 ┌─────────────────────────────────────────────┐
-│      KubeTask Controller (Operator)         │
+│      KubeOpenCode Controller (Operator)         │
 │  - Watch Task CRs                           │
 │  - Create Kubernetes Jobs for tasks         │
 │  - Update CR status                         │
@@ -58,12 +58,10 @@ KubeTask enables you to execute AI agent tasks (like Claude, Gemini) using Kuber
 ### Core Concepts
 
 - **Task**: Single task execution (the primary API)
-- **Workflow**: Reusable multi-stage task template
-- **WorkflowRun**: Workflow execution instance
-- **CronWorkflow**: Scheduled WorkflowRun triggering
-- **WebhookTrigger**: Event-driven Task creation from webhooks
 - **Agent**: AI agent configuration (HOW to execute)
-- **Context**: Reusable context resources (inline, ConfigMap, or Git)
+- **KubeOpenCodeConfig**: System-level configuration (optional)
+
+> **Note**: Workflow orchestration and webhook triggers have been delegated to Argo Workflows and Argo Events respectively. KubeOpenCode focuses on the core Task/Agent abstraction.
 
 ## Quick Start
 
@@ -76,15 +74,15 @@ KubeTask enables you to execute AI agent tasks (like Claude, Gemini) using Kuber
 
 ```bash
 # Create namespace
-kubectl create namespace kubetask-system
+kubectl create namespace kubeopencode-system
 
 # Install from OCI registry
-helm install kubetask oci://quay.io/kubetask/helm-charts/kubetask \
-  --namespace kubetask-system
+helm install kubeopencode oci://quay.io/kubeopencode/helm-charts/kubeopencode \
+  --namespace kubeopencode-system
 
 # Or install from local chart (for development)
-helm install kubetask ./charts/kubetask \
-  --namespace kubetask-system
+helm install kubeopencode ./charts/kubeopencode \
+  --namespace kubeopencode-system
 ```
 
 ### Example Usage
@@ -92,15 +90,15 @@ helm install kubetask ./charts/kubetask \
 #### 1. Create an Agent
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: default
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-gemini:latest
   workspaceDir: /workspace  # Optional, defaults to /workspace
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
   credentials:
     - name: gemini-api-key
       secretRef:
@@ -109,52 +107,40 @@ spec:
       env: GEMINI_API_KEY
 ```
 
-#### 2. Create a Context (Optional)
+#### 2. Create a Task
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
-kind: Context
-metadata:
-  name: process-guide
-  namespace: kubetask-system
-spec:
-  type: ConfigMap
-  configMap:
-    name: process-guides
-    key: pr-process.md
-```
-
-#### 3. Create a Task
-
-```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: update-service-a
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   # Task description (becomes /workspace/task.md)
   description: |
     Update dependencies to latest versions.
     Run tests and create PR.
 
-  # Reference reusable Context CRDs
+  # Optional inline contexts
   contexts:
-    - name: process-guide
-      mountPath: /workspace/guide.md
+    - type: Text
+      text: |
+        # Coding Standards
+        - Use descriptive names
+        - Write unit tests
 ```
 
-#### 4. Monitor Progress
+#### 3. Monitor Progress
 
 ```bash
 # Watch Task status
-kubectl get tasks -n kubetask-system -w
+kubectl get tasks -n kubeopencode-system -w
 
 # Check detailed status
-kubectl describe task update-service-a -n kubetask-system
+kubectl describe task update-service-a -n kubeopencode-system
 
 # View task logs
-kubectl logs job/$(kubectl get task update-service-a -o jsonpath='{.status.jobName}') -n kubetask-system
+kubectl logs job/$(kubectl get task update-service-a -o jsonpath='{.status.jobName}') -n kubeopencode-system
 ```
 
 ### Batch Operations with Helm
@@ -174,7 +160,7 @@ tasks:
 # templates/tasks.yaml
 {{- range .Values.tasks }}
 ---
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: {{ .name }}
@@ -192,60 +178,31 @@ helm template my-tasks ./chart | kubectl apply -f -
 
 ### Flexible Context System
 
-KubeTask uses a **Context CRD** to provide reusable context to AI agents:
+Tasks and Agents use inline **ContextItem** to provide additional context:
 
-- **Inline Content**:
-  ```yaml
-  apiVersion: kubetask.io/v1alpha1
-  kind: Context
-  metadata:
-    name: coding-standards
-  spec:
-    type: Text
-    text: |
-      # Coding Standards
-      - Use descriptive names
-      - Write unit tests
-  ```
+**Context Types:**
+- **Text**: Inline text content
+- **ConfigMap**: Content from ConfigMap
+- **Git**: Content from Git repository
+- **Runtime**: KubeOpenCode platform awareness system prompt
 
-- **ConfigMap Reference**:
-  ```yaml
-  apiVersion: kubetask.io/v1alpha1
-  kind: Context
-  metadata:
-    name: security-policy
-  spec:
-    type: ConfigMap
-    configMap:
-      name: org-policies
-      key: security.md
-  ```
-
-- **Git Repository**:
-  ```yaml
-  apiVersion: kubetask.io/v1alpha1
-  kind: Context
-  metadata:
-    name: repo-context
-  spec:
-    type: Git
-    git:
-      repository: https://github.com/org/contexts
-      path: .claude/
-      ref: main
-      secretRef:
-        name: git-credentials  # Optional, for private repos
-  ```
-
-Tasks reference Contexts using **ContextMount**:
+**Example:**
 ```yaml
-spec:
-  description: "Review the code"
-  contexts:
-    - name: coding-standards
-      mountPath: /workspace/guides/standards.md
-    - name: security-policy
-      # Empty mountPath = append to task.md with XML tags
+contexts:
+  - type: Text
+    text: |
+      # Rules for AI Agent
+      Always use signed commits...
+  - type: ConfigMap
+    configMap:
+      name: my-scripts
+    mountPath: .scripts
+    fileMode: 493  # 0755 in decimal
+  - type: Git
+    git:
+      repository: https://github.com/org/repo.git
+      ref: main
+    mountPath: source-code
 ```
 
 - **Content Aggregation**: Contexts without `mountPath` are aggregated into `/workspace/task.md` with XML tags
@@ -255,20 +212,22 @@ spec:
 Agent centralizes execution environment configuration:
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: default
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-gemini:latest
   workspaceDir: /workspace  # Configurable workspace directory
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
 
-  # Default contexts for all tasks (references to Context CRDs)
+  # Default contexts for all tasks (inline ContextItems)
   contexts:
-    - name: org-coding-standards
-      # Empty mountPath = append to task.md with XML tags
-    - name: org-security-policy
+    - type: Text
+      text: |
+        # Organization Standards
+        - Use signed commits
+        - Follow Go conventions
 
   # Credentials (secrets as env vars or file mounts)
   credentials:
@@ -284,123 +243,7 @@ spec:
         key: id_rsa
       mountPath: /home/agent/.ssh/id_rsa
       fileMode: 0400
-
-  # Pod scheduling
-  podSpec:
-    scheduling:
-      nodeSelector:
-        workload-type: ai-agent
-
-  # Human-in-the-loop: session sidecar for debugging
-  humanInTheLoop:
-    enabled: true
-    duration: "2h"  # How long session remains available
-    ports:
-      - name: dev-server
-        containerPort: 3000
 ```
-
-### Human-in-the-Loop
-
-KubeTask supports two complementary session strategies for human interaction:
-
-**1. Session Sidecar (Ephemeral)**: Runs alongside the agent, providing immediate access after task completion.
-
-```yaml
-apiVersion: kubetask.io/v1alpha1
-kind: Agent
-metadata:
-  name: dev-agent
-spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
-  serviceAccountName: kubetask-agent
-  humanInTheLoop:
-    enabled: true
-    duration: "2h"        # Session available for 2 hours
-    # Or use custom command:
-    # command: ["sh", "-c", "code-server --bind-addr 0.0.0.0:8080"]
-    ports:
-      - name: dev-server
-        containerPort: 3000
-```
-
-Access the session:
-```bash
-# Exec into session container
-kubectl exec -it <pod-name> -c session -- /bin/bash
-
-# Port-forward for web access
-kubectl port-forward <pod-name> 3000:3000
-```
-
-**2. Session Persistence (Durable)**: Saves workspace to PVC, allowing resume later.
-
-Configure in KubeTaskConfig:
-```yaml
-apiVersion: kubetask.io/v1alpha1
-kind: KubeTaskConfig
-metadata:
-  name: default
-spec:
-  sessionPersistence:
-    enabled: true
-    pvcName: kubetask-session-data
-    storageSize: "50Gi"
-```
-
-Resume a completed task:
-```bash
-# Trigger session resume
-kubectl annotate task my-task kubetask.io/resume-session=true
-
-# Access session Pod
-kubectl exec -it my-task-session -c session -- /bin/bash
-
-# Stop when done
-kubectl annotate task my-task kubetask.io/stop=true
-```
-
-| Feature | Session Sidecar | Session Persistence |
-|---------|-----------------|---------------------|
-| Availability | Immediate | After annotation |
-| Duration | Fixed | Unlimited |
-| Workspace after timeout | Lost | Preserved |
-| Resume capability | No | Yes |
-
-### Webhook Triggers
-
-Create Tasks automatically from external webhooks (GitHub, GitLab, custom systems):
-
-```yaml
-apiVersion: kubetask.io/v1alpha1
-kind: WebhookTrigger
-metadata:
-  name: github-pr-review
-spec:
-  # Authentication (optional)
-  auth:
-    hmac:
-      secretRef:
-        name: github-webhook-secret
-        key: secret
-      signatureHeader: X-Hub-Signature-256
-
-  # CEL filter expression (optional)
-  filter: 'body.action in ["opened", "synchronize"] && !body.pull_request.draft'
-
-  # Concurrency policy: Allow (default), Forbid, Replace
-  concurrencyPolicy: Replace
-
-  # Task template with Go templating
-  taskTemplate:
-    agentRef: code-review-agent
-    description: |
-      Review Pull Request #{{ .pull_request.number }}
-      Repository: {{ .repository.full_name }}
-      Author: {{ .pull_request.user.login }}
-```
-
-Configure your webhook source to send requests to `/webhooks/<namespace>/<trigger-name>`.
 
 ### Multi-AI Support
 
@@ -408,25 +251,25 @@ Use different Agents for different AI agents:
 
 ```yaml
 # Claude agent
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: claude
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-claude:latest
-  serviceAccountName: kubetask-agent
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-claude:latest
+  serviceAccountName: kubeopencode-agent
 ---
 # Gemini agent
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: gemini
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
-  serviceAccountName: kubetask-agent
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-gemini:latest
+  serviceAccountName: kubeopencode-agent
 ---
 # Task using specific agent
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: task-with-claude
@@ -437,7 +280,7 @@ spec:
 
 ## Agent Images
 
-KubeTask provides **template agent images** that serve as starting points for building your own customized agents. These templates demonstrate the agent interface pattern and include common development tools, but are designed to be customized based on your specific requirements.
+KubeOpenCode provides **template agent images** that serve as starting points for building your own customized agents. These templates demonstrate the agent interface pattern and include common development tools, but are designed to be customized based on your specific requirements.
 
 **Important**: The provided agent images (gemini, claude, echo) are examples/templates. You should build and customize your own agent images according to your needs:
 
@@ -473,8 +316,8 @@ For detailed guidance on building custom agent images, see the [Agent Developer 
 
 ```bash
 # Clone the repository
-git clone https://github.com/kubetask-io/kubetask.git
-cd kubetask
+git clone https://github.com/kubeopencode/kubeopencode.git
+cd kubeopencode
 
 # Build the controller
 make build
@@ -526,14 +369,14 @@ make docker-buildx
 
 ### Helm Chart Values
 
-See [charts/kubetask/README.md](charts/kubetask/README.md) for complete configuration options.
+See [charts/kubeopencode/README.md](charts/kubeopencode/README.md) for complete configuration options.
 
 Key configurations:
 
 ```yaml
 controller:
   image:
-    repository: quay.io/kubetask/kubetask
+    repository: quay.io/kubeopencode/kubeopencode
     tag: latest
   resources:
     limits:
@@ -545,14 +388,14 @@ controller:
 
 - [Architecture](docs/architecture.md) - Detailed architecture and design decisions
 - [Agent Context Spec](docs/agent-context-spec.md) - How contexts are mounted
-- [Helm Chart](charts/kubetask/README.md) - Deployment and configuration guide
+- [Helm Chart](charts/kubeopencode/README.md) - Deployment and configuration guide
 - [ADRs](docs/adr/) - Architecture Decision Records
 
 ## Security
 
 ### RBAC
 
-KubeTask follows the principle of least privilege:
+KubeOpenCode follows the principle of least privilege:
 
 - **Controller**: Manages CRs and Jobs only
 
@@ -576,24 +419,24 @@ Never commit secrets to Git. Use:
 
 ```bash
 # Check controller logs
-kubectl logs -n kubetask-system deployment/kubetask-controller
+kubectl logs -n kubeopencode-system deployment/kubeopencode-controller
 
 # Verify RBAC
 kubectl auth can-i create tasks \
-  --as=system:serviceaccount:kubetask-system:kubetask-controller
+  --as=system:serviceaccount:kubeopencode-system:kubeopencode-controller
 ```
 
 ### Job Failures
 
 ```bash
 # List failed jobs
-kubectl get jobs -n kubetask-system --field-selector status.successful=0
+kubectl get jobs -n kubeopencode-system --field-selector status.successful=0
 
 # Check job logs
-kubectl logs job/<job-name> -n kubetask-system
+kubectl logs job/<job-name> -n kubeopencode-system
 
 # Describe job for events
-kubectl describe job/<job-name> -n kubetask-system
+kubectl describe job/<job-name> -n kubeopencode-system
 ```
 
 ## Contributing
@@ -624,13 +467,9 @@ See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 
 ## Roadmap
 
-- [x] Workflow and WorkflowRun for multi-stage task execution
-- [x] CronWorkflow for scheduled workflow execution
-- [x] Context CRD for reusable contexts
-- [x] GitContext for Git repository support
-- [x] Human-in-the-Loop with session sidecar
-- [x] Session persistence for resumable work
-- [x] WebhookTrigger for event-driven Task creation
+- [x] Core Task/Agent abstraction
+- [x] Inline ContextItem system (Text, ConfigMap, Git, Runtime)
+- [x] Argo Events integration for webhook-triggered Tasks
 - [ ] Enhanced status reporting and observability
 - [ ] Support for additional context types (MCP)
 - [ ] Advanced retry and failure handling
@@ -640,12 +479,12 @@ See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 
 ## Community
 
-- **Issues**: [GitHub Issues](https://github.com/kubetask-io/kubetask/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/kubetask-io/kubetask/discussions)
+- **Issues**: [GitHub Issues](https://github.com/kubeopencode/kubeopencode/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/kubeopencode/kubeopencode/discussions)
 
 ## License
 
-Copyright Contributors to the KubeTask project.
+Copyright Contributors to the KubeOpenCode project.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at:
 
@@ -655,7 +494,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 ## Acknowledgments
 
-KubeTask is inspired by:
+KubeOpenCode is inspired by:
 - Tekton Pipelines
 - Argo Workflows
 - Kubernetes Batch API
@@ -666,4 +505,4 @@ Built with:
 
 ---
 
-Made with love by the KubeTask community
+Made with love by the KubeOpenCode community

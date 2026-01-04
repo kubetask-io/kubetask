@@ -1,8 +1,8 @@
 # Copyright Contributors to the KubeTask project
 SHELL := /bin/bash
 
-# Agent to build (gemini, claude, echo, etc.)
-AGENT ?= gemini
+# Agent to build (opencode, devbox, code-server, etc.)
+AGENT ?= devbox
 
 # No-cache option for fresh builds (usage: make NO_CACHE=1 build)
 # This is useful when agent Dockerfiles use dynamic installation methods
@@ -13,13 +13,13 @@ NO_CACHE_FLAG := $(if $(NO_CACHE),--no-cache,)
 
 # Image URL configuration
 IMG_REGISTRY ?= quay.io
-IMG_ORG ?= kubetask
-IMG_NAME ?= kubetask-agent-$(AGENT)
+IMG_ORG ?= kubeopencode
+IMG_NAME ?= kubeopencode-agent-$(AGENT)
 VERSION ?= latest
 IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME):$(VERSION)
 
 # Base image configuration
-BASE_IMG_NAME ?= kubetask-agent-base
+BASE_IMG_NAME ?= kubeopencode-agent-base
 BASE_IMG ?= $(IMG_REGISTRY)/$(IMG_ORG)/$(BASE_IMG_NAME):$(VERSION)
 
 # PLATFORMS defines the target platforms for multi-arch build
@@ -40,7 +40,7 @@ base-push: ## Push the base image to registry
 
 .PHONY: base-buildx
 base-buildx: ## Build and push base image for multiple architectures
-	@docker buildx use kubetask-builder 2>/dev/null || docker buildx create --use --name=kubetask-builder
+	@docker buildx use kubeopencode-builder 2>/dev/null || docker buildx create --use --name=kubeopencode-builder
 	docker buildx build \
 		$(NO_CACHE_FLAG) \
 		--platform=$(PLATFORMS) \
@@ -51,7 +51,7 @@ base-buildx: ## Build and push base image for multiple architectures
 ##@ Agent Images
 
 .PHONY: build
-build: ## Build agent docker image (AGENT=gemini|claude|echo)
+build: ## Build agent docker image (AGENT=opencode|devbox|code-server)
 	@if [ ! -d "$(AGENT)" ]; then \
 		echo "Error: Agent '$(AGENT)' not found. Available agents:"; \
 		ls -d */ 2>/dev/null | sed 's/\///g' | grep -v '^base$$'; \
@@ -78,7 +78,7 @@ buildx: ## Build and push agent image for multiple architectures
 		echo "Use 'make base-buildx' to build the base image"; \
 		exit 1; \
 	fi
-	@docker buildx use kubetask-builder 2>/dev/null || docker buildx create --use --name=kubetask-builder
+	@docker buildx use kubeopencode-builder 2>/dev/null || docker buildx create --use --name=kubeopencode-builder
 	docker buildx build \
 		$(NO_CACHE_FLAG) \
 		--build-arg BASE_IMAGE=$(BASE_IMG) \
@@ -128,8 +128,8 @@ help: ## Display this help
 	@echo ""
 	@echo "Examples:"
 	@echo "  make base-build               # Build the universal base image"
-	@echo "  make build                    # Build gemini (default) using base"
-	@echo "  make AGENT=claude build       # Build claude using base"
+	@echo "  make build                    # Build devbox (default) using base"
+	@echo "  make AGENT=opencode build     # Build opencode using base"
 	@echo "  make NO_CACHE=1 build         # Build without cache (fetch latest)"
 	@echo "  make NO_CACHE=1 build-all     # Rebuild all agents without cache"
 	@echo "  make build-all                # Build base + all agents"

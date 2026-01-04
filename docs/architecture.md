@@ -1,4 +1,4 @@
-# KubeTask Architecture & API Design
+# KubeOpenCode Architecture & API Design
 
 ## Table of Contents
 
@@ -15,7 +15,7 @@
 
 ## System Overview
 
-KubeTask is a Kubernetes-native system that executes AI-powered tasks using Custom Resources (CRs) and the Operator pattern. It provides a simple, declarative way to run AI agents (like Claude, Gemini) as Kubernetes Jobs.
+KubeOpenCode is a Kubernetes-native system that executes AI-powered tasks using Custom Resources (CRs) and the Operator pattern. It provides a simple, declarative way to run AI agents as Kubernetes Jobs, using OpenCode as the primary AI coding tool.
 
 ### Core Goals
 
@@ -36,7 +36,7 @@ KubeTask is a Kubernetes-native system that executes AI-powered tasks using Cust
 
 ### External Integrations
 
-KubeTask focuses on the core Task/Agent abstraction. For advanced features, integrate with external projects:
+KubeOpenCode focuses on the core Task/Agent abstraction. For advanced features, integrate with external projects:
 
 | Feature | Recommended Integration |
 |---------|------------------------|
@@ -44,7 +44,7 @@ KubeTask focuses on the core Task/Agent abstraction. For advanced features, inte
 | Event-driven triggers | [Argo Events](https://argoproj.github.io/argo-events/) |
 | Scheduled execution | Kubernetes CronJob or Argo CronWorkflows |
 
-See `deploy/dogfooding/argo-events/` for examples of GitHub webhook integration using Argo Events that creates KubeTask Tasks.
+See `deploy/dogfooding/argo-events/` for examples of GitHub webhook integration using Argo Events that creates KubeOpenCode Tasks.
 
 ---
 
@@ -56,7 +56,7 @@ See `deploy/dogfooding/argo-events/` for examples of GitHub webhook integration 
 |----------|---------|-----------|
 | **Task** | Single task execution (primary API) | Stable - semantic name |
 | **Agent** | AI agent configuration (HOW to execute) | Stable - independent of project name |
-| **KubeTaskConfig** | System-level configuration | Stable - system settings |
+| **KubeOpenCodeConfig** | System-level configuration | Stable - system settings |
 | **ContextItem** | Inline context for AI agents (KNOW) | Stable - inline context only |
 
 ### Key Design Decisions
@@ -66,11 +66,11 @@ See `deploy/dogfooding/argo-events/` for examples of GitHub webhook integration 
 **Rationale**: Simple, focused API for single task execution. For batch operations, use Helm/Kustomize to create multiple Tasks.
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 ```
 
-#### 2. Agent (not KubeTaskConfig)
+#### 2. Agent (not KubeOpenCodeConfig)
 
 **Rationale**:
 - **Stable**: Independent of project name - won't change even if project renames
@@ -78,7 +78,7 @@ kind: Task
 - **Clear**: Configures the agent environment for task execution
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 ```
 
@@ -133,10 +133,10 @@ Agent (execution configuration)
     ├── serviceAccountName: string
     └── maxConcurrentTasks: *int32   (limit concurrent Tasks, nil/0 = unlimited)
 
-KubeTaskConfig (system configuration)
-└── KubeTaskConfigSpec
-    └── systemImage: *SystemImageConfig       (internal KubeTask components)
-        ├── image: string                     (default: DefaultKubeTaskImage)
+KubeOpenCodeConfig (system configuration)
+└── KubeOpenCodeConfigSpec
+    └── systemImage: *SystemImageConfig       (internal KubeOpenCode components)
+        ├── image: string                     (default: DefaultKubeOpenCodeImage)
         └── imagePullPolicy: PullPolicy       (default: IfNotPresent)
 ```
 
@@ -182,9 +182,9 @@ const (
     ContextTypeRuntime   ContextType = "Runtime"
 )
 
-// RuntimeContext enables KubeTask platform awareness for agents.
+// RuntimeContext enables KubeOpenCode platform awareness for agents.
 // When enabled, the controller injects a system prompt explaining:
-// - The agent is running in a Kubernetes environment as a KubeTask Task
+// - The agent is running in a Kubernetes environment as a KubeOpenCode Task
 // - Available environment variables (TASK_NAME, TASK_NAMESPACE, WORKSPACE_DIR)
 // - How to query Task information via kubectl
 type RuntimeContext struct {
@@ -221,18 +221,18 @@ type AgentSpec struct {
     MaxConcurrentTasks *int32           // Limit concurrent Tasks (nil/0 = unlimited)
 }
 
-// KubeTaskConfig defines system-level configuration
-type KubeTaskConfig struct {
-    Spec KubeTaskConfigSpec
+// KubeOpenCodeConfig defines system-level configuration
+type KubeOpenCodeConfig struct {
+    Spec KubeOpenCodeConfigSpec
 }
 
-type KubeTaskConfigSpec struct {
+type KubeOpenCodeConfigSpec struct {
     SystemImage *SystemImageConfig // System image for internal components
 }
 
-// SystemImageConfig configures the KubeTask system image
+// SystemImageConfig configures the KubeOpenCode system image
 type SystemImageConfig struct {
-    Image           string            // System image (default: built-in DefaultKubeTaskImage)
+    Image           string            // System image (default: built-in DefaultKubeOpenCodeImage)
     ImagePullPolicy corev1.PullPolicy // Pull policy: Always/Never/IfNotPresent (default: IfNotPresent)
 }
 ```
@@ -253,7 +253,7 @@ type SystemImageConfig struct {
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              KubeTask Controller (Operator)                 │
+│              KubeOpenCode Controller (Operator)                 │
 │  - Watch Task CRs                                           │
 │  - Reconcile loop                                           │
 │  - Create Kubernetes Jobs for tasks                         │
@@ -295,11 +295,11 @@ type SystemImageConfig struct {
 Task is the primary API for executing AI-powered tasks.
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: update-service-a
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   # Simple task description (syntactic sugar for /workspace/task.md)
   description: |
@@ -386,7 +386,7 @@ contexts:
       ref: main
 ```
 
-4. **Runtime Context** - KubeTask platform awareness:
+4. **Runtime Context** - KubeOpenCode platform awareness:
 ```yaml
 contexts:
   - type: Runtime
@@ -404,7 +404,7 @@ Contexts provide additional information to AI agents during task execution. They
 | `Text` | Inline text content directly in YAML |
 | `ConfigMap` | Content from a Kubernetes ConfigMap |
 | `Git` | Content cloned from a Git repository |
-| `Runtime` | KubeTask platform awareness (auto-generated by controller) |
+| `Runtime` | KubeOpenCode platform awareness (auto-generated by controller) |
 
 **ContextItem Fields:**
 
@@ -421,7 +421,7 @@ Contexts provide additional information to AI agents during task execution. They
 **Important Notes:**
 
 - **Empty MountPath behavior**: When mountPath is empty, content is appended to `/workspace/task.md` with XML tags
-- **Runtime context**: Provides KubeTask platform awareness to agents, explaining environment variables, kubectl commands, and system concepts
+- **Runtime context**: Provides KubeOpenCode platform awareness to agents, explaining environment variables, kubectl commands, and system concepts
 - **Path resolution**: Relative paths are prefixed with workspaceDir; absolute paths are used as-is
 
 **Context Priority (lowest to highest):**
@@ -434,21 +434,25 @@ Contexts provide additional information to AI agents during task execution. They
 
 Agent defines the AI agent configuration for task execution.
 
+KubeOpenCode uses a **two-container pattern**:
+1. **Init Container** (OpenCode image): Copies OpenCode binary to `/tools` shared volume
+2. **Worker Container** (Executor image): Uses `/tools/opencode` to run AI tasks
+
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: default  # Convention: "default" is used when no agentRef is specified
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
-  # Agent container image
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  # Executor container image (worker that runs OpenCode)
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
 
   # Optional: Working directory (default: "/workspace")
   workspaceDir: /workspace
 
-  # Optional: Custom entrypoint command
-  command: ["sh", "-c", "gemini --yolo -p \"$(cat /workspace/task.md)\""]
+  # Optional: Custom entrypoint command (uses OpenCode from /tools)
+  command: ["sh", "-c", "/tools/opencode run --format json \"$(cat /workspace/task.md)\""]
 
   # Optional: Inline contexts (applied to all tasks using this agent)
   contexts:
@@ -507,7 +511,7 @@ spec:
   maxConcurrentTasks: 3
 
   # Required: ServiceAccount for agent pods
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
 ```
 
 **Field Description:**
@@ -525,10 +529,10 @@ spec:
 
 **Task Stop:**
 
-Running Tasks can be stopped by setting the `kubetask.io/stop=true` annotation:
+Running Tasks can be stopped by setting the `kubeopencode.io/stop=true` annotation:
 
 ```bash
-kubectl annotate task my-task kubetask.io/stop=true
+kubectl annotate task my-task kubeopencode.io/stop=true
 ```
 
 When this annotation is detected:
@@ -543,19 +547,26 @@ When this annotation is detected:
 
 ### Agent Image Discovery
 
-Controller determines the agent image in this priority order:
+KubeOpenCode uses a **two-container pattern** for AI task execution:
+
+1. **Init Container** (OpenCode image): Copies OpenCode binary to `/tools` shared volume
+2. **Worker Container** (Executor image): Uses `/tools/opencode` to run AI tasks
+
+The executor image is discovered in this priority order:
 
 1. **Agent.spec.agentImage** (from referenced Agent)
-2. **Built-in default** (fallback) - `quay.io/kubetask/kubetask-agent-gemini:latest`
+2. **Built-in default** (fallback) - `quay.io/kubeopencode/kubeopencode-agent-devbox:latest`
 
 ### How It Works
 
 The controller:
 1. Looks up the Agent referenced by `agentRef` (defaults to "default")
-2. Uses the `agentImage` from Agent if specified
-3. Falls back to built-in default image if no Agent or agentImage found
+2. Uses the `agentImage` from Agent as the executor image
+3. Falls back to built-in default executor image if no Agent or agentImage found
 4. Generates a Job with:
-   - Labels for tracking (`kubetask.io/task`)
+   - Init container that copies OpenCode binary to `/tools`
+   - Worker container with the executor image
+   - Labels for tracking (`kubeopencode.io/task`)
    - Environment variables (`TASK_NAME`, `TASK_NAMESPACE`)
    - Owner references for garbage collection
    - ServiceAccount from Agent spec
@@ -565,13 +576,14 @@ The controller:
 Agents can limit the number of concurrent Tasks to prevent overwhelming backend AI services with rate limits:
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
-  name: claude-agent
+  name: opencode-agent
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-claude:latest
-  serviceAccountName: kubetask-agent
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  command: ["sh", "-c", "/tools/opencode run --format json \"$(cat /workspace/task.md)\""]
+  serviceAccountName: kubeopencode-agent
   maxConcurrentTasks: 3  # Only 3 Tasks can run concurrently
 ```
 
@@ -604,21 +616,21 @@ Task Created
 
 ## System Configuration
 
-### KubeTaskConfig (System-level Configuration)
+### KubeOpenCodeConfig (System-level Configuration)
 
-KubeTaskConfig provides cluster or namespace-level settings for container image configuration.
+KubeOpenCodeConfig provides cluster or namespace-level settings for container image configuration.
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
-kind: KubeTaskConfig
+apiVersion: kubeopencode.io/v1alpha1
+kind: KubeOpenCodeConfig
 metadata:
   name: default
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
-  # System image configuration for internal KubeTask components
+  # System image configuration for internal KubeOpenCode components
   # (git-init, context-init containers)
   systemImage:
-    image: quay.io/kubetask/kubetask:latest  # Default system image
+    image: quay.io/kubeopencode/kubeopencode:latest  # Default system image
     imagePullPolicy: Always  # Always/Never/IfNotPresent (default: IfNotPresent)
 ```
 
@@ -626,7 +638,7 @@ spec:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `spec.systemImage.image` | string | No | System image for internal components (default: built-in DefaultKubeTaskImage) |
+| `spec.systemImage.image` | string | No | System image for internal components (default: built-in DefaultKubeOpenCodeImage) |
 | `spec.systemImage.imagePullPolicy` | string | No | Pull policy for system containers: Always, Never, IfNotPresent (default: IfNotPresent) |
 
 **Image Pull Policy:**
@@ -636,7 +648,7 @@ Setting `imagePullPolicy: Always` is recommended when:
 - Nodes may have cached old images that differ from registry versions
 - Frequent image updates are expected
 
-The `systemImage` configuration affects all internal KubeTask containers:
+The `systemImage` configuration affects all internal KubeOpenCode containers:
 - `git-init`: Clones Git repositories for Context
 - `context-init`: Copies ConfigMap content to writable workspace
 
@@ -648,22 +660,25 @@ The `systemImage` configuration affects all internal KubeTask containers:
 
 ```yaml
 # Create Agent
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: default
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  # Executor image (worker container)
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  # Command uses OpenCode from /tools (injected by init container)
+  command: ["sh", "-c", "/tools/opencode run --format json \"$(cat /workspace/task.md)\""]
   workspaceDir: /workspace
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
 ---
 # Create Task
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: update-service-a
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   description: |
     Update dependencies to latest versions.
@@ -673,11 +688,11 @@ spec:
 ### 2. Task with Multiple Contexts
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: complex-task
-  namespace: kubetask-system
+  namespace: kubeopencode-system
 spec:
   agentRef: claude
   description: "Refactor the authentication module"
@@ -718,7 +733,7 @@ tasks:
 # templates/tasks.yaml
 {{- range .Values.tasks }}
 ---
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   name: {{ .name }}
@@ -743,29 +758,29 @@ helm template my-tasks ./chart | kubectl apply -f -
 kubectl apply -f task.yaml
 
 # List tasks
-kubectl get tasks -n kubetask-system
+kubectl get tasks -n kubeopencode-system
 
 # Watch task execution
-kubectl get task update-service-a -n kubetask-system -w
+kubectl get task update-service-a -n kubeopencode-system -w
 
 # Check task status
 kubectl get task update-service-a -o yaml
 
 # View task logs
-kubectl logs job/$(kubectl get task update-service-a -o jsonpath='{.status.jobName}') -n kubetask-system
+kubectl logs job/$(kubectl get task update-service-a -o jsonpath='{.status.jobName}') -n kubeopencode-system
 
 # Stop a running task (gracefully stops and marks as Completed with logs preserved)
-kubectl annotate task update-service-a kubetask.io/stop=true
+kubectl annotate task update-service-a kubeopencode.io/stop=true
 
 # Delete task
-kubectl delete task update-service-a -n kubetask-system
+kubectl delete task update-service-a -n kubeopencode-system
 ```
 
 ### Agent Operations
 
 ```bash
 # List agents
-kubectl get agents -n kubetask-system
+kubectl get agents -n kubeopencode-system
 
 # Create agent
 kubectl apply -f agent.yaml
@@ -781,17 +796,17 @@ kubectl get agent default -o yaml
 **API**:
 - **Task** - primary API for single task execution
 - **Agent** - stable, project-independent configuration
-- **KubeTaskConfig** - system-level settings (systemImage)
+- **KubeOpenCodeConfig** - system-level settings (systemImage)
 
 **Context Types** (via ContextItem):
 - `Text` - Content directly in YAML
 - `ConfigMap` - Content from ConfigMap (single key or all keys as directory)
 - `Git` - Content from Git repository with branch/tag/commit support
-- `Runtime` - KubeTask platform awareness (environment variables, kubectl commands, system concepts)
+- `Runtime` - KubeOpenCode platform awareness (environment variables, kubectl commands, system concepts)
 
 **Task Lifecycle**:
 - No retry on failure (AI tasks are non-idempotent)
-- User-initiated stop via `kubetask.io/stop=true` annotation (graceful, logs preserved)
+- User-initiated stop via `kubeopencode.io/stop=true` annotation (graceful, logs preserved)
 - OwnerReference cascade deletion
 
 **Batch Operations**:
@@ -804,7 +819,7 @@ kubectl get agent default -o yaml
 
 **Workflow Orchestration**:
 - Use [Argo Workflows](https://argoproj.github.io/argo-workflows/) for multi-stage task orchestration
-- KubeTask Tasks can be triggered from Argo Workflow steps
+- KubeOpenCode Tasks can be triggered from Argo Workflow steps
 
 **Advantages**:
 - Simplified Architecture
@@ -816,6 +831,6 @@ kubectl get agent default -o yaml
 ---
 
 **Status**: FINAL
-**Date**: 2025-12-25
-**Version**: v5.0 (Simplified API - Task, Agent, KubeTaskConfig only)
-**Maintainer**: KubeTask Team
+**Date**: 2026-01-04
+**Version**: v6.0 (OpenCode Init Container + Executor pattern)
+**Maintainer**: KubeOpenCode Team

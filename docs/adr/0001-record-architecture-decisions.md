@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-We need a way to document important architectural and design decisions made during the development of KubeTask. As the project evolves, it's crucial to:
+We need a way to document important architectural and design decisions made during the development of KubeOpenCode. As the project evolves, it's crucial to:
 
 - Understand why certain decisions were made
 - Provide context for future team members

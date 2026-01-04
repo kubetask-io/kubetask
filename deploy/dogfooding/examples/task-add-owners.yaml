@@ -1,19 +1,19 @@
-# Copyright Contributors to the KubeTask project
-apiVersion: kubetask.io/v1alpha1
+# Copyright Contributors to the KubeOpenCode project
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   generateName: add-owners-
-  namespace: kubetask-dogfooding
+  namespace: kubeopencode-dogfooding
 spec:
   # Use description field for simple task instructions
   description: |
     # Task: Add OWNERS File
-    Add a OWNERS file with xuezhaojun name in for repo kubetask.
+    Add a OWNERS file with xuezhaojun name in for repo kubeopencode.
     Then push to GitHub and create a PR.
   contexts:
     - inline:
         type: Git
-        mountPath: kubetask
+        mountPath: kubeopencode
         git:
-          repository: https://github.com/kubetask-io/kubetask
+          repository: https://github.com/kubeopencode/kubeopencode
           ref: main

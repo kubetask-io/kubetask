@@ -9,7 +9,7 @@ bin/
 cover.out
 
 # Built binaries
-/kubetask
+/kubeopencode
 
 # Helm
 dist/

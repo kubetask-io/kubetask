@@ -1,23 +1,23 @@
-# Copyright Contributors to the KubeTask project
-apiVersion: kubetask.io/v1alpha1
+# Copyright Contributors to the KubeOpenCode project
+apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
   generateName: say-hi-
-  namespace: kubetask-dogfooding
+  namespace: kubeopencode-dogfooding
 spec:
   # Use description field for simple task instructions
   description: |
     # Task: Say Hi
-    Add a say-hi file include "hi" in the root directory of the kubetask.
+    Add a say-hi file include "hi" in the root directory of the kubeopencode.
   contexts:
     - inline:
         type: Git
-        mountPath: kubetask
+        mountPath: kubeopencode
         git:
-          repository: https://github.com/kubetask-io/kubetask
+          repository: https://github.com/kubeopencode/kubeopencode
           ref: main
   # The dev-realtime agent has humanInTheLoop.sidecar enabled, which allows
   # you to port-forward into the agent pod after the task completes to make
   # further modifications or continue the conversation.
-  # Example: kubectl port-forward pod/<pod-name> 8080:8080 -n kubetask-dogfooding
+  # Example: kubectl port-forward pod/<pod-name> 8080:8080 -n kubeopencode-dogfooding
   agentRef: dev-realtime

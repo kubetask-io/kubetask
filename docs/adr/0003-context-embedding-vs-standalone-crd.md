@@ -6,7 +6,7 @@ Superseded by [ADR 0004: Context as Standalone CRD](0004-context-as-standalone-c
 
 ## Context
 
-As KubeTask evolves, a design question arose: should `Context` be extracted as a standalone CRD instead of being embedded within Task?
+As KubeOpenCode evolves, a design question arose: should `Context` be extracted as a standalone CRD instead of being embedded within Task?
 
 The argument for a standalone Context CRD:
 - Contexts could be reused across multiple Tasks
@@ -14,7 +14,7 @@ The argument for a standalone Context CRD:
 - Separate RBAC permissions
 - Better GitOps tracking
 
-However, this needs to be evaluated against the overall design philosophy of KubeTask.
+However, this needs to be evaluated against the overall design philosophy of KubeOpenCode.
 
 ## Decision
 
@@ -85,4 +85,4 @@ Task ──agentRef──► Agent (standalone CRD, reusable)
 ## References
 
 - [ADR 0002: Task CRD vs Kubernetes Job](0002-task-crd-vs-kubernetes-job.md)
-- [KubeTask Architecture](../architecture.md)
+- [KubeOpenCode Architecture](../architecture.md)

@@ -1,17 +1,17 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 # Agent configuration for AI agent with credentials
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: default
 spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-gemini:latest
   workspaceDir: /workspace
   command:
     - sh
     - -c
     - gemini --output-format stream-json --yolo -p "$(cat ${WORKSPACE_DIR}/task.md)" | stream-json-reader
-  serviceAccountName: kubetask-agent
+  serviceAccountName: kubeopencode-agent
   maxConcurrentTasks: 3
   credentials:
     # Mount entire secret - all keys become env vars automatically
@@ -52,7 +52,7 @@ spec:
 
           ```bash
           # Correct: Create temp files inside the Git repo
-          cd ${WORKSPACE_DIR}/kubetask  # Your repo's mountPath
+          cd ${WORKSPACE_DIR}/kubeopencode  # Your repo's mountPath
           mkdir -p .tmp
           echo "some-value" > .tmp/my-temp-file
           # Later read: cat .tmp/my-temp-file

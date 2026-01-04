@@ -1,37 +1,63 @@
-# KubeTask Agent Developer Guide
+# KubeOpenCode Agent Developer Guide
 
-This guide explains how to build custom agent images for KubeTask.
+This guide explains how to build custom executor images for KubeOpenCode.
 
 ## Overview
 
-KubeTask agent images are container images that execute AI-powered tasks. The architecture uses a **layered approach**:
+KubeOpenCode uses a **two-container pattern** for executing AI-powered tasks:
 
-1. **Base Image** (`kubetask-agent-base`): Universal development environment with common tools
-2. **Agent Images** (gemini, claude, etc.): Extend base with specific AI CLI
+1. **OpenCode Image** (Init Container): Contains the OpenCode CLI, copies it to a shared volume
+2. **Executor Image** (Worker Container): User's development environment that uses the OpenCode tool
 
-This design is inspired by GitHub Actions runners and devcontainer images, providing a comprehensive development environment that covers most use cases.
+This design separates the AI tool (OpenCode) from the execution environment, allowing users to bring their own toolsets while using a single, maintained AI agent.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Agent Images                          │
-├─────────────────┬─────────────────┬─────────────────────┤
-│  gemini         │  claude         │  (your agent)       │
-│  + Gemini CLI   │  + Claude CLI   │  + Your AI CLI      │
-├─────────────────┴─────────────────┴─────────────────────┤
-│                    Base Image                            │
-│  kubetask-agent-base                                    │
-│  ├── Languages: Go, Node.js, Python                    │
-│  ├── Cloud CLIs: gcloud, aws, kubectl, helm            │
-│  ├── Dev Tools: git, gh, make, gcc, jq, yq             │
-│  └── Shell: zsh + Oh My Zsh                            │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                        Job Pod                               │
+├─────────────────────────────────────────────────────────────┤
+│  Init Container: opencode-init                               │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  Image: kubeopencode-agent-opencode                   │  │
+│  │  - Contains OpenCode CLI (AI coding agent)            │  │
+│  │  - Copies opencode binary to /tools volume            │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                           │                                  │
+│                           ▼ shared volume (/tools)           │
+│                                                              │
+│  Main Container: worker                                      │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  Executor Images:                                     │  │
+│  │  ├── devbox        (full dev environment)             │  │
+│  │  ├── code-server   (browser-based IDE)                │  │
+│  │  └── user-custom   (your own toolset)                 │  │
+│  │                                                       │  │
+│  │  Runs: /tools/opencode run "$(cat task.md)"           │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Base Image Contents
+### Design Philosophy
 
-The universal base image (`kubetask-agent-base`) includes:
+| Concept | Description |
+|---------|-------------|
+| **Single AI Tool** | OpenCode is the only AI agent, simplifying maintenance |
+| **Tool Injection** | OpenCode binary is injected via init container |
+| **Custom Executors** | Users provide their own execution environments |
+| **Separation of Concerns** | AI tool vs development environment are decoupled |
+
+## Image Types
+
+| Image | Purpose | Container Type |
+|-------|---------|----------------|
+| `opencode` | OpenCode CLI (AI coding agent) | Init Container |
+| `devbox` | Universal development environment | Worker (Executor) |
+| `code-server` | Browser-based VSCode IDE | Worker (Executor) |
+
+## Devbox Image Contents
+
+The universal devbox image (`kubeopencode-agent-devbox`) provides a comprehensive development environment:
 
 ### Languages & Runtimes
 | Tool | Version | Description |
@@ -62,19 +88,9 @@ The universal base image (`kubetask-agent-base`) includes:
 | vim, nano | Text editors |
 | tree, htop | Utilities |
 
-### Shell Experience
-- **zsh** with Oh My Zsh
-- Pre-configured plugins: git, kubectl, docker, golang, npm, python, pip
-
-## Agent Image Templates
-
-| Template | Base | Tools | Use Case |
-|----------|------|-------|----------|
-| `gemini` | base | Gemini CLI | Google AI tasks |
-| `claude` | base | Claude CLI | Anthropic AI tasks |
-| `opencode` | base | OpenCode CLI | Open source AI coding |
-| `code-server` | base | code-server + Gemini CLI | Browser-based VSCode for humanInTheLoop |
-| `echo` | alpine | None | E2E testing |
+### Shell & Compatibility
+- **zsh** as default shell
+- **OpenShift compatible**: Works with arbitrary UIDs (uses /tmp as HOME)
 
 ## Building Images
 
@@ -88,111 +104,121 @@ The universal base image (`kubetask-agent-base`) includes:
 From the `agents/` directory:
 
 ```bash
-# Build base image first (required for other agents)
-make base-build
+# Build OpenCode image (init container)
+make AGENT=opencode build
 
-# Build a specific agent (uses base image)
-make build                    # Build gemini (default)
-make AGENT=claude build       # Build claude
+# Build devbox image (executor)
+make AGENT=devbox build
 
-# Build all images at once
-make build-all                # Build base + all agents
+# Build code-server image (executor)
+make AGENT=code-server build
 
 # Multi-arch build and push
-make base-buildx              # Push base (linux/amd64, linux/arm64)
-make AGENT=gemini buildx      # Push gemini
-make buildx-all               # Push everything
+make AGENT=opencode buildx
+make AGENT=devbox buildx
 ```
 
 From the project root:
 
 ```bash
 # Same commands via project Makefile
-make agent-base-build
-make agent-build AGENT=gemini
-make agent-build-all
+make agent-build AGENT=opencode
+make agent-build AGENT=devbox
 ```
 
 ### Image Naming
 
-Default: `quay.io/kubetask/kubetask-agent-<name>:latest`
+Default: `quay.io/kubeopencode/kubeopencode-agent-<name>:latest`
 
 Customize with variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `IMG_REGISTRY` | `quay.io` | Container registry |
-| `IMG_ORG` | `kubetask` | Registry organization |
+| `IMG_ORG` | `kubeopencode` | Registry organization |
 | `VERSION` | `latest` | Image tag |
 
 Example:
 ```bash
-make base-build IMG_REGISTRY=docker.io IMG_ORG=myorg VERSION=v1.0.0
-# Builds: docker.io/myorg/kubetask-agent-base:v1.0.0
+make AGENT=devbox build IMG_REGISTRY=docker.io IMG_ORG=myorg VERSION=v1.0.0
+# Builds: docker.io/myorg/kubeopencode-agent-devbox:v1.0.0
 ```
 
-## Creating a Custom Agent
+## Creating a Custom Executor
 
-### Step 1: Create Agent Directory
+If the default `devbox` image doesn't meet your needs, you can create a custom executor image.
+
+### Step 1: Create Executor Directory
 
 ```bash
-mkdir agents/my-agent
+mkdir agents/my-executor
 ```
 
 ### Step 2: Create Dockerfile
 
 ```dockerfile
-# My Custom Agent Image
-ARG BASE_IMAGE=quay.io/kubetask/kubetask-agent-base:latest
-FROM ${BASE_IMAGE}
+# My Custom Executor Image
+FROM debian:bookworm-slim
 
-# Install your AI CLI
-USER root
-RUN npm install -g my-ai-cli
-# Or: pip install my-ai-cli
-# Or: curl -fsSL https://... | bash
-USER agent
+# Install your tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    your-custom-tools \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set any required environment variables
-ENV MY_AI_MODE=auto
+# OpenShift compatibility: use /tmp as HOME for arbitrary UIDs
+ENV HOME="/tmp"
+ENV SHELL="/bin/bash"
 
-# Define the entrypoint
-ENTRYPOINT ["sh", "-c", "my-ai-cli run \"$(cat ${WORKSPACE_DIR}/task.md)\""]
+# Create workspace directory
+ARG WORKSPACE_DIR=/workspace
+ENV WORKSPACE_DIR=${WORKSPACE_DIR}
+RUN mkdir -p ${WORKSPACE_DIR} && chmod 777 ${WORKSPACE_DIR}
+
+# Run as non-root
+USER 1000:0
+
+WORKDIR ${WORKSPACE_DIR}
+
+CMD ["/bin/bash"]
 ```
 
 ### Step 3: Build and Test
 
 ```bash
 # Build
-make AGENT=my-agent build
+make AGENT=my-executor build
 
-# Test locally
-echo "List files in the current directory" > /tmp/task.md
+# Test locally (simulating the init container pattern)
 docker run --rm \
+  -v /tmp/tools:/tools \
   -v /tmp/task.md:/workspace/task.md:ro \
-  -e MY_API_KEY=$MY_API_KEY \
-  quay.io/kubetask/kubetask-agent-my-agent:latest
+  -e PATH="/tools:$PATH" \
+  quay.io/kubeopencode/kubeopencode-agent-my-executor:latest \
+  /tools/opencode run "$(cat /workspace/task.md)"
 ```
 
-## Agent Image Requirements
+## Executor Image Requirements
 
-Every agent image must follow these conventions:
+Every executor image should follow these conventions:
 
-1. **Read task from `/workspace/task.md`**: The controller mounts the task description at this path
-2. **Work in `/workspace` directory**: All context files are mounted here
+1. **Work in `/workspace` directory**: All context files are mounted here
+2. **Support `/tools` volume mount**: OpenCode binary is injected here
 3. **Output to stdout/stderr**: Results are captured as Job logs
 4. **Exit with appropriate code**: 0 for success, non-zero for failure
-5. **Run as non-root user**: The base image provides the `agent` user
+5. **OpenShift compatible**: Use /tmp as HOME to support arbitrary UIDs
 
 ## Environment Variables
 
-### Set by Base Image
+### Set by Devbox Image
 
 | Variable | Value | Description |
 |----------|-------|-------------|
 | `WORKSPACE_DIR` | `/workspace` | Workspace directory path |
-| `GOPATH` | `/workspace/.go` | Go workspace |
-| `GOMODCACHE` | `/workspace/.gomodcache` | Go module cache |
+| `HOME` | `/tmp` | Home directory (OpenShift compatible) |
+| `GOPATH` | `/tmp/.go` | Go workspace |
+| `GOMODCACHE` | `/tmp/.gomodcache` | Go module cache |
 
 ### Set by Controller
 
@@ -206,18 +232,18 @@ Every agent image must follow these conventions:
 Configure via the Agent `credentials` field:
 
 ```yaml
-apiVersion: kubetask.io/v1alpha1
+apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
   name: my-agent
 spec:
-  agentImage: myregistry/my-agent:v1.0
+  # TBD: New fields for opencode image + executor image pattern
   credentials:
     - name: api-key
       secretRef:
         name: ai-credentials
         key: api-key
-      env: MY_API_KEY
+      env: ANTHROPIC_API_KEY
     - name: github-token
       secretRef:
         name: github-credentials
@@ -225,100 +251,70 @@ spec:
       env: GITHUB_TOKEN
 ```
 
-## Extending the Base Image
+## Extending the Devbox Image
 
-If the base image doesn't include a tool you need, you have two options:
+If the devbox image doesn't include a tool you need:
 
-### Option 1: Add to Your Agent Dockerfile
+### Option 1: Create Custom Executor
 
 ```dockerfile
-ARG BASE_IMAGE=quay.io/kubetask/kubetask-agent-base:latest
-FROM ${BASE_IMAGE}
+FROM quay.io/kubeopencode/kubeopencode-agent-devbox:latest
 
 # Add additional tools
 USER root
 RUN apt-get update && apt-get install -y postgresql-client \
     && rm -rf /var/lib/apt/lists/*
-USER agent
-
-# Rest of your agent setup...
+USER 1000:0
 ```
 
-### Option 2: Contribute to Base Image
+### Option 2: Contribute to Devbox Image
 
-If the tool is generally useful, consider adding it to `base/Dockerfile` and submitting a PR.
+If the tool is generally useful, consider adding it to `devbox/Dockerfile` and submitting a PR.
 
 ## Security Best Practices
 
-1. **Run as non-root**: Always use the `agent` user (base image handles this)
-2. **Minimize additional packages**: Only install what you need in agent images
-3. **Use specific versions**: Pin base image and tool versions for reproducibility
+1. **Run as non-root**: Use UID 1000 or support arbitrary UIDs
+2. **Minimize packages**: Only install what you need
+3. **Use specific versions**: Pin tool versions for reproducibility
 4. **Credential handling**: Never bake credentials into images; use Kubernetes secrets
+5. **OpenShift compatible**: Use /tmp for HOME and cache directories
 
 ## Troubleshooting
 
-### Agent fails to start
+### Executor fails to start
 
 Check that:
-- The base image is available (run `make base-build` first if building locally)
-- The task file is mounted at `/workspace/task.md`
+- The workspace directory is writable
 - Required environment variables (API keys) are set
+- The /tools volume is properly mounted
+
+### Permission denied errors
+
+If running on OpenShift or with arbitrary UIDs:
+- Ensure HOME is set to /tmp
+- Use chmod 777 for directories that need to be writable
+- Don't rely on specific user IDs
 
 ### Missing tools
 
 If a tool is missing:
-1. Check if it's in the base image (`docker run -it kubetask-agent-base which <tool>`)
-2. Add it to your agent Dockerfile if needed
-3. Consider contributing to the base image if generally useful
-
-### Build failures
-
-- Ensure base image is built first: `make base-build`
-- Check Docker is running
-- For multi-arch builds, ensure buildx is configured
+1. Check if it's in the devbox image
+2. Create a custom executor with the tools you need
+3. Consider contributing to the devbox image if generally useful
 
 ## Image Size Reference
 
 | Image | Approximate Size | Description |
 |-------|-----------------|-------------|
-| `base` | ~2-3 GB | Full development environment |
-| `gemini` | ~2-3 GB | Base + Gemini CLI |
-| `claude` | ~2-3 GB | Base + Claude CLI |
-| `code-server` | ~3-4 GB | Base + code-server + Gemini CLI |
-| `echo` | ~10 MB | Minimal Alpine (testing only) |
+| `opencode` | ~500 MB | OpenCode CLI only |
+| `devbox` | ~2-3 GB | Full development environment |
+| `code-server` | ~3-4 GB | Devbox + code-server |
 
-The larger size is a trade-off for having a comprehensive development environment similar to GitHub Actions runners.
+The larger size of `devbox` is a trade-off for having a comprehensive development environment similar to GitHub Actions runners.
 
-## Using code-server for humanInTheLoop
+## Using code-server for Human-in-the-Loop
 
-The `code-server` image provides a browser-based VSCode experience for human-in-the-loop debugging. It's designed to be used as a sidecar container.
-
-### Example Agent Configuration
-
-```yaml
-apiVersion: kubetask.io/v1alpha1
-kind: Agent
-metadata:
-  name: gemini-dev
-spec:
-  agentImage: quay.io/kubetask/kubetask-agent-gemini:latest
-  command:
-    - sh
-    - -c
-    - gemini --output-format stream-json --yolo -p "$(cat ${WORKSPACE_DIR}/task.md)"
-  workspaceDir: /workspace
-  serviceAccountName: kubetask-agent
-  humanInTheLoop:
-    enabled: true
-    image: quay.io/kubetask/kubetask-agent-code-server:latest
-    command:
-      - sh
-      - -c
-      - code-server --bind-addr 0.0.0.0:8080 ${WORKSPACE_DIR} & sleep 7200
-    ports:
-      - name: code-server
-        containerPort: 8080
-```
+The `code-server` image provides a browser-based VSCode experience for human-in-the-loop debugging.
 
 ### Accessing code-server
 
@@ -326,7 +322,7 @@ After the task starts:
 
 ```bash
 # Get the pod name
-POD=$(kubectl get pods -l kubetask.io/task=my-task -o jsonpath='{.items[0].metadata.name}')
+POD=$(kubectl get pods -l kubeopencode.io/task=my-task -o jsonpath='{.items[0].metadata.name}')
 
 # Port forward to code-server
 kubectl port-forward pod/$POD 8080:8080
@@ -336,8 +332,7 @@ kubectl port-forward pod/$POD 8080:8080
 
 ### How It Works
 
-1. The agent container executes the AI task (gemini, claude, etc.) and exits
-2. The code-server sidecar runs in parallel, sharing the same workspace volume
-3. Users can access VSCode in the browser to view/edit files created by the AI
-4. Gemini CLI is available in the VSCode terminal for interactive AI assistance
-5. The sidecar exits after the specified sleep duration (e.g., 7200 seconds = 2 hours)
+1. The init container injects OpenCode into /tools
+2. The code-server executor runs with OpenCode available
+3. Users can access VSCode in the browser to view/edit files
+4. OpenCode CLI is available in the VSCode terminal for interactive AI assistance
