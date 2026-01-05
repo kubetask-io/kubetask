@@ -335,7 +335,7 @@ The controller provides these environment variables to the agent:
 | `TASK_NAME` | Name of the Task CR |
 | `TASK_NAMESPACE` | Namespace of the Task CR |
 | `WORKSPACE_DIR` | Working directory path (from Agent.spec.workspaceDir, default: "/workspace") |
-| `KUBETASK_KEEP_ALIVE_SECONDS` | (if humanInTheLoop enabled) Keep-alive duration |
+| `KUBEOPENCODE_KEEP_ALIVE_SECONDS` | (if humanInTheLoop enabled) Keep-alive duration |
 | `GITHUB_TOKEN` | (if configured) GitHub API token |
 | `ANTHROPIC_API_KEY` | (if configured) Anthropic API key |
 | ... | Other credentials as configured in Agent |

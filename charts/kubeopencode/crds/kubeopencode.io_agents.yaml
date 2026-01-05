@@ -57,9 +57,10 @@ spec:
             properties:
               agentImage:
                 description: |-
-                  Agent container image to use for task execution.
-                  The controller generates Jobs with this image.
-                  If not specified, defaults to "quay.io/kubeopencode/kubeopencode-agent:latest".
+                  AgentImage specifies the OpenCode init container image.
+                  This image contains the OpenCode binary that gets copied to /tools volume.
+                  The init container runs this image and copies the opencode binary to /tools/opencode.
+                  If not specified, defaults to "quay.io/kubeopencode/kubeopencode-agent-opencode:latest".
                 type: string
               command:
                 description: |-
@@ -112,6 +113,12 @@ spec:
                       required:
                       - name
                       type: object
+                    description:
+                      description: |-
+                        Description provides human-readable documentation for this context.
+                        This is purely for documentation purposes and does not affect behavior.
+                        Useful for explaining why a context is included or what it provides.
+                      type: string
                     fileMode:
                       description: |-
                         FileMode is the file permission mode for the mounted file (e.g., 0755 for executable scripts).
@@ -176,16 +183,53 @@ spec:
                         - Absolute paths (starting with "/") are used as-is
                         - Relative paths (NOT starting with "/") are prefixed with the agent's workspaceDir
 
-                        See ContextRef.MountPath for detailed examples.
+                        If not specified, the content is appended to task.md with XML tags.
 
                         Note: For Runtime context type, MountPath is ignored - content is always
                         appended to task.md.
                       type: string
+                    name:
+                      description: |-
+                        Name is an optional identifier for this context.
+                        Used for:
+                          - Logging and debugging (clearer error messages)
+                          - XML tag generation (appears in task.md context blocks)
+                          - Context deduplication (same-named contexts can override each other)
+                        If not specified, a default name is generated based on the context type and index.
+                      type: string
+                    optional:
+                      description: |-
+                        Optional specifies whether this context is required for task execution.
+                        If true, the task will proceed even if the context cannot be resolved
+                        (e.g., ConfigMap not found, Git clone failed, URL fetch failed).
+                        If false (default), the task will fail if the context cannot be resolved.
+
+                        Note: This field takes precedence over type-specific optional fields
+                        (e.g., configMap.optional). If both are specified, this field wins.
+                      type: boolean
                     runtime:
                       description: |-
                         Runtime context (optional when Type == "Runtime")
                         Enables KubeOpenCode platform awareness. The controller injects a system prompt
                         that explains the runtime environment to the agent.
+                      type: object
+                    secret:
+                      description: |-
+                        Secret context (required when Type == "Secret")
+                        References a Kubernetes Secret for context content.
+                        Unlike Credentials, this provides content for the agent to read and process.
+                      properties:
+                        key:
+                          description: |-
+                            Key specifies a single key to use from the Secret.
+                            If not specified, all keys are mounted as files in the directory
+                            (requires MountPath to be set on ContextItem).
+                          type: string
+                        name:
+                          description: Name of the Secret
+                          type: string
+                      required:
+                      - name
                       type: object
                     text:
                       description: |-
@@ -194,13 +238,65 @@ spec:
                       type: string
                     type:
                       description: 'Type of context source: Text, ConfigMap, Git,
-                        or Runtime'
+                        Runtime, Secret, or URL'
                       enum:
                       - Text
                       - ConfigMap
                       - Git
                       - Runtime
+                      - Secret
+                      - URL
                       type: string
+                    url:
+                      description: |-
+                        URL context (required when Type == "URL")
+                        Fetches content from a remote HTTP/HTTPS URL at task execution time.
+                      properties:
+                        headers:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            Headers specifies HTTP headers to include in the request.
+                            Useful for authentication tokens or custom headers.
+                            Example: {"Authorization": "Bearer token123"}
+                          type: object
+                        insecureSkipTLSVerify:
+                          description: |-
+                            InsecureSkipTLSVerify skips TLS certificate verification.
+                            WARNING: This is insecure and should only be used for testing
+                            or with self-signed certificates in controlled environments.
+                          type: boolean
+                        secretRef:
+                          description: |-
+                            SecretRef references a Secret containing authentication credentials.
+                            The Secret can contain:
+                              - "token": Used as Bearer token in Authorization header
+                              - "username" + "password": Used for HTTP Basic authentication
+                            If both Headers["Authorization"] and SecretRef are specified,
+                            SecretRef takes precedence.
+                          properties:
+                            name:
+                              description: Name of the Secret containing authentication
+                                credentials.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        source:
+                          description: |-
+                            Source is the URL to fetch content from.
+                            Must be a valid HTTP or HTTPS URL.
+                          type: string
+                        timeout:
+                          default: 30
+                          description: |-
+                            Timeout specifies the request timeout in seconds.
+                            Defaults to 30 seconds if not specified.
+                          format: int32
+                          type: integer
+                      required:
+                      - source
+                      type: object
                   required:
                   - type
                   type: object
@@ -279,6 +375,13 @@ spec:
                   - secretRef
                   type: object
                 type: array
+              executorImage:
+                description: |-
+                  ExecutorImage specifies the main worker container image for task execution.
+                  This is the development environment where tasks actually run.
+                  The container uses /tools/opencode (provided by agentImage init container) to execute AI tasks.
+                  If not specified, defaults to "quay.io/kubeopencode/kubeopencode-agent-devbox:latest".
+                type: string
               maxConcurrentTasks:
                 description: |-
                   MaxConcurrentTasks limits the number of Tasks that can run concurrently
@@ -295,6 +398,55 @@ spec:
                     maxConcurrentTasks: 3  # Only 3 Tasks can run at once
                 format: int32
                 type: integer
+              outputs:
+                description: |-
+                  Outputs defines default output parameters for tasks using this Agent.
+                  These can be overridden or extended by Task.spec.outputs.
+                  The controller creates a sidecar to capture these outputs from files.
+
+                  Merge behavior with Task.spec.outputs:
+                    - Parameters with same name: Task definition overrides Agent
+                    - Parameters with different names: Both are kept
+
+                  Example:
+                    outputs:
+                      parameters:
+                        - name: pr-url
+                          path: ".outputs/pr-url"
+                        - name: summary
+                          path: ".outputs/summary"
+                          default: "No summary provided"
+                properties:
+                  parameters:
+                    description: |-
+                      Parameters defines the output parameters to capture from files.
+                      Each parameter specifies a name and file path to read from.
+                    items:
+                      description: OutputParameterSpec defines a single output parameter
+                        to capture from a file.
+                      properties:
+                        default:
+                          description: |-
+                            Default is the default value if the file doesn't exist.
+                            If not specified and file doesn't exist, parameter is omitted from output.
+                          type: string
+                        name:
+                          description: |-
+                            Name is the parameter name, used as the key in status.outputs.parameters.
+                            Must be unique within the merged output parameters.
+                          type: string
+                        path:
+                          description: |-
+                            Path is the file path to read the parameter value from.
+                            Relative paths are prefixed with workspaceDir.
+                            Example: ".outputs/pr-url" -> ${WORKSPACE_DIR}/.outputs/pr-url
+                          type: string
+                      required:
+                      - name
+                      - path
+                      type: object
+                    type: array
+                type: object
               podSpec:
                 description: |-
                   PodSpec defines advanced Pod configuration for agent pods.

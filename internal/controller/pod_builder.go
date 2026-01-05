@@ -5,10 +5,10 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -17,7 +17,8 @@ import (
 
 // agentConfig holds the resolved configuration from Agent
 type agentConfig struct {
-	agentImage         string
+	agentImage         string // OpenCode init container image (copies binary to /tools)
+	executorImage      string // Worker container image for task execution
 	command            []string
 	workspaceDir       string
 	contexts           []kubeopenv1alpha1.ContextItem
@@ -25,6 +26,7 @@ type agentConfig struct {
 	podSpec            *kubeopenv1alpha1.AgentPodSpec
 	serviceAccountName string
 	maxConcurrentTasks *int32
+	outputs            *kubeopenv1alpha1.OutputSpec // Agent-level output parameters
 }
 
 // systemConfig holds resolved system-level configuration from KubeOpenCodeConfig.
@@ -125,11 +127,85 @@ func int32Ptr(i int32) *int32 {
 	return &i
 }
 
+// mergeOutputSpecs merges Agent and Task output specifications.
+// Task outputs take precedence over Agent outputs (by parameter name).
+// Returns nil if both inputs are nil or have no parameters.
+func mergeOutputSpecs(agentOutputs, taskOutputs *kubeopenv1alpha1.OutputSpec) *kubeopenv1alpha1.OutputSpec {
+	if agentOutputs == nil && taskOutputs == nil {
+		return nil
+	}
+
+	// Use a map to handle overwrites by name
+	paramMap := make(map[string]kubeopenv1alpha1.OutputParameterSpec)
+
+	// Add Agent outputs first (lower priority)
+	if agentOutputs != nil {
+		for _, p := range agentOutputs.Parameters {
+			paramMap[p.Name] = p
+		}
+	}
+
+	// Add/override with Task outputs (higher priority)
+	if taskOutputs != nil {
+		for _, p := range taskOutputs.Parameters {
+			paramMap[p.Name] = p // Overwrites if same name exists
+		}
+	}
+
+	if len(paramMap) == 0 {
+		return nil
+	}
+
+	// Convert map back to slice (sorted for deterministic output)
+	merged := &kubeopenv1alpha1.OutputSpec{
+		Parameters: make([]kubeopenv1alpha1.OutputParameterSpec, 0, len(paramMap)),
+	}
+
+	// Get sorted keys for deterministic order
+	names := make([]string, 0, len(paramMap))
+	for name := range paramMap {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		merged.Parameters = append(merged.Parameters, paramMap[name])
+	}
+
+	return merged
+}
+
 const (
 	// DefaultKubeOpenCodeImage is the default kubeopencode container image.
 	// This unified image provides: controller, git-init (Git clone), etc.
 	DefaultKubeOpenCodeImage = "quay.io/kubeopencode/kubeopencode:latest"
+
+	// ToolsVolumeName is the volume name for sharing OpenCode binary between containers
+	ToolsVolumeName = "tools"
+
+	// ToolsMountPath is the mount path for the tools volume
+	ToolsMountPath = "/tools"
 )
+
+// buildOpenCodeInitContainer creates an init container that copies OpenCode binary to /tools.
+// This enables the two-container pattern where:
+// - Init container (agentImage): Contains OpenCode, copies it to /tools
+// - Worker container (executorImage): Uses /tools/opencode to execute tasks
+func buildOpenCodeInitContainer(agentImage string) corev1.Container {
+	return corev1.Container{
+		Name:            "opencode-init",
+		Image:           agentImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		// Uses default entrypoint from agents/opencode/entrypoint.sh
+		// which copies /opencode to ${TOOLS_DIR}/opencode
+		Env: []corev1.EnvVar{
+			{Name: "TOOLS_DIR", Value: ToolsMountPath},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: ToolsVolumeName, MountPath: ToolsMountPath},
+		},
+	}
+}
 
 // buildGitInitContainer creates an init container that clones a Git repository.
 func buildGitInitContainer(gm gitMount, volumeName string, index int, sysCfg systemConfig) corev1.Container {
@@ -261,12 +337,54 @@ func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirM
 	}
 }
 
-// buildJob creates a Job object for the task with context mounts
-func buildJob(task *kubeopenv1alpha1.Task, jobName string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, sysCfg systemConfig) *batchv1.Job {
+// buildOutputCollectorSidecar creates a sidecar container that collects outputs from files.
+// The sidecar waits for the executor container to exit, reads files specified in the merged
+// OutputSpec, and writes the collected parameters to /dev/termination-log.
+// Returns nil if mergedOutputs is nil or has no parameters.
+func buildOutputCollectorSidecar(mergedOutputs *kubeopenv1alpha1.OutputSpec, workspaceDir string, sysCfg systemConfig) *corev1.Container {
+	if mergedOutputs == nil || len(mergedOutputs.Parameters) == 0 {
+		return nil // No outputs defined, skip sidecar
+	}
+
+	// Serialize merged output spec to JSON for sidecar to read
+	outputSpecJSON, _ := json.Marshal(mergedOutputs)
+
+	return &corev1.Container{
+		Name:            "output-collector",
+		Image:           sysCfg.systemImage,
+		ImagePullPolicy: sysCfg.systemImagePullPolicy,
+		Command:         []string{"/kubeopencode", "collect-outputs"},
+		Env: []corev1.EnvVar{
+			{Name: "WORKSPACE_DIR", Value: workspaceDir},
+			{Name: "OUTPUT_SPEC", Value: string(outputSpecJSON)},
+		},
+		// VolumeMounts will be added by the caller (workspace volume)
+	}
+}
+
+// buildPod creates a Pod object for the task with context mounts and optional output collector sidecar.
+// If mergedOutputs is non-nil, a sidecar container is added to collect outputs from files.
+func buildPod(task *kubeopenv1alpha1.Task, podName string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, mergedOutputs *kubeopenv1alpha1.OutputSpec, sysCfg systemConfig) *corev1.Pod {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var envVars []corev1.EnvVar
 	var initContainers []corev1.Container
+
+	// Add tools volume for sharing OpenCode binary between init and worker containers.
+	// The OpenCode init container copies the binary to /tools, and the worker container uses it.
+	volumes = append(volumes, corev1.Volume{
+		Name: ToolsVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      ToolsVolumeName,
+		MountPath: ToolsMountPath,
+	})
+
+	// Add OpenCode init container FIRST - it copies the OpenCode binary to /tools
+	initContainers = append(initContainers, buildOpenCodeInitContainer(cfg.agentImage))
 
 	// Always add workspace emptyDir volume for writable workspace.
 	// This is essential for SCC environments where containers run with random UIDs
@@ -546,10 +664,11 @@ func buildJob(task *kubeopenv1alpha1.Task, jobName string, cfg agentConfig, cont
 		}
 	}
 
-	// Build agent container
+	// Build agent container using executorImage (the worker container)
+	// The OpenCode binary is available at /tools/opencode from the init container
 	agentContainer := corev1.Container{
 		Name:            "agent",
-		Image:           cfg.agentImage,
+		Image:           cfg.executorImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         cfg.command,
 		Env:             envVars,
@@ -560,13 +679,26 @@ func buildJob(task *kubeopenv1alpha1.Task, jobName string, cfg agentConfig, cont
 	// Build containers list
 	containers := []corev1.Container{agentContainer}
 
+	// Add output-collector sidecar if outputs are defined
+	var shareProcessNamespace *bool
+	if sidecar := buildOutputCollectorSidecar(mergedOutputs, cfg.workspaceDir, sysCfg); sidecar != nil {
+		// Sidecar needs access to the workspace volume to read output files
+		sidecar.VolumeMounts = []corev1.VolumeMount{
+			{Name: "workspace", MountPath: cfg.workspaceDir},
+		}
+		containers = append(containers, *sidecar)
+		// Enable shared PID namespace so sidecar can detect when agent container exits
+		shareProcessNamespace = boolPtr(true)
+	}
+
 	// Build PodSpec with scheduling configuration
 	podSpec := corev1.PodSpec{
-		ServiceAccountName: cfg.serviceAccountName,
-		InitContainers:     initContainers,
-		Containers:         containers,
-		Volumes:            volumes,
-		RestartPolicy:      corev1.RestartPolicyNever,
+		ServiceAccountName:    cfg.serviceAccountName,
+		ShareProcessNamespace: shareProcessNamespace,
+		InitContainers:        initContainers,
+		Containers:            containers,
+		Volumes:               volumes,
+		RestartPolicy:         corev1.RestartPolicyNever,
 	}
 
 	// Apply PodSpec configuration if specified
@@ -590,14 +722,11 @@ func buildJob(task *kubeopenv1alpha1.Task, jobName string, cfg agentConfig, cont
 		}
 	}
 
-	return &batchv1.Job{
+	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
+			Name:      podName,
 			Namespace: task.Namespace,
-			Labels: map[string]string{
-				"app":              "kubeopencode",
-				"kubeopencode.io/task": task.Name,
-			},
+			Labels:    podLabels,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: task.APIVersion,
@@ -608,14 +737,6 @@ func buildJob(task *kubeopenv1alpha1.Task, jobName string, cfg agentConfig, cont
 				},
 			},
 		},
-		Spec: batchv1.JobSpec{
-			BackoffLimit: int32Ptr(0), // No retries - AI tasks are not idempotent
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: podLabels,
-				},
-				Spec: podSpec,
-			},
-		},
+		Spec: podSpec,
 	}
 }

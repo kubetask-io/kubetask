@@ -96,8 +96,6 @@ Expected output:
 
 ```
 agents.kubeopencode.io            <timestamp>
-contexts.kubeopencode.io          <timestamp>
-crontasks.kubeopencode.io         <timestamp>
 kubeopencodeconfigs.kubeopencode.io   <timestamp>
 tasks.kubeopencode.io             <timestamp>
 ```

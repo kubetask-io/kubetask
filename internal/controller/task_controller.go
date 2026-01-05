@@ -5,12 +5,12 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -25,8 +25,13 @@ import (
 )
 
 const (
-	// DefaultAgentImage is the default agent container image
-	DefaultAgentImage = "quay.io/kubeopencode/kubeopencode-agent-gemini:latest"
+	// DefaultAgentImage is the default OpenCode init container image.
+	// This image copies the OpenCode binary to /tools volume.
+	DefaultAgentImage = "quay.io/kubeopencode/kubeopencode-agent-opencode:latest"
+
+	// DefaultExecutorImage is the default worker container image for task execution.
+	// This is the development environment where tasks actually run.
+	DefaultExecutorImage = "quay.io/kubeopencode/kubeopencode-agent-devbox:latest"
 
 	// ContextConfigMapSuffix is the suffix for ConfigMap names created for context
 	ContextConfigMapSuffix = "-context"
@@ -80,7 +85,6 @@ type TaskReconciler struct {
 // +kubebuilder:rbac:groups=kubeopencode.io,resources=agents,verbs=get;list;watch
 // +kubebuilder:rbac:groups=kubeopencode.io,resources=contexts,verbs=get;list;watch
 // +kubebuilder:rbac:groups=kubeopencode.io,resources=kubeopencodeconfigs,verbs=get;list;watch
-// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;delete
@@ -100,7 +104,7 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
-	// If new, initialize status and create Job
+	// If new, initialize status and create Pod
 	if task.Status.Phase == "" {
 		return r.initializeTask(ctx, task)
 	}
@@ -123,8 +127,8 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
-	// Update task status from Job status
-	if err := r.updateTaskStatusFromJob(ctx, task); err != nil {
+	// Update task status from Pod status
+	if err := r.updateTaskStatusFromPod(ctx, task); err != nil {
 		log.Error(err, "unable to update task status")
 		return ctrl.Result{}, err
 	}
@@ -132,7 +136,7 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	return ctrl.Result{}, nil
 }
 
-// initializeTask initializes a new Task and creates its Job
+// initializeTask initializes a new Task and creates its Pod
 func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
@@ -207,16 +211,16 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 		}
 	}
 
-	// Generate Job name
-	jobName := fmt.Sprintf("%s-job", task.Name)
+	// Generate Pod name
+	podName := fmt.Sprintf("%s-pod", task.Name)
 
-	// Check if Job already exists
-	existingJob := &batchv1.Job{}
-	jobKey := types.NamespacedName{Name: jobName, Namespace: task.Namespace}
-	if err := r.Get(ctx, jobKey, existingJob); err == nil {
-		// Job already exists, update status
+	// Check if Pod already exists
+	existingPod := &corev1.Pod{}
+	podKey := types.NamespacedName{Name: podName, Namespace: task.Namespace}
+	if err := r.Get(ctx, podKey, existingPod); err == nil {
+		// Pod already exists, update status
 		task.Status.ObservedGeneration = task.Generation
-		task.Status.JobName = jobName
+		task.Status.PodName = podName
 		task.Status.Phase = kubeopenv1alpha1.TaskPhaseRunning
 		now := metav1.Now()
 		task.Status.StartTime = &now
@@ -260,17 +264,20 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 	// Get system configuration (image, pull policies)
 	sysCfg := r.getSystemConfig(ctx, task.Namespace)
 
-	// Create Job with agent configuration and context mounts
-	job := buildJob(task, jobName, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, sysCfg)
+	// Merge Agent and Task output specifications (Task takes precedence)
+	mergedOutputs := mergeOutputSpecs(agentConfig.outputs, task.Spec.Outputs)
 
-	if err := r.Create(ctx, job); err != nil {
-		log.Error(err, "unable to create Job", "job", jobName)
+	// Create Pod with agent configuration, context mounts, and output collector sidecar
+	pod := buildPod(task, podName, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, mergedOutputs, sysCfg)
+
+	if err := r.Create(ctx, pod); err != nil {
+		log.Error(err, "unable to create Pod", "pod", podName)
 		return ctrl.Result{}, err
 	}
 
 	// Update status
 	task.Status.ObservedGeneration = task.Generation
-	task.Status.JobName = jobName
+	task.Status.PodName = podName
 	task.Status.Phase = kubeopenv1alpha1.TaskPhaseRunning
 	now := metav1.Now()
 	task.Status.StartTime = &now
@@ -280,43 +287,48 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 		return ctrl.Result{}, err
 	}
 
-	log.Info("initialized Task", "job", jobName, "image", agentConfig.agentImage)
+	log.Info("initialized Task", "pod", podName, "image", agentConfig.agentImage)
 	return ctrl.Result{}, nil
 }
 
-// updateTaskStatusFromJob syncs task status from Job status
-func (r *TaskReconciler) updateTaskStatusFromJob(ctx context.Context, task *kubeopenv1alpha1.Task) error {
+// updateTaskStatusFromPod syncs task status from Pod status
+func (r *TaskReconciler) updateTaskStatusFromPod(ctx context.Context, task *kubeopenv1alpha1.Task) error {
 	log := log.FromContext(ctx)
 
-	if task.Status.JobName == "" {
+	if task.Status.PodName == "" {
 		return nil
 	}
 
-	// Get Job status
-	job := &batchv1.Job{}
-	jobKey := types.NamespacedName{Name: task.Status.JobName, Namespace: task.Namespace}
-	if err := r.Get(ctx, jobKey, job); err != nil {
+	// Get Pod status
+	pod := &corev1.Pod{}
+	podKey := types.NamespacedName{Name: task.Status.PodName, Namespace: task.Namespace}
+	if err := r.Get(ctx, podKey, pod); err != nil {
 		if errors.IsNotFound(err) {
-			log.Error(err, "Job not found", "job", task.Status.JobName)
+			log.Error(err, "Pod not found", "pod", task.Status.PodName)
 			return nil
 		}
 		return err
 	}
 
-	// Check Job completion
-	if job.Status.Succeeded > 0 {
+	// Check Pod phase
+	switch pod.Status.Phase {
+	case corev1.PodSucceeded:
 		task.Status.ObservedGeneration = task.Generation
 		task.Status.Phase = kubeopenv1alpha1.TaskPhaseCompleted
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
-		log.Info("task completed", "job", task.Status.JobName)
+		// Capture outputs from termination message
+		task.Status.Outputs = r.captureTaskOutputs(pod)
+		log.Info("task completed", "pod", task.Status.PodName, "hasOutputs", task.Status.Outputs != nil)
 		return r.Status().Update(ctx, task)
-	} else if job.Status.Failed > 0 {
+	case corev1.PodFailed:
 		task.Status.ObservedGeneration = task.Generation
 		task.Status.Phase = kubeopenv1alpha1.TaskPhaseFailed
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
-		log.Info("task failed", "job", task.Status.JobName)
+		// Capture outputs from termination message (may contain error info)
+		task.Status.Outputs = r.captureTaskOutputs(pod)
+		log.Info("task failed", "pod", task.Status.PodName, "hasOutputs", task.Status.Outputs != nil)
 		return r.Status().Update(ctx, task)
 	}
 
@@ -327,7 +339,7 @@ func (r *TaskReconciler) updateTaskStatusFromJob(ctx context.Context, task *kube
 func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kubeopenv1alpha1.Task{}).
-		Owns(&batchv1.Job{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
 
@@ -355,9 +367,17 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubeo
 	}
 
 	// Get agent image (optional, has default)
+	// This is the OpenCode init container image that copies the binary to /tools
 	agentImage := DefaultAgentImage
 	if agent.Spec.AgentImage != "" {
 		agentImage = agent.Spec.AgentImage
+	}
+
+	// Get executor image (optional, has default)
+	// This is the worker container image where tasks actually run
+	executorImage := DefaultExecutorImage
+	if agent.Spec.ExecutorImage != "" {
+		executorImage = agent.Spec.ExecutorImage
 	}
 
 	// Get workspace directory (required)
@@ -370,6 +390,7 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubeo
 
 	return agentConfig{
 		agentImage:         agentImage,
+		executorImage:      executorImage,
 		command:            agent.Spec.Command,
 		workspaceDir:       workspaceDir,
 		contexts:           agent.Spec.Contexts,
@@ -377,11 +398,12 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubeo
 		podSpec:            agent.Spec.PodSpec,
 		serviceAccountName: agent.Spec.ServiceAccountName,
 		maxConcurrentTasks: agent.Spec.MaxConcurrentTasks,
+		outputs:            agent.Spec.Outputs,
 	}, agentName, nil
 }
 
 // processAllContexts processes all contexts from Agent and Task
-// and returns the ConfigMap, file mounts, directory mounts, and git mounts for the Job.
+// and returns the ConfigMap, file mounts, directory mounts, and git mounts for the Pod.
 //
 // Content order in task.md (top to bottom):
 //  1. Task.description (appears first in task.md)
@@ -829,29 +851,26 @@ func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubeopenv1a
 }
 
 // handleStop handles user-initiated task stop via annotation.
-// It suspends the Job which triggers graceful termination of running Pods via SIGTERM.
-// The Job and Pod are preserved (not deleted) so logs remain accessible.
+// It deletes the Pod which triggers graceful termination via SIGTERM.
+// The Pod is deleted but logs may remain accessible for a short period via kubectl logs.
 func (r *TaskReconciler) handleStop(ctx context.Context, task *kubeopenv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	log.Info("user-initiated stop detected", "task", task.Name)
 
-	// Suspend the Job if it exists
-	if task.Status.JobName != "" {
-		job := &batchv1.Job{}
-		jobKey := types.NamespacedName{Name: task.Status.JobName, Namespace: task.Namespace}
-		if err := r.Get(ctx, jobKey, job); err == nil {
-			// Suspend the Job - Kubernetes will automatically:
-			// 1. Send SIGTERM to running Pods
+	// Delete the Pod if it exists
+	if task.Status.PodName != "" {
+		pod := &corev1.Pod{}
+		podKey := types.NamespacedName{Name: task.Status.PodName, Namespace: task.Namespace}
+		if err := r.Get(ctx, podKey, pod); err == nil {
+			// Delete the Pod - Kubernetes will automatically:
+			// 1. Send SIGTERM to the Pod
 			// 2. Wait for graceful termination period (default 30s)
-			// 3. Pod transitions to Failed state (NOT deleted)
-			// 4. Logs remain accessible via kubectl logs
-			suspend := true
-			job.Spec.Suspend = &suspend
-			if err := r.Update(ctx, job); err != nil {
-				log.Error(err, "failed to suspend job")
+			// 3. Forcefully kill if still running
+			if err := r.Delete(ctx, pod); err != nil {
+				log.Error(err, "failed to delete pod")
 				return ctrl.Result{}, err
 			}
-			log.Info("suspended job for stopped task", "job", task.Status.JobName)
+			log.Info("deleted pod for stopped task", "pod", task.Status.PodName)
 		}
 	}
 
@@ -911,4 +930,42 @@ func (r *TaskReconciler) getSystemConfig(ctx context.Context, namespace string) 
 	}
 
 	return cfg
+}
+
+// captureTaskOutputs extracts outputs from the output-collector sidecar's termination message.
+// The sidecar reads files specified in OutputSpec and writes JSON to /dev/termination-log.
+// Format: {"parameters": {"key": "value"}}
+func (r *TaskReconciler) captureTaskOutputs(pod *corev1.Pod) *kubeopenv1alpha1.TaskOutputs {
+	// Look for the output-collector sidecar container
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Name == "output-collector" && cs.State.Terminated != nil {
+			msg := cs.State.Terminated.Message
+			if msg != "" {
+				parsed := parseTerminationMessage(msg)
+				if parsed != nil && len(parsed.Parameters) > 0 {
+					return &kubeopenv1alpha1.TaskOutputs{
+						Parameters: parsed.Parameters,
+					}
+				}
+			}
+			break
+		}
+	}
+	return nil
+}
+
+// terminationMessageOutput represents the JSON structure written to /dev/termination-log
+// by the output-collector sidecar
+type terminationMessageOutput struct {
+	Parameters map[string]string `json:"parameters,omitempty"`
+}
+
+// parseTerminationMessage parses the JSON termination message from the output-collector.
+func parseTerminationMessage(msg string) *terminationMessageOutput {
+	var output terminationMessageOutput
+	if err := json.Unmarshal([]byte(msg), &output); err != nil {
+		// Not valid JSON, ignore
+		return nil
+	}
+	return &output
 }

@@ -51,7 +51,7 @@ The terminal process "/sbin/nologin" terminated with exit code: 1.
 
 ## Decision
 
-We set `HOME=/tmp` and `SHELL=/bin/bash` for all agent containers via environment variables in the controller's `job_builder.go`.
+We set `HOME=/tmp` and `SHELL=/bin/bash` for all agent containers via environment variables in the controller's `pod_builder.go`.
 
 ```go
 envVars = append(envVars,

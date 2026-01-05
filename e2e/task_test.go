@@ -11,7 +11,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	batchv1 "k8s.io/api/batch/v1"
+	
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -79,19 +79,19 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 				return createdTask.Status.Phase
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
-			By("Verifying Job is created")
-			jobName := fmt.Sprintf("%s-job", taskName)
+			By("Verifying Pod is created")
+			jobName := fmt.Sprintf("%s-pod", taskName)
 			jobKey := types.NamespacedName{Name: jobName, Namespace: testNS}
-			job := &batchv1.Job{}
+			job := &corev1.Pod{}
 			Eventually(func() bool {
 				return k8sClient.Get(ctx, jobKey, job) == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying Job uses echo agent image")
+			By("Verifying Pod uses echo agent image")
 			Expect(job.Spec.Template.Spec.Containers).Should(HaveLen(1))
 			Expect(job.Spec.Template.Spec.Containers[0].Image).Should(Equal(echoImage))
 
-			By("Waiting for Job to complete successfully")
+			By("Waiting for Pod to complete successfully")
 			Eventually(func() int32 {
 				if err := k8sClient.Get(ctx, jobKey, job); err != nil {
 					return 0
@@ -168,7 +168,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Verifying all content parts are in the logs")
-			jobName := fmt.Sprintf("%s-job", taskName)
+			jobName := fmt.Sprintf("%s-pod", taskName)
 			logs := getPodLogs(ctx, testNS, jobName)
 			Expect(logs).Should(ContainSubstring("Part 1: Introduction"))
 			Expect(logs).Should(ContainSubstring("Part 2: Details"))
@@ -232,7 +232,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Verifying ConfigMap content is in the logs")
-			jobName := fmt.Sprintf("%s-job", taskName)
+			jobName := fmt.Sprintf("%s-pod", taskName)
 			logs := getPodLogs(ctx, testNS, jobName)
 			Expect(logs).Should(ContainSubstring("ConfigMap Content"))
 			Expect(logs).Should(ContainSubstring("ConfigMap resolution works"))
@@ -304,7 +304,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Verifying both default and task content are in the logs")
-			jobName := fmt.Sprintf("%s-job", taskName)
+			jobName := fmt.Sprintf("%s-pod", taskName)
 			logs := getPodLogs(ctx, testNS, jobName)
 			Expect(logs).Should(ContainSubstring("Default Guidelines"))
 			Expect(logs).Should(ContainSubstring("Specific Task"))
@@ -349,7 +349,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 			runningTask := &kubeopenv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, taskKey, runningTask)).Should(Succeed())
 			Expect(runningTask.Status.StartTime).ShouldNot(BeNil())
-			Expect(runningTask.Status.JobName).ShouldNot(BeEmpty())
+			Expect(runningTask.Status.PodName).ShouldNot(BeEmpty())
 
 			By("Verifying Task transitions to Completed")
 			Eventually(func() kubeopenv1alpha1.TaskPhase {
@@ -389,17 +389,17 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
 			taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
-			jobName := fmt.Sprintf("%s-job", taskName)
+			jobName := fmt.Sprintf("%s-pod", taskName)
 			jobKey := types.NamespacedName{Name: jobName, Namespace: testNS}
 
-			By("Waiting for Job to be created")
+			By("Waiting for Pod to be created")
 			Eventually(func() bool {
-				job := &batchv1.Job{}
+				job := &corev1.Pod{}
 				return k8sClient.Get(ctx, jobKey, job) == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying Job has owner reference to Task")
-			job := &batchv1.Job{}
+			By("Verifying Pod has owner reference to Task")
+			job := &corev1.Pod{}
 			Expect(k8sClient.Get(ctx, jobKey, job)).Should(Succeed())
 			Expect(job.OwnerReferences).Should(HaveLen(1))
 			Expect(job.OwnerReferences[0].Name).Should(Equal(taskName))
@@ -415,9 +415,9 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 				return err != nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying Job is garbage collected")
+			By("Verifying Pod is garbage collected")
 			Eventually(func() bool {
-				job := &batchv1.Job{}
+				job := &corev1.Pod{}
 				err := k8sClient.Get(ctx, jobKey, job)
 				return err != nil
 			}, timeout, interval).Should(BeTrue())
@@ -508,7 +508,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 	})
 
 	Context("Task with failing Job", func() {
-		It("should transition to Failed phase when Job fails", func() {
+		It("should transition to Failed phase when Pod fails", func() {
 			taskName := uniqueName("task-fail")
 
 			By("Creating an Agent that always fails")
@@ -605,7 +605,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Verifying Git repository content is available in logs")
-			jobName := fmt.Sprintf("%s-job", taskName)
+			jobName := fmt.Sprintf("%s-pod", taskName)
 			logs := getPodLogs(ctx, testNS, jobName)
 			// The Hello-World repo contains a README file
 			Expect(logs).Should(ContainSubstring("README"))
@@ -655,7 +655,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Verifying specific file content is available")
-			jobName := fmt.Sprintf("%s-job", taskName)
+			jobName := fmt.Sprintf("%s-pod", taskName)
 			logs := getPodLogs(ctx, testNS, jobName)
 			Expect(logs).Should(ContainSubstring("readme-file"))
 
@@ -665,21 +665,18 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 	})
 })
 
-// getPodLogs retrieves logs from pods associated with a Job
-func getPodLogs(ctx context.Context, namespace, jobName string) string {
-	// List pods with the job-name label
+// getPodLogs retrieves logs from the Pod associated with a Task
+func getPodLogs(ctx context.Context, namespace, podName string) string {
+	// The pod name is "{task-name}-pod", task name is the label value
+	taskName := strings.TrimSuffix(podName, "-pod")
+
+	// List pods with the kubeopencode.io/task label
 	pods := &corev1.PodList{}
 	err := k8sClient.List(ctx, pods,
 		client.InNamespace(namespace),
-		client.MatchingLabels{"job-name": jobName})
+		client.MatchingLabels{"kubeopencode.io/task": taskName})
 	if err != nil || len(pods.Items) == 0 {
-		// Try alternative label format
-		err = k8sClient.List(ctx, pods,
-			client.InNamespace(namespace),
-			client.MatchingLabels{"batch.kubernetes.io/job-name": jobName})
-		if err != nil || len(pods.Items) == 0 {
-			return ""
-		}
+		return ""
 	}
 
 	var allLogs strings.Builder

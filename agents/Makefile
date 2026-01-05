@@ -1,4 +1,4 @@
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 SHELL := /bin/bash
 
 # Agent to build (opencode, devbox, code-server, etc.)

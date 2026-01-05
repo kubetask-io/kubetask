@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright Contributors to the KubeTask project
+# Copyright Contributors to the KubeOpenCode project
 
 set -o errexit
 set -o nounset

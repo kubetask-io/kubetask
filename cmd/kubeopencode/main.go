@@ -4,8 +4,11 @@
 // and infrastructure tool functionality in a single image.
 //
 // Available commands:
-//   - controller:    Start the Kubernetes controller
-//   - git-init:      Clone Git repositories for Git Context
+//   - controller:      Start the Kubernetes controller
+//   - git-init:        Clone Git repositories for Git Context
+//   - context-init:    Copy ConfigMap content to workspace
+//   - url-fetch:       Fetch content from remote URLs for URL Context
+//   - collect-outputs: Collect output parameters from files (sidecar)
 package main
 
 import (
@@ -21,15 +24,21 @@ var rootCmd = &cobra.Command{
 	Long: `KubeOpenCode is a Kubernetes-native system for executing AI-powered tasks.
 
 This unified binary provides:
-  controller      Start the Kubernetes controller
-  git-init        Clone Git repositories for Git Context
+  controller       Start the Kubernetes controller
+  git-init         Clone Git repositories for Git Context
+  context-init     Copy ConfigMap content to workspace
+  url-fetch        Fetch content from remote URLs for URL Context
+  collect-outputs  Collect output parameters from files (sidecar)
 
 Examples:
   # Start the controller
   kubeopencode controller --metrics-bind-address=:8080
 
   # Clone a Git repository (used in init containers)
-  kubeopencode git-init`,
+  kubeopencode git-init
+
+  # Fetch URL content (used in init containers)
+  kubeopencode url-fetch`,
 }
 
 func main() {

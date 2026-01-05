@@ -209,7 +209,7 @@ func TestSanitizeVolumeName(t *testing.T) {
 	}
 }
 
-func TestBuildJob_BasicTask(t *testing.T) {
+func TestBuildPod_BasicTask(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -221,35 +221,36 @@ func TestBuildJob_BasicTask(t *testing.T) {
 	task.Kind = "Task"
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
-	// Verify job metadata
-	if job.Name != "test-task-job" {
-		t.Errorf("Job.Name = %q, want %q", job.Name, "test-task-job")
+	// Verify pod metadata
+	if pod.Name != "test-task-pod" {
+		t.Errorf("Pod.Name = %q, want %q", pod.Name, "test-task-pod")
 	}
-	if job.Namespace != "default" {
-		t.Errorf("Job.Namespace = %q, want %q", job.Namespace, "default")
+	if pod.Namespace != "default" {
+		t.Errorf("Pod.Namespace = %q, want %q", pod.Namespace, "default")
 	}
 
 	// Verify labels
-	if job.Labels["app"] != "kubeopencode" {
-		t.Errorf("Job.Labels[app] = %q, want %q", job.Labels["app"], "kubeopencode")
+	if pod.Labels["app"] != "kubeopencode" {
+		t.Errorf("Pod.Labels[app] = %q, want %q", pod.Labels["app"], "kubeopencode")
 	}
-	if job.Labels["kubeopencode.io/task"] != "test-task" {
-		t.Errorf("Job.Labels[kubeopencode.io/task] = %q, want %q", job.Labels["kubeopencode.io/task"], "test-task")
+	if pod.Labels["kubeopencode.io/task"] != "test-task" {
+		t.Errorf("Pod.Labels[kubeopencode.io/task] = %q, want %q", pod.Labels["kubeopencode.io/task"], "test-task")
 	}
 
 	// Verify owner reference
-	if len(job.OwnerReferences) != 1 {
-		t.Fatalf("len(Job.OwnerReferences) = %d, want 1", len(job.OwnerReferences))
+	if len(pod.OwnerReferences) != 1 {
+		t.Fatalf("len(Pod.OwnerReferences) = %d, want 1", len(pod.OwnerReferences))
 	}
-	ownerRef := job.OwnerReferences[0]
+	ownerRef := pod.OwnerReferences[0]
 	if ownerRef.Name != "test-task" {
 		t.Errorf("OwnerReference.Name = %q, want %q", ownerRef.Name, "test-task")
 	}
@@ -257,16 +258,52 @@ func TestBuildJob_BasicTask(t *testing.T) {
 		t.Errorf("OwnerReference.Controller = %v, want true", ownerRef.Controller)
 	}
 
-	// Verify container
-	if len(job.Spec.Template.Spec.Containers) != 1 {
-		t.Fatalf("len(Containers) = %d, want 1", len(job.Spec.Template.Spec.Containers))
+	// Verify init containers (OpenCode init should be first)
+	if len(pod.Spec.InitContainers) < 1 {
+		t.Fatalf("len(InitContainers) = %d, want at least 1", len(pod.Spec.InitContainers))
 	}
-	container := job.Spec.Template.Spec.Containers[0]
+	initContainer := pod.Spec.InitContainers[0]
+	if initContainer.Name != "opencode-init" {
+		t.Errorf("InitContainer.Name = %q, want %q", initContainer.Name, "opencode-init")
+	}
+	if initContainer.Image != "test-opencode:v1.0.0" {
+		t.Errorf("InitContainer.Image = %q, want %q", initContainer.Image, "test-opencode:v1.0.0")
+	}
+
+	// Verify init container mounts /tools volume
+	var initHasToolsMount bool
+	for _, vm := range initContainer.VolumeMounts {
+		if vm.Name == "tools" && vm.MountPath == "/tools" {
+			initHasToolsMount = true
+			break
+		}
+	}
+	if !initHasToolsMount {
+		t.Errorf("InitContainer should mount /tools volume")
+	}
+
+	// Verify container (uses executorImage)
+	if len(pod.Spec.Containers) != 1 {
+		t.Fatalf("len(Containers) = %d, want 1", len(pod.Spec.Containers))
+	}
+	container := pod.Spec.Containers[0]
 	if container.Name != "agent" {
 		t.Errorf("Container.Name = %q, want %q", container.Name, "agent")
 	}
-	if container.Image != "test-agent:v1.0.0" {
-		t.Errorf("Container.Image = %q, want %q", container.Image, "test-agent:v1.0.0")
+	if container.Image != "test-executor:v1.0.0" {
+		t.Errorf("Container.Image = %q, want %q", container.Image, "test-executor:v1.0.0")
+	}
+
+	// Verify container mounts /tools volume
+	var containerHasToolsMount bool
+	for _, vm := range container.VolumeMounts {
+		if vm.Name == "tools" && vm.MountPath == "/tools" {
+			containerHasToolsMount = true
+			break
+		}
+	}
+	if !containerHasToolsMount {
+		t.Errorf("Container should mount /tools volume")
 	}
 
 	// Verify environment variables
@@ -285,18 +322,13 @@ func TestBuildJob_BasicTask(t *testing.T) {
 	}
 
 	// Verify service account
-	if job.Spec.Template.Spec.ServiceAccountName != "test-sa" {
-		t.Errorf("ServiceAccountName = %q, want %q", job.Spec.Template.Spec.ServiceAccountName, "test-sa")
+	if pod.Spec.ServiceAccountName != "test-sa" {
+		t.Errorf("ServiceAccountName = %q, want %q", pod.Spec.ServiceAccountName, "test-sa")
 	}
 
 	// Verify restart policy
-	if job.Spec.Template.Spec.RestartPolicy != corev1.RestartPolicyNever {
-		t.Errorf("RestartPolicy = %q, want %q", job.Spec.Template.Spec.RestartPolicy, corev1.RestartPolicyNever)
-	}
-
-	// Verify backoff limit is 0 (no retries - AI tasks are not idempotent)
-	if job.Spec.BackoffLimit == nil || *job.Spec.BackoffLimit != 0 {
-		t.Errorf("BackoffLimit = %v, want 0", job.Spec.BackoffLimit)
+	if pod.Spec.RestartPolicy != corev1.RestartPolicyNever {
+		t.Errorf("RestartPolicy = %q, want %q", pod.Spec.RestartPolicy, corev1.RestartPolicyNever)
 	}
 }
 
@@ -305,7 +337,7 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-func TestBuildJob_WithCredentials(t *testing.T) {
+func TestBuildPod_WithCredentials(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -320,7 +352,8 @@ func TestBuildJob_WithCredentials(t *testing.T) {
 	mountPath := "/home/agent/.ssh/id_rsa"
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -344,9 +377,9 @@ func TestBuildJob_WithCredentials(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
-	container := job.Spec.Template.Spec.Containers[0]
+	container := pod.Spec.Containers[0]
 
 	// Verify env credential
 	var foundEnvCred bool
@@ -382,7 +415,7 @@ func TestBuildJob_WithCredentials(t *testing.T) {
 
 	// Verify volume exists
 	var foundVolume bool
-	for _, vol := range job.Spec.Template.Spec.Volumes {
+	for _, vol := range pod.Spec.Volumes {
 		if vol.Secret != nil && vol.Secret.SecretName == "ssh-secret" {
 			foundVolume = true
 		}
@@ -392,7 +425,7 @@ func TestBuildJob_WithCredentials(t *testing.T) {
 	}
 }
 
-func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
+func TestBuildPod_WithEntireSecretCredential(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -404,7 +437,8 @@ func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
 	task.Kind = "Task"
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -420,9 +454,9 @@ func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
-	container := job.Spec.Template.Spec.Containers[0]
+	container := pod.Spec.Containers[0]
 
 	// Verify envFrom is set with secretRef
 	if len(container.EnvFrom) != 1 {
@@ -437,7 +471,7 @@ func TestBuildJob_WithEntireSecretCredential(t *testing.T) {
 	}
 }
 
-func TestBuildJob_WithMixedCredentials(t *testing.T) {
+func TestBuildPod_WithMixedCredentials(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -451,7 +485,8 @@ func TestBuildJob_WithMixedCredentials(t *testing.T) {
 	envName := "GITHUB_TOKEN"
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -475,9 +510,9 @@ func TestBuildJob_WithMixedCredentials(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
-	container := job.Spec.Template.Spec.Containers[0]
+	container := pod.Spec.Containers[0]
 
 	// Verify envFrom has 1 entry (entire secret)
 	if len(container.EnvFrom) != 1 {
@@ -509,7 +544,7 @@ func TestBuildJob_WithMixedCredentials(t *testing.T) {
 	}
 }
 
-func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
+func TestBuildPod_WithEntireSecretAsDirectory(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -524,7 +559,8 @@ func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
 	var fileMode int32 = 0400
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -542,10 +578,9 @@ func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
-	container := job.Spec.Template.Spec.Containers[0]
-	podSpec := job.Spec.Template.Spec
+	container := pod.Spec.Containers[0]
 
 	// Verify envFrom is NOT set (should not be env vars)
 	if len(container.EnvFrom) != 0 {
@@ -555,7 +590,7 @@ func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
 	// Verify volume is created
 	var foundVolume bool
 	var volumeName string
-	for _, vol := range podSpec.Volumes {
+	for _, vol := range pod.Spec.Volumes {
 		if vol.Secret != nil && vol.Secret.SecretName == "tls-certificates" {
 			foundVolume = true
 			volumeName = vol.Name
@@ -596,7 +631,7 @@ func TestBuildJob_WithEntireSecretAsDirectory(t *testing.T) {
 	}
 }
 
-func TestBuildJob_WithPodScheduling(t *testing.T) {
+func TestBuildPod_WithPodScheduling(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -609,7 +644,8 @@ func TestBuildJob_WithPodScheduling(t *testing.T) {
 
 	runtimeClass := "gvisor"
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -634,40 +670,37 @@ func TestBuildJob_WithPodScheduling(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, nil, defaultSystemConfig())
-
-	podSpec := job.Spec.Template.Spec
+	pod := buildPod(task, "test-task-pod", cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
 
 	// Verify node selector
-	if podSpec.NodeSelector["node-type"] != "gpu" {
-		t.Errorf("NodeSelector[node-type] = %q, want %q", podSpec.NodeSelector["node-type"], "gpu")
+	if pod.Spec.NodeSelector["node-type"] != "gpu" {
+		t.Errorf("NodeSelector[node-type] = %q, want %q", pod.Spec.NodeSelector["node-type"], "gpu")
 	}
 
 	// Verify tolerations
-	if len(podSpec.Tolerations) != 1 {
-		t.Fatalf("len(Tolerations) = %d, want 1", len(podSpec.Tolerations))
+	if len(pod.Spec.Tolerations) != 1 {
+		t.Fatalf("len(Tolerations) = %d, want 1", len(pod.Spec.Tolerations))
 	}
-	if podSpec.Tolerations[0].Key != "dedicated" {
-		t.Errorf("Tolerations[0].Key = %q, want %q", podSpec.Tolerations[0].Key, "dedicated")
+	if pod.Spec.Tolerations[0].Key != "dedicated" {
+		t.Errorf("Tolerations[0].Key = %q, want %q", pod.Spec.Tolerations[0].Key, "dedicated")
 	}
 
 	// Verify runtime class
-	if podSpec.RuntimeClassName == nil || *podSpec.RuntimeClassName != "gvisor" {
-		t.Errorf("RuntimeClassName = %v, want %q", podSpec.RuntimeClassName, "gvisor")
+	if pod.Spec.RuntimeClassName == nil || *pod.Spec.RuntimeClassName != "gvisor" {
+		t.Errorf("RuntimeClassName = %v, want %q", pod.Spec.RuntimeClassName, "gvisor")
 	}
 
-	// Verify custom label on pod template
-	podLabels := job.Spec.Template.Labels
-	if podLabels["custom-label"] != "custom-value" {
-		t.Errorf("PodLabels[custom-label] = %q, want %q", podLabels["custom-label"], "custom-value")
+	// Verify custom label on pod
+	if pod.Labels["custom-label"] != "custom-value" {
+		t.Errorf("Pod.Labels[custom-label] = %q, want %q", pod.Labels["custom-label"], "custom-value")
 	}
 	// Verify base labels are still present
-	if podLabels["app"] != "kubeopencode" {
-		t.Errorf("PodLabels[app] = %q, want %q", podLabels["app"], "kubeopencode")
+	if pod.Labels["app"] != "kubeopencode" {
+		t.Errorf("Pod.Labels[app] = %q, want %q", pod.Labels["app"], "kubeopencode")
 	}
 }
 
-func TestBuildJob_WithContextConfigMap(t *testing.T) {
+func TestBuildPod_WithContextConfigMap(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -679,7 +712,8 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 	task.Kind = "Task"
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -699,11 +733,11 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 		{filePath: "/workspace/task.md"},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, nil, nil, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, contextConfigMap, fileMounts, nil, nil, nil, defaultSystemConfig())
 
 	// Verify context-files volume exists (for init container to read from)
 	var foundContextVolume bool
-	for _, vol := range job.Spec.Template.Spec.Volumes {
+	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == "context-files" && vol.ConfigMap != nil {
 			foundContextVolume = true
 			if vol.ConfigMap.Name != "test-task-context" {
@@ -717,7 +751,7 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 
 	// Verify workspace emptyDir volume exists
 	var foundWorkspaceVolume bool
-	for _, vol := range job.Spec.Template.Spec.Volumes {
+	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == "workspace" && vol.EmptyDir != nil {
 			foundWorkspaceVolume = true
 		}
@@ -727,7 +761,7 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 	}
 
 	// Verify agent container mounts workspace emptyDir
-	container := job.Spec.Template.Spec.Containers[0]
+	container := pod.Spec.Containers[0]
 	var foundWorkspaceMount bool
 	for _, mount := range container.VolumeMounts {
 		if mount.MountPath == "/workspace" && mount.Name == "workspace" {
@@ -739,7 +773,7 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 	}
 
 	// Verify context-init container exists
-	initContainers := job.Spec.Template.Spec.InitContainers
+	initContainers := pod.Spec.InitContainers
 	var foundContextInit bool
 	for _, ic := range initContainers {
 		if ic.Name == "context-init" {
@@ -768,7 +802,7 @@ func TestBuildJob_WithContextConfigMap(t *testing.T) {
 	}
 }
 
-func TestBuildJob_WithDirMounts(t *testing.T) {
+func TestBuildPod_WithDirMounts(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -780,7 +814,8 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 	task.Kind = "Task"
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -794,11 +829,11 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, dirMounts, nil, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, nil, nil, dirMounts, nil, nil, defaultSystemConfig())
 
 	// Verify dir-mount volume exists (for init container to read from)
 	var foundDirVolume bool
-	for _, vol := range job.Spec.Template.Spec.Volumes {
+	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == "dir-mount-0" && vol.ConfigMap != nil {
 			foundDirVolume = true
 			if vol.ConfigMap.Name != "guides-configmap" {
@@ -815,7 +850,7 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 
 	// Verify workspace emptyDir volume exists
 	var foundWorkspaceVolume bool
-	for _, vol := range job.Spec.Template.Spec.Volumes {
+	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == "workspace" && vol.EmptyDir != nil {
 			foundWorkspaceVolume = true
 		}
@@ -825,7 +860,7 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 	}
 
 	// Verify agent container mounts workspace emptyDir (not dir-mount directly)
-	container := job.Spec.Template.Spec.Containers[0]
+	container := pod.Spec.Containers[0]
 	var foundWorkspaceMount bool
 	for _, mount := range container.VolumeMounts {
 		if mount.MountPath == "/workspace" && mount.Name == "workspace" {
@@ -837,7 +872,7 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 	}
 
 	// Verify context-init container exists and mounts the ConfigMap
-	initContainers := job.Spec.Template.Spec.InitContainers
+	initContainers := pod.Spec.InitContainers
 	var foundContextInit bool
 	for _, ic := range initContainers {
 		if ic.Name == "context-init" {
@@ -859,7 +894,7 @@ func TestBuildJob_WithDirMounts(t *testing.T) {
 	}
 }
 
-func TestBuildJob_WithGitMounts(t *testing.T) {
+func TestBuildPod_WithGitMounts(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -873,7 +908,8 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 	}
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -891,19 +927,26 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, gitMounts, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, nil, nil, nil, gitMounts, nil, defaultSystemConfig())
 
-	// Verify init container exists
-	if len(job.Spec.Template.Spec.InitContainers) != 1 {
-		t.Fatalf("Expected 1 init container, got %d", len(job.Spec.Template.Spec.InitContainers))
+	// Verify init containers exist (opencode-init first, then git-init-0)
+	if len(pod.Spec.InitContainers) != 2 {
+		t.Fatalf("Expected 2 init containers (opencode-init + git-init), got %d", len(pod.Spec.InitContainers))
 	}
 
-	initContainer := job.Spec.Template.Spec.InitContainers[0]
+	// First init container should be opencode-init
+	openCodeInit := pod.Spec.InitContainers[0]
+	if openCodeInit.Name != "opencode-init" {
+		t.Errorf("First init container name = %q, want %q", openCodeInit.Name, "opencode-init")
+	}
+
+	// Second init container should be git-init-0
+	initContainer := pod.Spec.InitContainers[1]
 	if initContainer.Name != "git-init-0" {
-		t.Errorf("Init container name = %q, want %q", initContainer.Name, "git-init-0")
+		t.Errorf("Git init container name = %q, want %q", initContainer.Name, "git-init-0")
 	}
 	if initContainer.Image != DefaultKubeOpenCodeImage {
-		t.Errorf("Init container image = %q, want %q", initContainer.Image, DefaultKubeOpenCodeImage)
+		t.Errorf("Git init container image = %q, want %q", initContainer.Image, DefaultKubeOpenCodeImage)
 	}
 
 	// Verify environment variables
@@ -923,7 +966,7 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 
 	// Verify emptyDir volume exists
 	var foundGitVolume bool
-	for _, vol := range job.Spec.Template.Spec.Volumes {
+	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == "git-context-0" && vol.EmptyDir != nil {
 			foundGitVolume = true
 		}
@@ -933,7 +976,7 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 	}
 
 	// Verify volume mount in agent container with correct subPath
-	container := job.Spec.Template.Spec.Containers[0]
+	container := pod.Spec.Containers[0]
 	var foundMount bool
 	for _, mount := range container.VolumeMounts {
 		if mount.MountPath == "/workspace/.claude" && mount.Name == "git-context-0" {
@@ -949,7 +992,7 @@ func TestBuildJob_WithGitMounts(t *testing.T) {
 	}
 }
 
-func TestBuildJob_WithGitMountsAndAuth(t *testing.T) {
+func TestBuildPod_WithGitMountsAndAuth(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -963,7 +1006,8 @@ func TestBuildJob_WithGitMountsAndAuth(t *testing.T) {
 	}
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -981,12 +1025,21 @@ func TestBuildJob_WithGitMountsAndAuth(t *testing.T) {
 		},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, nil, nil, nil, gitMounts, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, nil, nil, nil, gitMounts, nil, defaultSystemConfig())
 
-	// Verify init container has auth env vars
-	initContainer := job.Spec.Template.Spec.InitContainers[0]
+	// Verify we have 2 init containers (opencode-init + git-init)
+	if len(pod.Spec.InitContainers) != 2 {
+		t.Fatalf("Expected 2 init containers, got %d", len(pod.Spec.InitContainers))
+	}
+
+	// Verify git-init container (second one) has auth env vars
+	gitInitContainer := pod.Spec.InitContainers[1]
+	if gitInitContainer.Name != "git-init-0" {
+		t.Errorf("Second init container name = %q, want %q", gitInitContainer.Name, "git-init-0")
+	}
+
 	var foundUsername, foundPassword bool
-	for _, env := range initContainer.Env {
+	for _, env := range gitInitContainer.Env {
 		if env.Name == "GIT_USERNAME" && env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
 			if env.ValueFrom.SecretKeyRef.Name == "git-credentials" && env.ValueFrom.SecretKeyRef.Key == "username" {
 				foundUsername = true
@@ -1006,7 +1059,7 @@ func TestBuildJob_WithGitMountsAndAuth(t *testing.T) {
 	}
 
 	// Verify volume mount without subPath (entire repo)
-	container := job.Spec.Template.Spec.Containers[0]
+	container := pod.Spec.Containers[0]
 	var foundMount bool
 	for _, mount := range container.VolumeMounts {
 		if mount.MountPath == "/workspace/git-private-repo" && mount.Name == "git-context-0" {
@@ -1182,12 +1235,12 @@ func TestBuildContextInitContainer(t *testing.T) {
 			}
 
 			// Verify no unexpected env vars for FILE_MAPPINGS/DIR_MAPPINGS
-			if tt.fileMounts == nil || len(tt.fileMounts) == 0 {
+			if len(tt.fileMounts) == 0 {
 				if _, ok := envMap["FILE_MAPPINGS"]; ok {
 					t.Errorf("FILE_MAPPINGS should not be set when there are no file mounts")
 				}
 			}
-			if tt.dirMounts == nil || len(tt.dirMounts) == 0 {
+			if len(tt.dirMounts) == 0 {
 				if _, ok := envMap["DIR_MAPPINGS"]; ok {
 					t.Errorf("DIR_MAPPINGS should not be set when there are no dir mounts")
 				}
@@ -1196,9 +1249,9 @@ func TestBuildContextInitContainer(t *testing.T) {
 	}
 }
 
-// TestBuildJob_WithExternalFileMounts tests that files mounted outside of /workspace
+// TestBuildPod_WithExternalFileMounts tests that files mounted outside of /workspace
 // are properly handled by creating shared emptyDir volumes.
-func TestBuildJob_WithExternalFileMounts(t *testing.T) {
+func TestBuildPod_WithExternalFileMounts(t *testing.T) {
 	task := &kubeopenv1alpha1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-task",
@@ -1210,7 +1263,8 @@ func TestBuildJob_WithExternalFileMounts(t *testing.T) {
 	task.Kind = "Task"
 
 	cfg := agentConfig{
-		agentImage:         "test-agent:v1.0.0",
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
 		command:            []string{"sh", "-c", "echo test"},
@@ -1233,11 +1287,11 @@ func TestBuildJob_WithExternalFileMounts(t *testing.T) {
 		{filePath: "/etc/github-app/github-app-iat.sh"},
 	}
 
-	job := buildJob(task, "test-task-job", cfg, contextConfigMap, fileMounts, nil, nil, defaultSystemConfig())
+	pod := buildPod(task, "test-task-pod", cfg, contextConfigMap, fileMounts, nil, nil, nil, defaultSystemConfig())
 
 	// Verify workspace emptyDir volume exists
 	var foundWorkspaceVolume bool
-	for _, vol := range job.Spec.Template.Spec.Volumes {
+	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == "workspace" && vol.EmptyDir != nil {
 			foundWorkspaceVolume = true
 		}
@@ -1249,7 +1303,7 @@ func TestBuildJob_WithExternalFileMounts(t *testing.T) {
 	// Verify external directory volume exists (for /etc/github-app)
 	var foundExternalVolume bool
 	var externalVolumeName string
-	for _, vol := range job.Spec.Template.Spec.Volumes {
+	for _, vol := range pod.Spec.Volumes {
 		if strings.HasPrefix(vol.Name, "ctx-") && vol.EmptyDir != nil {
 			foundExternalVolume = true
 			externalVolumeName = vol.Name
@@ -1261,9 +1315,9 @@ func TestBuildJob_WithExternalFileMounts(t *testing.T) {
 
 	// Verify context-init container has the external volume mounted
 	var contextInitContainer *corev1.Container
-	for i := range job.Spec.Template.Spec.InitContainers {
-		if job.Spec.Template.Spec.InitContainers[i].Name == "context-init" {
-			contextInitContainer = &job.Spec.Template.Spec.InitContainers[i]
+	for i := range pod.Spec.InitContainers {
+		if pod.Spec.InitContainers[i].Name == "context-init" {
+			contextInitContainer = &pod.Spec.InitContainers[i]
 			break
 		}
 	}
@@ -1283,9 +1337,9 @@ func TestBuildJob_WithExternalFileMounts(t *testing.T) {
 
 	// Verify agent container has the external volume mounted
 	var agentContainer *corev1.Container
-	for i := range job.Spec.Template.Spec.Containers {
-		if job.Spec.Template.Spec.Containers[i].Name == "agent" {
-			agentContainer = &job.Spec.Template.Spec.Containers[i]
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == "agent" {
+			agentContainer = &pod.Spec.Containers[i]
 			break
 		}
 	}

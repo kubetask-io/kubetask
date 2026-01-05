@@ -41,20 +41,7 @@ rules:
   - get
   - update
   - patch
-# Jobs
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-# ConfigMaps and Secrets (full access for task context and job templates)
+# ConfigMaps and Secrets (full access for task context)
 - apiGroups:
   - ""
   resources:
@@ -76,7 +63,7 @@ rules:
   verbs:
   - create
   - patch
-# Pods (for session resume functionality)
+# Pods (for task execution)
 - apiGroups:
   - ""
   resources:

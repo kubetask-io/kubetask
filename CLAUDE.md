@@ -8,7 +8,7 @@ This document provides guidelines for AI assistants (like Claude) working on the
 
 > **Disclaimer**: This project uses [OpenCode](https://opencode.ai) as its primary AI coding tool. KubeOpenCode is not built by or affiliated with the OpenCode team.
 
-KubeOpenCode is a Kubernetes-native system that executes AI-powered tasks using Custom Resources (CRs) and the Operator pattern. It provides a simple, declarative way to run AI agents as Kubernetes Jobs, using OpenCode as the primary AI coding tool.
+KubeOpenCode brings Agentic AI capabilities into the Kubernetes ecosystem. By leveraging Kubernetes, it enables AI agents to be deployed as services, run in isolated virtual environments, and integrate with enterprise management and governance frameworks.
 
 **Key Technologies:**
 - Kubernetes Custom Resource Definitions (CRDs)
@@ -18,7 +18,7 @@ KubeOpenCode is a Kubernetes-native system that executes AI-powered tasks using 
 
 **Architecture Philosophy:**
 - No external dependencies (no PostgreSQL, Redis)
-- Kubernetes-native (uses etcd for state, Jobs for execution)
+- Kubernetes-native (uses etcd for state, Pods for execution)
 - Declarative and GitOps-friendly
 - Simple API: Task (WHAT to do) + Agent (HOW to execute)
 - Use Helm/Kustomize for batch operations (multiple Tasks)
@@ -32,8 +32,9 @@ KubeOpenCode uses a single container image (`quay.io/kubeopencode/kubeopencode`)
 | `controller` | Main controller reconciliation |
 | `git-init` | Git Context cloning (init container) |
 | `context-init` | Context file initialization (init container) |
+| `url-fetch` | URL Context fetching (init container) |
 
-The image constant is defined in `internal/controller/job_builder.go` as `DefaultKubeOpenCodeImage`.
+The image constant is defined in `internal/controller/pod_builder.go` as `DefaultKubeOpenCodeImage`.
 
 **Event-Driven Triggers (Argo Events):**
 
@@ -52,7 +53,7 @@ Webhook/event handling has been delegated to [Argo Events](https://argoproj.gith
 ### Important Design Decisions
 
 - **Agent** (not KubeOpenCodeConfig) - Stable, project-independent naming
-- **AgentImage** (not AgentTemplateRef) - Simple container image, controller generates Jobs
+- **AgentImage** (not AgentTemplateRef) - Simple container image, controller generates Pods
 - **agentRef** - Reference from Task to Agent
 - **No Batch/BatchRun** - Use Helm/Kustomize to create multiple Tasks (Kubernetes-native approach)
 
@@ -65,9 +66,14 @@ Tasks and Agents use inline **ContextItem** to provide additional context:
 - **ConfigMap**: Content from ConfigMap (`type: ConfigMap`, `configMap.name`, optional `configMap.key`)
 - **Git**: Content from Git repository (`type: Git`, `git.repository`, `git.ref`, optional `git.secretRef`)
 - **Runtime**: KubeOpenCode platform awareness system prompt (`type: Runtime`)
+- **Secret**: Content from Kubernetes Secret (`type: Secret`, `secret.name`, optional `secret.key`)
+- **URL**: Content from remote HTTP/HTTPS URL (`type: URL`, `url.source`, requires `mountPath`)
 
 **ContextItem** fields:
-- `type`: Context type (Text, ConfigMap, Git, Runtime)
+- `name`: Optional identifier for logging, debugging, and XML tag generation
+- `description`: Human-readable documentation for this context
+- `optional`: If true, task proceeds even if context cannot be resolved
+- `type`: Context type (Text, ConfigMap, Git, Runtime, Secret, URL)
 - `mountPath`: Where to mount (empty = append to task.md with XML tags)
   - Path resolution follows Tekton conventions:
     - Absolute paths (`/etc/config`) are used as-is
@@ -77,20 +83,35 @@ Tasks and Agents use inline **ContextItem** to provide additional context:
 **Example:**
 ```yaml
 contexts:
-  - type: Text
+  - name: coding-standards
+    description: "Organization coding standards"
+    type: Text
     text: |
       # Rules for AI Agent
       Always use signed commits...
-  - type: ConfigMap
+  - name: scripts
+    type: ConfigMap
     configMap:
       name: my-scripts
     mountPath: .scripts
     fileMode: 493  # 0755 in decimal
-  - type: Git
+  - name: source
+    type: Git
     git:
       repository: https://github.com/org/repo.git
       ref: main
     mountPath: source-code
+  - name: api-spec
+    type: URL
+    url:
+      source: https://api.example.com/openapi.yaml
+    mountPath: specs/openapi.yaml
+  - name: config-template
+    type: Secret
+    optional: true
+    secret:
+      name: api-config
+      key: config.yaml
 ```
 
 **Future**: MCP contexts (extensible design)
@@ -267,10 +288,11 @@ kubeopencode/
 │   ├── main.go            # Root command
 │   ├── controller.go      # Controller subcommand
 │   ├── git_init.go        # Git init container subcommand
-│   └── context_init.go    # Context initialization subcommand
+│   ├── context_init.go    # Context initialization subcommand
+│   └── url_fetch.go       # URL context fetching subcommand
 ├── internal/controller/   # Controller reconcilers
 │   ├── task_controller.go # Task reconciliation logic
-│   ├── job_builder.go     # Job creation from Task specs
+│   ├── pod_builder.go     # Pod creation from Task specs
 │   └── context_resolver.go # Context resolution logic
 ├── deploy/               # Kubernetes manifests
 │   ├── crds/            # Generated CRD YAMLs
@@ -387,7 +409,7 @@ internal/controller/
 
 - Located in `e2e/` directory
 - Use Kind cluster for full system testing
-- Test complete workflows (Task → Job)
+- Test complete workflows (Task → Pod)
 - Verify status updates and conditions
 - Check that cleanup works correctly
 
@@ -404,13 +426,20 @@ internal/controller/
 ### Agent Configuration
 
 Key Agent spec fields:
-- `agentImage`: Container image for task execution
+- `agentImage`: OpenCode init container image (copies binary to `/tools`)
+- `executorImage`: Main worker container image for task execution
 - `command`: **Required** - Entrypoint command that defines HOW the agent executes tasks
 - `workspaceDir`: **Required** - Working directory where task.md and context files are mounted
 - `contexts`: Inline ContextItems applied to all tasks using this Agent
 - `credentials`: Secrets as env vars or file mounts (supports single key or entire secret)
 - `serviceAccountName`: Kubernetes ServiceAccount for RBAC
 - `maxConcurrentTasks`: Limit concurrent Tasks using this Agent (nil/0 = unlimited)
+
+**Two-Container Pattern:**
+
+KubeOpenCode uses a two-container pattern:
+1. **Init Container** (`agentImage`): Copies OpenCode binary to `/tools` shared volume
+2. **Worker Container** (`executorImage`): Runs tasks using `/tools/opencode`
 
 **Command Field (Required):**
 
@@ -424,9 +453,10 @@ kind: Agent
 metadata:
   name: opencode-agent
 spec:
-  # TBD: New architecture uses init container + executor pattern
-  # agentImage will be the executor image, opencode is injected via init container
-  agentImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  # OpenCode init container (optional, has default)
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  # Executor container (optional, has default)
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   command:
     - sh
     - -c
@@ -445,7 +475,8 @@ kind: Agent
 metadata:
   name: opencode-agent
 spec:
-  agentImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   command:
     - sh
     - -c
@@ -469,15 +500,16 @@ kubectl annotate task my-task kubeopencode.io/stop=true
 ```
 
 When this annotation is detected:
-- The controller suspends the Job (sets `spec.suspend=true`)
-- Kubernetes sends SIGTERM to all running Pods, triggering graceful shutdown
-- Job and Pod are preserved (not deleted), so **logs remain accessible**
+- The controller deletes the Pod (with graceful termination period)
+- Kubernetes sends SIGTERM to the container, triggering graceful shutdown
+- Pod is deleted after termination (logs are not preserved)
 - Task status is set to `Completed` with a `Stopped` condition
 - The `Stopped` condition has reason `UserStopped`
 
 This is useful for:
 - Stopping long-running Tasks without waiting for timeout
-- Preserving logs for debugging or auditing after stopping
+
+**Note:** Logs are lost when a Task is stopped. For log persistence, use an external log aggregation system (Loki, ELK, CloudWatch, etc.).
 
 **Credentials Mounting:**
 
@@ -513,31 +545,60 @@ credentials:
 KubeOpenCode uses a **two-container pattern**:
 
 1. **Init Container** (OpenCode image): Copies `/opencode` binary to `/tools` shared volume
-2. **Worker Container** (Executor image): Uses `/tools/opencode` to run AI tasks
+2. **Worker Container** (`executorImage`): Uses `/tools/opencode` to run AI tasks
 
-The executor image is discovered via:
-1. `Agent.spec.agentImage` (from referenced Agent)
-2. Built-in default image (fallback: `quay.io/kubeopencode/kubeopencode-agent-devbox:latest`)
+Image resolution:
+
+| Field | Container | Default |
+|-------|-----------|---------|
+| `agentImage` | Init Container (OpenCode) | `quay.io/kubeopencode/kubeopencode-agent-opencode:latest` |
+| `executorImage` | Worker Container | `quay.io/kubeopencode/kubeopencode-agent-devbox:latest` |
+
+**Backward Compatibility:**
+- If only `agentImage` is set (legacy): it's used as executor image, default OpenCode image for init container
+- If both are set: `agentImage` for init container, `executorImage` for worker container
 
 Agent lookup:
 - Task uses `agentRef` to reference an Agent
 - If not specified, looks for Agent named "default" in the same namespace
-- If not found, uses built-in default executor image
+- If not found, uses built-in default images
 
-The controller generates Jobs with:
-- Init container that copies OpenCode binary to `/tools`
-- Worker container with executor image
+The controller generates Pods with:
+- Init containers for context initialization (git-init, context-init, url-fetch)
+- Agent container with the configured agent image
 - Labels: `kubeopencode.io/task`
-- Env vars: `TASK_NAME`, `TASK_NAMESPACE`
+- Env vars: `TASK_NAME`, `TASK_NAMESPACE`, `WORKSPACE_DIR`
 - ServiceAccount from Agent spec
 - Owner references for garbage collection
+
+### Task Outputs
+
+Task execution results are captured in `status.outputs`:
+
+- `exitCode`: Agent process exit code (0 = success)
+- `result`: Primary output summary from the agent
+- `parameters`: Dynamic key-value map for structured outputs (PR URLs, commit SHAs, etc.)
+
+**Retrieving Outputs:**
+```bash
+# Get exit code
+kubectl get task my-task -o jsonpath='{.status.outputs.exitCode}'
+
+# Get result summary
+kubectl get task my-task -o jsonpath='{.status.outputs.result}'
+
+# Get specific parameter (e.g., PR URL)
+kubectl get task my-task -o jsonpath='{.status.outputs.parameters.pr-url}'
+```
+
+**Note:** Due to Kubernetes termination message 4KB limit, total output must be under 4KB. For larger outputs, consider using external storage.
 
 ## Kubernetes Integration
 
 ### RBAC
 
 The controller requires permissions for:
-- Creating/updating/deleting Jobs
+- Creating/updating/deleting Pods
 - Reading/writing CR status
 - Reading Agents
 - Reading ConfigMaps and Secrets
@@ -608,8 +669,8 @@ go run ./cmd/kubeopencode controller --zap-log-level=debug
 # Check controller logs in cluster
 kubectl logs -n kubeopencode-system deployment/kubeopencode-controller -f
 
-# Check Job logs
-kubectl logs job/<job-name> -n kubeopencode-system
+# Check Pod logs
+kubectl logs <pod-name> -n kubeopencode-system
 ```
 
 ## Best Practices
@@ -621,7 +682,7 @@ kubectl logs job/<job-name> -n kubeopencode-system
 5. **Performance**: Avoid unnecessary API calls, use caching where appropriate
 6. **Security**: Never log sensitive data (tokens, credentials)
 7. **Testing**: Write tests for new features, maintain coverage
-8. **Stopping Tasks**: When asked to stop running Tasks, use the annotation method (`kubectl annotate task <name> kubeopencode.io/stop=true`) instead of `kubectl delete task`. The annotation method preserves Job and Pod resources, keeping logs accessible for debugging. Only use `kubectl delete` when explicitly asked to remove the Task entirely.
+8. **Stopping Tasks**: When asked to stop running Tasks, use the annotation method (`kubectl annotate task <name> kubeopencode.io/stop=true`) instead of `kubectl delete task`. Note that the annotation method deletes the Pod, so logs will be lost. For log persistence, use an external log aggregation system. Only use `kubectl delete` when explicitly asked to remove the Task entirely.
 
 ## References
 
@@ -646,4 +707,4 @@ kubectl logs job/<job-name> -n kubeopencode-system
 
 ---
 
-**Last Updated**: 2026-01-04
+**Last Updated**: 2026-01-05

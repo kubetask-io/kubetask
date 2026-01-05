@@ -256,7 +256,7 @@ e2e-docker-build: ## Build docker image for e2e testing
 .PHONY: e2e-docker-build
 
 # Load docker image into kind cluster
-# Also tags and loads :latest for init containers (git-init, save-session) that use DefaultKubeTaskImage
+# Also tags and loads :latest for init containers (git-init, save-session) that use DefaultKubeOpenCodeImage
 e2e-kind-load: ## Load docker image into kind cluster
 	kind load docker-image $(IMG_REGISTRY)/$(IMG_ORG)/$(IMG_NAME):$(E2E_IMG_TAG) --name $(E2E_CLUSTER_NAME)
 	@if [ "$(E2E_IMG_TAG)" != "latest" ]; then \

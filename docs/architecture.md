@@ -15,19 +15,17 @@
 
 ## System Overview
 
-KubeOpenCode is a Kubernetes-native system that executes AI-powered tasks using Custom Resources (CRs) and the Operator pattern. It provides a simple, declarative way to run AI agents as Kubernetes Jobs, using OpenCode as the primary AI coding tool.
+KubeOpenCode brings Agentic AI capabilities into the Kubernetes ecosystem. By leveraging Kubernetes, it enables AI agents to be deployed as services, run in isolated virtual environments, and integrate with enterprise management and governance frameworks.
 
 ### Core Goals
 
 - Use Kubernetes CRDs to define Task resources
 - Use Controller pattern to manage resource lifecycle
-- Execute tasks as Kubernetes Jobs
-- No external databases or message queues required
+- Execute tasks as Kubernetes Pods
 - Seamless integration with Kubernetes ecosystem
 
 ### Key Advantages
 
-- **Simplified Architecture**: No PostgreSQL, Redis - reduced component dependencies
 - **Native Integration**: Works seamlessly with Helm, Kustomize, ArgoCD and other K8s tools
 - **Declarative Management**: Use K8s resource definitions, supports GitOps
 - **Infrastructure Reuse**: Logs, monitoring, auth/authz all leverage K8s capabilities
@@ -98,7 +96,7 @@ kind: Agent
 - **Compound failures**: Retrying a partially completed task may cause duplicate operations or inconsistent state
 
 **Implementation**:
-- Jobs are created with `backoffLimit: 0` (no Pod retry on failure)
+- Pods are created with `RestartPolicy: Never` (no retry on failure)
 - Pods use `restartPolicy: Never` (no container restart on failure)
 - Task fails immediately when the agent container exits with non-zero code
 
@@ -114,24 +112,28 @@ Task (single task execution)
 ├── TaskSpec
 │   ├── description: *string         (syntactic sugar for /workspace/task.md)
 │   ├── contexts: []ContextItem      (inline context definitions)
-│   └── agentRef: string
+│   ├── agentRef: string
+│   └── outputs: *OutputSpec         (Task-specific output parameters)
 └── TaskExecutionStatus
     ├── phase: TaskPhase
     ├── jobName: string
     ├── startTime: Time
     ├── completionTime: Time
+    ├── outputs: *TaskOutputs        (captured output parameters)
     └── conditions: []Condition
 
 Agent (execution configuration)
 └── AgentSpec
-    ├── agentImage: string
+    ├── agentImage: string           (OpenCode init container image)
+    ├── executorImage: string        (Main worker container image)
     ├── workspaceDir: string         (default: "/workspace")
     ├── command: []string
     ├── contexts: []ContextItem      (inline context definitions)
     ├── credentials: []Credential
     ├── podSpec: *AgentPodSpec
     ├── serviceAccountName: string
-    └── maxConcurrentTasks: *int32   (limit concurrent Tasks, nil/0 = unlimited)
+    ├── maxConcurrentTasks: *int32   (limit concurrent Tasks, nil/0 = unlimited)
+    └── outputs: *OutputSpec         (default output parameters)
 
 KubeOpenCodeConfig (system configuration)
 └── KubeOpenCodeConfigSpec
@@ -153,6 +155,7 @@ type TaskSpec struct {
     Description *string       // Syntactic sugar for /workspace/task.md
     Contexts    []ContextItem // Inline context definitions
     AgentRef    string        // Reference to Agent
+    Outputs     *OutputSpec   // Task-specific output parameters (merged with Agent outputs)
 }
 
 // ContextItem defines inline context content
@@ -168,10 +171,28 @@ type ContextItem struct {
 
 type TaskExecutionStatus struct {
     Phase          TaskPhase
-    JobName        string
+    PodName        string
     StartTime      *metav1.Time
     CompletionTime *metav1.Time
+    Outputs        *TaskOutputs       // Captured output parameters
     Conditions     []metav1.Condition
+}
+
+// TaskOutputs contains parameters captured from task execution
+type TaskOutputs struct {
+    Parameters map[string]string // Key-value map of captured parameters
+}
+
+// OutputSpec defines output parameters to capture from task execution
+type OutputSpec struct {
+    Parameters []OutputParameterSpec // Output parameters to capture from files
+}
+
+// OutputParameterSpec defines a single output parameter to capture
+type OutputParameterSpec struct {
+    Name    string  // Parameter name (key in status.outputs.parameters)
+    Path    string  // File path to read value from (relative to workspaceDir)
+    Default *string // Default value if file doesn't exist
 }
 
 type ContextType string
@@ -211,7 +232,8 @@ type Agent struct {
 }
 
 type AgentSpec struct {
-    AgentImage         string
+    AgentImage         string           // OpenCode init container image (copies binary to /tools)
+    ExecutorImage      string           // Main worker container image (runs tasks)
     WorkspaceDir       string           // Working directory (default: "/workspace")
     Command            []string         // Custom entrypoint command
     Contexts           []ContextItem    // Inline context definitions
@@ -219,6 +241,7 @@ type AgentSpec struct {
     PodSpec            *AgentPodSpec    // Pod configuration (labels, scheduling, runtime)
     ServiceAccountName string
     MaxConcurrentTasks *int32           // Limit concurrent Tasks (nil/0 = unlimited)
+    Outputs            *OutputSpec      // Default output parameters for tasks
 }
 
 // KubeOpenCodeConfig defines system-level configuration
@@ -256,14 +279,14 @@ type SystemImageConfig struct {
 │              KubeOpenCode Controller (Operator)                 │
 │  - Watch Task CRs                                           │
 │  - Reconcile loop                                           │
-│  - Create Kubernetes Jobs for tasks                         │
+│  - Create Kubernetes Pods for tasks                         │
 │  - Update CR status fields                                  │
 └─────────────────────────────────────────────────────────────┘
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   Kubernetes Jobs/Pods                      │
-│  - Each task runs as a separate Job/Pod                     │
+│                   Kubernetes Pods                      │
+│  - Each task runs as a separate Pod                     │
 │  - Execute task using agent container                       │
 │  - AI agent invocation                                      │
 │  - Context files mounted as volumes                         │
@@ -322,16 +345,31 @@ spec:
   # Optional: Reference to Agent (defaults to "default")
   agentRef: my-agent
 
+  # Optional: Task-specific output parameters (merged with Agent outputs)
+  outputs:
+    parameters:
+      - name: test-coverage
+        path: ".outputs/coverage"
+        default: "N/A"
+
 status:
   # Execution phase
   phase: Running  # Pending|Queued|Running|Completed|Failed
 
-  # Kubernetes Job name
+  # Kubernetes Pod name
   jobName: update-service-a-xyz123
 
   # Start and end times
   startTime: "2025-01-18T10:00:00Z"
   completionTime: "2025-01-18T10:05:00Z"
+
+  # Captured output parameters
+  outputs:
+    parameters:
+      pr-url: "https://github.com/org/repo/pull/42"
+      commit-sha: "abc123def456"
+      summary: "Updated 15 dependencies, all tests pass."
+      test-coverage: "85.5%"
 ```
 
 **Field Description:**
@@ -341,15 +379,17 @@ status:
 | `spec.description` | String | No | Task instruction (creates /workspace/task.md) |
 | `spec.contexts` | []ContextItem | No | Inline context definitions (see below) |
 | `spec.agentRef` | String | No | Reference to Agent (default: "default") |
+| `spec.outputs` | *OutputSpec | No | Task-specific output parameters (merged with Agent outputs) |
 
 **Status Field Description:**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `status.phase` | TaskPhase | Execution phase: Pending\|Queued\|Running\|Completed\|Failed |
-| `status.jobName` | String | Kubernetes Job name |
+| `status.podName` | String | Kubernetes Pod name |
 | `status.startTime` | Timestamp | Start time |
 | `status.completionTime` | Timestamp | End time |
+| `status.outputs` | *TaskOutputs | Captured output parameters (see Output System) |
 
 **ContextItem Types:**
 
@@ -405,24 +445,33 @@ Contexts provide additional information to AI agents during task execution. They
 | `ConfigMap` | Content from a Kubernetes ConfigMap |
 | `Git` | Content cloned from a Git repository |
 | `Runtime` | KubeOpenCode platform awareness (auto-generated by controller) |
+| `Secret` | Content from a Kubernetes Secret (for task input, not agent auth) |
+| `URL` | Content fetched from a remote HTTP/HTTPS URL at task execution time |
 
 **ContextItem Fields:**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | ContextType | Yes | Type of context: Text, ConfigMap, Git, or Runtime |
+| `name` | string | No | Optional identifier for logging, debugging, and XML tag generation |
+| `description` | string | No | Human-readable documentation for the context |
+| `optional` | *bool | No | If true, task proceeds even if context cannot be resolved |
+| `type` | ContextType | Yes | Type of context: Text, ConfigMap, Git, Runtime, Secret, or URL |
 | `mountPath` | string | No | Where to mount (empty = append to task.md with XML tags) |
 | `fileMode` | *int32 | No | File permission mode (e.g., 0755 for executables) |
 | `text` | string | When type=Text | Text content |
 | `configMap` | ConfigMapContext | When type=ConfigMap | Reference to ConfigMap |
 | `git` | GitContext | When type=Git | Content from Git repository |
 | `runtime` | RuntimeContext | When type=Runtime | Platform awareness (no fields - content is generated by controller) |
+| `secret` | SecretContext | When type=Secret | Reference to a Kubernetes Secret for context content |
+| `url` | URLContext | When type=URL | Remote URL to fetch content from |
 
 **Important Notes:**
 
 - **Empty MountPath behavior**: When mountPath is empty, content is appended to `/workspace/task.md` with XML tags
 - **Runtime context**: Provides KubeOpenCode platform awareness to agents, explaining environment variables, kubectl commands, and system concepts
 - **Path resolution**: Relative paths are prefixed with workspaceDir; absolute paths are used as-is
+- **Secret vs Credentials**: Secret contexts provide content for the agent to read and process as task input. Credentials provide authentication for the agent itself (env vars, mounted files)
+- **URL context**: Fetches content at task execution time via an init container. Requires `mountPath` to be specified
 
 **Context Priority (lowest to highest):**
 
@@ -445,8 +494,11 @@ metadata:
   name: default  # Convention: "default" is used when no agentRef is specified
   namespace: kubeopencode-system
 spec:
+  # OpenCode init container image (optional, has default)
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+
   # Executor container image (worker that runs OpenCode)
-  agentImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
 
   # Optional: Working directory (default: "/workspace")
   workspaceDir: /workspace
@@ -510,6 +562,17 @@ spec:
   # Optional: Limit concurrent Tasks using this Agent
   maxConcurrentTasks: 3
 
+  # Optional: Default output parameters for tasks using this Agent
+  outputs:
+    parameters:
+      - name: pr-url
+        path: ".outputs/pr-url"
+      - name: commit-sha
+        path: ".outputs/commit-sha"
+      - name: summary
+        path: ".outputs/summary"
+        default: "No summary provided"
+
   # Required: ServiceAccount for agent pods
   serviceAccountName: kubeopencode-agent
 ```
@@ -518,13 +581,15 @@ spec:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `spec.agentImage` | String | No | Agent container image |
+| `spec.agentImage` | String | No | OpenCode init container image (copies binary to /tools) |
+| `spec.executorImage` | String | No | Main worker container image (runs tasks) |
 | `spec.workspaceDir` | String | No | Working directory (default: "/workspace") |
 | `spec.command` | []String | No | Custom entrypoint command |
 | `spec.contexts` | []ContextItem | No | Inline contexts (applied to all tasks) |
 | `spec.credentials` | []Credential | No | Secrets as env vars or file mounts |
 | `spec.podSpec` | *AgentPodSpec | No | Advanced Pod configuration (labels, scheduling, runtimeClass) |
 | `spec.maxConcurrentTasks` | *int32 | No | Limit concurrent Tasks (nil/0 = unlimited) |
+| `spec.outputs` | *OutputSpec | No | Default output parameters for tasks (see Output System) |
 | `spec.serviceAccountName` | String | Yes | ServiceAccount for agent pods |
 
 **Task Stop:**
@@ -536,9 +601,9 @@ kubectl annotate task my-task kubeopencode.io/stop=true
 ```
 
 When this annotation is detected:
-- The controller suspends the Job (sets `spec.suspend=true`)
+- The controller deletes the Pod (with graceful termination)
 - Kubernetes sends SIGTERM to all running Pods, triggering graceful shutdown
-- Job and Pod are preserved (not deleted), so **logs remain accessible**
+- Pod is deleted after termination (logs are not preserved)
 - Task status is set to `Completed` with a `Stopped` condition
 
 ---
@@ -549,22 +614,27 @@ When this annotation is detected:
 
 KubeOpenCode uses a **two-container pattern** for AI task execution:
 
-1. **Init Container** (OpenCode image): Copies OpenCode binary to `/tools` shared volume
-2. **Worker Container** (Executor image): Uses `/tools/opencode` to run AI tasks
+1. **Init Container** (`agentImage`): Copies OpenCode binary to `/tools` shared volume
+2. **Worker Container** (`executorImage`): Uses `/tools/opencode` to run AI tasks
 
-The executor image is discovered in this priority order:
+### Image Resolution
 
-1. **Agent.spec.agentImage** (from referenced Agent)
-2. **Built-in default** (fallback) - `quay.io/kubeopencode/kubeopencode-agent-devbox:latest`
+| Field | Container | Default |
+|-------|-----------|---------|
+| `agentImage` | Init Container (OpenCode) | `quay.io/kubeopencode/kubeopencode-agent-opencode:latest` |
+| `executorImage` | Worker Container | `quay.io/kubeopencode/kubeopencode-agent-devbox:latest` |
+
+**Backward Compatibility:**
+- If only `agentImage` is set (legacy): it's used as the executor image, default OpenCode image is used for init container
+- If both are set: `agentImage` for init container, `executorImage` for worker container
 
 ### How It Works
 
 The controller:
 1. Looks up the Agent referenced by `agentRef` (defaults to "default")
-2. Uses the `agentImage` from Agent as the executor image
-3. Falls back to built-in default executor image if no Agent or agentImage found
-4. Generates a Job with:
-   - Init container that copies OpenCode binary to `/tools`
+2. Resolves `agentImage` and `executorImage` with backward compatibility
+3. Generates a Pod with:
+   - `opencode-init` init container (copies OpenCode binary to `/tools`)
    - Worker container with the executor image
    - Labels for tracking (`kubeopencode.io/task`)
    - Environment variables (`TASK_NAME`, `TASK_NAMESPACE`)
@@ -581,7 +651,10 @@ kind: Agent
 metadata:
   name: opencode-agent
 spec:
-  agentImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  # OpenCode init container (optional, has default)
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  # Executor container (optional, has default)
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   command: ["sh", "-c", "/tools/opencode run --format json \"$(cat /workspace/task.md)\""]
   serviceAccountName: kubeopencode-agent
   maxConcurrentTasks: 3  # Only 3 Tasks can run concurrently
@@ -611,6 +684,120 @@ Task Created
                                     │
                                     └─── Still at capacity ──► Remain Queued
 ```
+
+### Output System
+
+KubeOpenCode provides a file-based output capture system using a sidecar container pattern. Agents and Tasks can define output parameters that are automatically captured from files after task execution.
+
+**How It Works:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                           Pod                                    │
+│  ┌──────────────────┐    ┌──────────────────────────────────┐   │
+│  │  Agent Container │    │  Output Collector Sidecar        │   │
+│  │  (AI Agent)      │    │  (kubeopencode collect-outputs)  │   │
+│  │                  │    │                                   │   │
+│  │  Writes files:   │───▶│  1. Waits for agent to exit      │   │
+│  │  .outputs/pr-url │    │  2. Reads output parameter files │   │
+│  │  .outputs/...    │    │  3. Writes to termination-log    │   │
+│  └──────────────────┘    └──────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Controller reads termination-log and updates Task.status       │
+│  status.outputs.parameters:                                     │
+│    pr-url: "https://github.com/org/repo/pull/42"               │
+│    summary: "Updated 15 dependencies..."                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Output Merge Logic:**
+
+Outputs can be defined at both Agent and Task level:
+
+| Priority | Source | Description |
+|----------|--------|-------------|
+| Low | `Agent.spec.outputs` | Default parameters for all Tasks using this Agent |
+| High | `Task.spec.outputs` | Task-specific parameters (overrides Agent by name) |
+
+When merging, parameters are matched by `name`:
+- Same name: Task definition overrides Agent definition
+- Different names: Both are kept
+
+**OutputSpec Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `parameters` | []OutputParameterSpec | No | List of output parameters to capture |
+
+**OutputParameterSpec Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | String | Yes | Parameter name (key in status.outputs.parameters) |
+| `path` | String | Yes | File path to read value from (relative to workspaceDir) |
+| `default` | *String | No | Default value if file doesn't exist |
+
+**Example - Agent with Default Outputs:**
+
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: pr-agent
+spec:
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  serviceAccountName: kubeopencode-agent
+  outputs:
+    parameters:
+      - name: pr-url
+        path: ".outputs/pr-url"
+      - name: summary
+        path: ".outputs/summary"
+        default: "No summary provided"
+```
+
+**Example - Task Extending/Overriding Agent Outputs:**
+
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: Task
+metadata:
+  name: update-deps
+spec:
+  agentRef: pr-agent
+  description: |
+    Update dependencies and save results:
+    - PR URL to .outputs/pr-url
+    - Detailed summary to .outputs/detailed-summary
+    - Coverage to .outputs/coverage
+  outputs:
+    parameters:
+      - name: summary
+        path: ".outputs/detailed-summary"  # Overrides Agent's path
+      - name: coverage
+        path: ".outputs/coverage"
+        default: "N/A"
+```
+
+**Merged Result:**
+- `pr-url` - from Agent (path: .outputs/pr-url)
+- `summary` - from Task, overrides Agent (path: .outputs/detailed-summary)
+- `coverage` - from Task, new parameter (path: .outputs/coverage)
+
+**Sidecar Behavior:**
+
+1. The controller creates an `output-collector` sidecar container when outputs are defined
+2. The sidecar uses shared PID namespace to detect when the agent container exits
+3. After agent exit, it reads each parameter file and writes JSON to `/dev/termination-log`
+4. The controller reads the termination message and updates `Task.status.outputs`
+5. Outputs are captured on both success and failure, useful for debugging
+
+**No Sidecar When No Outputs:**
+
+If neither Agent nor Task defines outputs, no sidecar container is created, reducing resource overhead.
 
 ---
 
@@ -666,8 +853,10 @@ metadata:
   name: default
   namespace: kubeopencode-system
 spec:
+  # OpenCode init container (optional, uses default if not specified)
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   # Executor image (worker container)
-  agentImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   # Command uses OpenCode from /tools (injected by init container)
   command: ["sh", "-c", "/tools/opencode run --format json \"$(cat /workspace/task.md)\""]
   workspaceDir: /workspace
@@ -803,11 +992,20 @@ kubectl get agent default -o yaml
 - `ConfigMap` - Content from ConfigMap (single key or all keys as directory)
 - `Git` - Content from Git repository with branch/tag/commit support
 - `Runtime` - KubeOpenCode platform awareness (environment variables, kubectl commands, system concepts)
+- `Secret` - Content from Kubernetes Secret (for task input, not agent auth)
+- `URL` - Content fetched from remote HTTP/HTTPS URL at task execution time
 
 **Task Lifecycle**:
 - No retry on failure (AI tasks are non-idempotent)
 - User-initiated stop via `kubeopencode.io/stop=true` annotation (graceful, logs preserved)
 - OwnerReference cascade deletion
+
+**Output System**:
+- File-based output capture via sidecar container
+- Define outputs at Agent level (defaults) or Task level (overrides)
+- Sidecar reads files after agent exits and writes to termination-log
+- Controller captures outputs to `Task.status.outputs.parameters`
+- No sidecar created when no outputs defined
 
 **Batch Operations**:
 - Use Helm, Kustomize, or other templating tools
