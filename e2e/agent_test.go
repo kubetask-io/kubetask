@@ -23,7 +23,7 @@ func stringPtr(s string) *string {
 var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 
 	Context("Agent with custom podSpec.labels", func() {
-		It("should apply labels to generated Jobs", func() {
+		It("should apply labels to generated Pods", func() {
 			agentName := uniqueName("ws-labels")
 			taskName := uniqueName("task-labels")
 			content := "# Labels Test"
@@ -35,7 +35,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
-					AgentImage:         echoImage,
+					ExecutorImage:      echoImage,
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
@@ -74,19 +74,12 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Verifying Pod has custom labels")
-			jobName := fmt.Sprintf("%s-job", taskName)
 			Eventually(func() map[string]string {
 				pods := &corev1.PodList{}
 				if err := k8sClient.List(ctx, pods,
 					client.InNamespace(testNS),
-					client.MatchingLabels{"job-name": jobName}); err != nil || len(pods.Items) == 0 {
-					// Try alternative label
-					_ = k8sClient.List(ctx, pods,
-						client.InNamespace(testNS),
-						client.MatchingLabels{"batch.kubernetes.io/job-name": jobName})
-					if len(pods.Items) == 0 {
-						return nil
-					}
+					client.MatchingLabels{"kubeopencode.io/task": taskName}); err != nil || len(pods.Items) == 0 {
+					return nil
 				}
 				return pods.Items[0].Labels
 			}, timeout, interval).Should(And(
@@ -102,7 +95,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 	})
 
 	Context("Agent with podSpec.scheduling constraints", func() {
-		It("should apply nodeSelector to generated Jobs", func() {
+		It("should apply nodeSelector to generated Pods", func() {
 			agentName := uniqueName("ws-scheduling")
 			taskName := uniqueName("task-scheduling")
 			content := "# Scheduling Test"
@@ -114,7 +107,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
-					AgentImage:         echoImage,
+					ExecutorImage:      echoImage,
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
@@ -154,7 +147,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 
 			By("Verifying Pod was scheduled successfully with nodeSelector")
 			// If the Pod completed successfully, the scheduling was applied correctly
-			logs := getPodLogs(ctx, testNS, fmt.Sprintf("%s-job", taskName))
+			logs := getPodLogs(ctx, testNS, fmt.Sprintf("%s-pod", taskName))
 			Expect(logs).Should(ContainSubstring("Scheduling Test"))
 
 			By("Cleaning up")
@@ -190,7 +183,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
-					AgentImage:         echoImage,
+					ExecutorImage:      echoImage,
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
@@ -251,7 +244,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
-					AgentImage:         echoImage,
+					ExecutorImage:      echoImage,
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
@@ -283,7 +276,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Verifying echo agent ran successfully")
-			logs := getPodLogs(ctx, testNS, fmt.Sprintf("%s-job", taskName))
+			logs := getPodLogs(ctx, testNS, fmt.Sprintf("%s-pod", taskName))
 			Expect(logs).Should(ContainSubstring("Default WS Test"))
 
 			By("Cleaning up")
@@ -304,7 +297,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
-					AgentImage:         echoImage,
+					ExecutorImage:      echoImage,
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					// Use a command that takes some time to complete
@@ -434,7 +427,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
-					AgentImage:         echoImage,
+					ExecutorImage:      echoImage,
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", fmt.Sprintf("echo '=== Checking SSH Key ===' && ls -la %s && cat %s | head -1 && echo '=== Done ==='", sshKeyPath, sshKeyPath)},
@@ -477,7 +470,7 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
 			By("Verifying SSH key was mounted correctly")
-			logs := getPodLogs(ctx, testNS, fmt.Sprintf("%s-job", taskName))
+			logs := getPodLogs(ctx, testNS, fmt.Sprintf("%s-pod", taskName))
 			Expect(logs).Should(ContainSubstring("Checking SSH Key"))
 			Expect(logs).Should(ContainSubstring("BEGIN RSA PRIVATE KEY"))
 

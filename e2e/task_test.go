@@ -27,7 +27,9 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 	)
 
 	BeforeEach(func() {
-		// Create a Agent with echo agent for all tests
+		// Create an Agent with echo executor image for all tests
+		// Note: In the two-container pattern, ExecutorImage is the main worker container,
+		// while AgentImage is the OpenCode init container that copies the binary
 		agentName = uniqueName("echo-ws")
 		agent = &kubeopenv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{
@@ -35,7 +37,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 				Namespace: testNS,
 			},
 			Spec: kubeopenv1alpha1.AgentSpec{
-				AgentImage:         echoImage,
+				ExecutorImage:      echoImage,
 				ServiceAccountName: testServiceAccount,
 				WorkspaceDir:       "/workspace",
 				Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
@@ -52,7 +54,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 	})
 
 	Context("Task with description using echo agent", func() {
-		It("should create a Job that echoes task content and complete successfully", func() {
+		It("should create a Pod that echoes task content and complete successfully", func() {
 			taskName := uniqueName("task-echo")
 			taskContent := "# Hello E2E Test\n\nThis is a test task for the echo agent.\n\n## Expected Output\nThe echo agent should display this content."
 
@@ -88,16 +90,16 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Verifying Pod uses echo agent image")
-			Expect(job.Spec.Template.Spec.Containers).Should(HaveLen(1))
-			Expect(job.Spec.Template.Spec.Containers[0].Image).Should(Equal(echoImage))
+			Expect(job.Spec.Containers).Should(HaveLen(1))
+			Expect(job.Spec.Containers[0].Image).Should(Equal(echoImage))
 
 			By("Waiting for Pod to complete successfully")
-			Eventually(func() int32 {
+			Eventually(func() corev1.PodPhase {
 				if err := k8sClient.Get(ctx, jobKey, job); err != nil {
-					return 0
+					return ""
 				}
-				return job.Status.Succeeded
-			}, timeout, interval).Should(Equal(int32(1)))
+				return job.Status.Phase
+			}, timeout, interval).Should(Equal(corev1.PodSucceeded))
 
 			By("Verifying Task status is Completed")
 			Eventually(func() kubeopenv1alpha1.TaskPhase {
@@ -258,7 +260,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
-					AgentImage:         echoImage,
+					ExecutorImage:      echoImage,
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
@@ -371,7 +373,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 	})
 
 	Context("Task garbage collection", func() {
-		It("should clean up Job when Task is deleted (owner reference)", func() {
+		It("should clean up Pod when Task is deleted (owner reference)", func() {
 			taskName := uniqueName("task-gc")
 			taskContent := "# GC Test"
 
@@ -436,7 +438,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
-					AgentImage:         echoImage,
+					ExecutorImage:      echoImage,
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo 'Starting long task' && sleep 300"},
@@ -507,7 +509,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 		})
 	})
 
-	Context("Task with failing Job", func() {
+	Context("Task with failing Pod", func() {
 		It("should transition to Failed phase when Pod fails", func() {
 			taskName := uniqueName("task-fail")
 
@@ -519,7 +521,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
-					AgentImage:         echoImage,
+					ExecutorImage:      echoImage,
 					ServiceAccountName: testServiceAccount,
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo 'Task will fail' && exit 1"},
