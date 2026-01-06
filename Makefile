@@ -313,14 +313,16 @@ e2e-reload: e2e-docker-build e2e-kind-load e2e-verify-image ## Rebuild and reloa
 	@echo "Controller image reloaded successfully"
 .PHONY: e2e-reload
 
-# Build echo agent image for e2e testing
-e2e-agent-build: ## Build echo agent image for e2e testing
+# Build agent images for e2e testing
+e2e-agent-build: ## Build agent images for e2e testing (echo + opencode)
 	docker build -t quay.io/kubeopencode/kubeopencode-agent-echo:latest agents/echo/
+	docker build -t quay.io/kubeopencode/kubeopencode-agent-opencode:latest agents/opencode/
 .PHONY: e2e-agent-build
 
-# Load echo agent image into kind cluster
-e2e-agent-load: ## Load echo agent image into kind cluster
+# Load agent images into kind cluster
+e2e-agent-load: ## Load agent images into kind cluster (echo + opencode)
 	kind load docker-image quay.io/kubeopencode/kubeopencode-agent-echo:latest --name $(E2E_CLUSTER_NAME)
+	kind load docker-image quay.io/kubeopencode/kubeopencode-agent-opencode:latest --name $(E2E_CLUSTER_NAME)
 .PHONY: e2e-agent-load
 
 
