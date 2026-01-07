@@ -24,9 +24,11 @@ KubeOpenCode enables you to execute AI agent tasks using Kubernetes Custom Resou
 - **Kubernetes-Native**: Built on CRDs and the Operator pattern
 - **Simple API**: Task (WHAT to do) + Agent (HOW to execute)
 - **AI-Agnostic**: Works with any AI agent (OpenCode, Claude, etc.)
-- **No External Dependencies**: Uses etcd for state, Jobs for execution
+- **No External Dependencies**: Uses etcd for state, Pods for execution
 - **GitOps Ready**: Fully declarative resource definitions
-- **Flexible Context System**: Support for inline content, ConfigMaps, and Git repositories
+- **Flexible Context System**: Support for Text, ConfigMaps, Git, Secrets, and URLs
+- **Task Outputs**: Capture results from task execution into status
+- **Concurrency Control**: Limit concurrent tasks per Agent
 - **Event-Driven**: Integrates with Argo Events for webhook-triggered Tasks
 - **Batch Operations**: Use Helm/Kustomize for multiple Tasks (Kubernetes-native approach)
 
@@ -41,15 +43,15 @@ KubeOpenCode enables you to execute AI agent tasks using Kubernetes Custom Resou
                   │
                   ▼
 ┌─────────────────────────────────────────────┐
-│      KubeOpenCode Controller (Operator)         │
+│      KubeOpenCode Controller (Operator)     │
 │  - Watch Task CRs                           │
-│  - Create Kubernetes Jobs for tasks         │
+│  - Create Kubernetes Pods for tasks         │
 │  - Update CR status                         │
 └─────────────────┬───────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────┐
-│         Kubernetes Jobs/Pods                │
+│            Kubernetes Pods                  │
 │  - Execute tasks using AI agents            │
 │  - Context files mounted as volumes         │
 └─────────────────────────────────────────────┘
@@ -149,7 +151,7 @@ kubectl get tasks -n kubeopencode-system -w
 kubectl describe task update-service-a -n kubeopencode-system
 
 # View task logs
-kubectl logs job/$(kubectl get task update-service-a -o jsonpath='{.status.jobName}') -n kubeopencode-system
+kubectl logs $(kubectl get task update-service-a -o jsonpath='{.status.podName}') -n kubeopencode-system
 ```
 
 ### Batch Operations with Helm
@@ -194,6 +196,8 @@ Tasks and Agents use inline **ContextItem** to provide additional context:
 - **ConfigMap**: Content from ConfigMap
 - **Git**: Content from Git repository
 - **Runtime**: KubeOpenCode platform awareness system prompt
+- **Secret**: Content from Kubernetes Secret (for task input, not credentials)
+- **URL**: Content fetched from remote HTTP/HTTPS URL
 
 **Example:**
 ```yaml
@@ -212,6 +216,15 @@ contexts:
       repository: https://github.com/org/repo.git
       ref: main
     mountPath: source-code
+  - type: Secret
+    secret:
+      name: api-config
+      key: config.yaml
+    mountPath: config/api.yaml
+  - type: URL
+    url:
+      source: https://api.example.com/openapi.yaml
+    mountPath: specs/openapi.yaml
 ```
 
 - **Content Aggregation**: Contexts without `mountPath` are aggregated into `/workspace/task.md` with XML tags
@@ -302,6 +315,134 @@ metadata:
 spec:
   agentRef: opencode-devbox
   description: "Update dependencies and create a PR"
+```
+
+### Task Outputs
+
+Capture results from task execution using output parameters:
+
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: pr-agent
+spec:
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  workspaceDir: /workspace
+  command:
+    - sh
+    - -c
+    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+  serviceAccountName: kubeopencode-agent
+  # Define output parameters to capture
+  outputs:
+    parameters:
+      - name: pr-url
+        path: ".outputs/pr-url"
+      - name: summary
+        path: ".outputs/summary"
+        default: "No summary provided"
+```
+
+**Retrieving outputs:**
+```bash
+# Get specific output parameter
+kubectl get task my-task -o jsonpath='{.status.outputs.parameters.pr-url}'
+
+# Get all output parameters
+kubectl get task my-task -o jsonpath='{.status.outputs.parameters}'
+```
+
+Task-level outputs can override Agent-level defaults:
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: Task
+metadata:
+  name: my-task
+spec:
+  agentRef: pr-agent
+  description: "Create a PR for the feature"
+  outputs:
+    parameters:
+      - name: custom-metric
+        path: ".outputs/custom-metric"
+```
+
+### Task Stop
+
+Stop a running task using the stop annotation:
+
+```bash
+kubectl annotate task my-task kubeopencode.io/stop=true
+```
+
+When this annotation is detected:
+- The controller deletes the Pod (with graceful termination period)
+- Task status is set to `Completed` with a `Stopped` condition
+- The `Stopped` condition has reason `UserStopped`
+
+**Note:** Logs are lost when a Task is stopped. For log persistence, use an external log aggregation system.
+
+### Concurrency Control
+
+Limit concurrent tasks per Agent when using rate-limited AI services:
+
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: rate-limited-agent
+spec:
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  workspaceDir: /workspace
+  command:
+    - sh
+    - -c
+    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+  serviceAccountName: kubeopencode-agent
+  maxConcurrentTasks: 3  # Only 3 Tasks can run at once
+```
+
+When the limit is reached:
+- New Tasks enter `Queued` phase instead of `Running`
+- Queued Tasks automatically transition to `Running` when capacity becomes available
+- Tasks are processed in approximate FIFO order
+
+### Pod Configuration
+
+Configure advanced Pod settings using `podSpec`:
+
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: advanced-agent
+spec:
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  workspaceDir: /workspace
+  command:
+    - sh
+    - -c
+    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+  serviceAccountName: kubeopencode-agent
+  podSpec:
+    # Labels for NetworkPolicy, monitoring, etc.
+    labels:
+      network-policy: agent-restricted
+    # Enhanced isolation with gVisor or Kata
+    runtimeClassName: gvisor
+    # Scheduling configuration
+    scheduling:
+      nodeSelector:
+        node-type: ai-workload
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "ai-workload"
+          effect: "NoSchedule"
 ```
 
 ## Agent Images
@@ -454,17 +595,17 @@ kubectl auth can-i create tasks \
   --as=system:serviceaccount:kubeopencode-system:kubeopencode-controller
 ```
 
-### Job Failures
+### Pod Failures
 
 ```bash
-# List failed jobs
-kubectl get jobs -n kubeopencode-system --field-selector status.successful=0
+# List task pods
+kubectl get pods -n kubeopencode-system -l kubeopencode.io/task
 
-# Check job logs
-kubectl logs job/<job-name> -n kubeopencode-system
+# Check pod logs
+kubectl logs <pod-name> -n kubeopencode-system
 
-# Describe job for events
-kubectl describe job/<job-name> -n kubeopencode-system
+# Describe pod for events
+kubectl describe pod/<pod-name> -n kubeopencode-system
 ```
 
 ## Contributing
@@ -496,12 +637,14 @@ See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 ## Roadmap
 
 - [x] Core Task/Agent abstraction
-- [x] Inline ContextItem system (Text, ConfigMap, Git, Runtime)
+- [x] Inline ContextItem system (Text, ConfigMap, Git, Runtime, Secret, URL)
 - [x] Argo Events integration for webhook-triggered Tasks
-- [ ] Enhanced status reporting and observability
+- [x] Task output capture system
+- [x] Task stop feature (annotation-based)
+- [x] Agent concurrency control (maxConcurrentTasks)
+- [x] Pod configuration (labels, scheduling, runtimeClassName)
 - [ ] Support for additional context types (MCP)
 - [ ] Advanced retry and failure handling
-- [ ] Integration with more AI providers
 - [ ] Web UI for monitoring and management
 - [ ] GitOps integration examples (Flux, ArgoCD)
 
