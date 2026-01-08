@@ -46,14 +46,83 @@ spec:
 
                   ## Instructions
 
-                  1. Clone the repository and checkout the PR branch
-                  2. Review the code changes thoroughly
-                  3. Prepare a constructive review with:
-                     - Summary of changes
-                     - Code quality observations
-                     - Suggestions for improvement (if any)
-                     - Overall assessment
-                  4. Post your review as a PR comment.
+                  ### Step 1: Clone and Checkout
+
+                  Clone the repository and checkout the PR branch:
+                  ```bash
+                  gh pr checkout {{ .Input.body.pull_request.number }}
+                  ```
+
+                  ### Step 2: Get Changed Files and Diff
+
+                  Get the list of changed files and the full diff:
+                  ```bash
+                  gh pr diff {{ .Input.body.pull_request.number }} --name-only
+                  gh pr diff {{ .Input.body.pull_request.number }}
+                  ```
+
+                  ### Step 3: Review Each Changed File
+
+                  For each changed file, analyze the code and collect issues. Note for each issue:
+                  - File path (relative to repo root)
+                  - Line number (MUST be a line that was ADDED or MODIFIED in the PR - lines with `+` prefix in diff)
+                  - Issue description
+
+                  Look for:
+                  - Code quality issues
+                  - Potential bugs
+                  - Security vulnerabilities
+                  - Style/convention violations
+                  - Missing error handling
+                  - Performance concerns
+
+                  ### Step 4: Submit Review with Inline Comments
+
+                  Use the GitHub API to submit a PR review with inline comments on specific code lines:
+
+                  **IMPORTANT**: The `line` parameter MUST be a line number from the NEW version of the file (right side of diff). Only comment on lines that were added (+) or modified in the PR.
+
+                  ```bash
+                  gh api repos/{{ .Input.body.repository.full_name }}/pulls/{{ .Input.body.pull_request.number }}/reviews \
+                    -f event="COMMENT" \
+                    -f body="## PR Review Summary
+
+                  ### Overview
+                  [Brief summary of what this PR does]
+
+                  ### Code Quality
+                  [Overall assessment]
+
+                  ### Suggestions
+                  [High-level recommendations if any]
+
+                  ---
+                  *Review by @kubeopencode-bot*" \
+                    -f 'comments[0][path]=path/to/file.go' \
+                    -f 'comments[0][line]=42' \
+                    -f 'comments[0][body]=Your inline comment here'
+                  ```
+
+                  If you find multiple issues, add more comment entries:
+                  ```bash
+                  -f 'comments[1][path]=another/file.go' \
+                  -f 'comments[1][line]=15' \
+                  -f 'comments[1][body]=Another issue'
+                  ```
+
+                  ### Step 5: If No Issues Found
+
+                  If no specific code issues are found, submit a review with only the summary (no inline comments):
+                  ```bash
+                  gh api repos/{{ .Input.body.repository.full_name }}/pulls/{{ .Input.body.pull_request.number }}/reviews \
+                    -f event="COMMENT" \
+                    -f body="## PR Review Summary
+
+                  [Your review summary here - what the PR does, overall quality assessment]
+
+                  ---
+                  *Review by @kubeopencode-bot*"
+                  ```
               dest: spec.description
 
     # Rule 2: @kubeopencode-bot mention from privileged users (OWNER, MEMBER, CONTRIBUTOR, COLLABORATOR)

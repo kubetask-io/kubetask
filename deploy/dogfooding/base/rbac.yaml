@@ -2,6 +2,14 @@
 # RBAC resources for kubeopencode dogfooding environment
 #
 # This creates the required ServiceAccount and RoleBinding for running tasks.
+#
+# Current API resources (v1alpha1):
+#   - Task: Single task execution
+#   - Agent: AI agent configuration
+#   - KubeOpenCodeConfig: System-level configuration
+#
+# Note: Contexts are inline in Task/Agent specs, not a separate CRD.
+# Note: Project uses Pod-based execution (not Jobs).
 
 ---
 apiVersion: v1
@@ -29,29 +37,21 @@ rules:
   - apiGroups: ["kubeopencode.io"]
     resources: ["tasks/status"]
     verbs: ["get", "patch", "update"]
-  # Allow agent to read Context resources
-  - apiGroups: ["kubeopencode.io"]
-    resources: ["contexts"]
-    verbs: ["get", "list", "watch"]
   # Allow agent to read Agent configuration (e.g., for self-discovery)
   - apiGroups: ["kubeopencode.io"]
     resources: ["agents"]
-    verbs: ["get", "list", "watch"]
-  # Allow agent to read Workflow, WorkflowRun, and CronWorkflow resources
-  - apiGroups: ["kubeopencode.io"]
-    resources: ["workflows", "workflowruns", "cronworkflows"]
     verbs: ["get", "list", "watch"]
   # Allow agent to read KubeOpenCodeConfig (system configuration)
   - apiGroups: ["kubeopencode.io"]
     resources: ["kubeopencodeconfigs"]
     verbs: ["get", "list", "watch"]
-  # Allow agent to read Jobs (for workflow stage dependencies)
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["get", "list", "watch"]
   # Allow agent to read Pods and Pod logs (for analyzing previous task results)
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # Allow agent to read ConfigMaps (for context resolution)
+  - apiGroups: [""]
+    resources: ["configmaps"]
     verbs: ["get", "list", "watch"]
 
 ---

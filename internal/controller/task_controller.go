@@ -83,7 +83,6 @@ type TaskReconciler struct {
 // +kubebuilder:rbac:groups=kubeopencode.io,resources=tasks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kubeopencode.io,resources=tasks/finalizers,verbs=update
 // +kubebuilder:rbac:groups=kubeopencode.io,resources=agents,verbs=get;list;watch
-// +kubebuilder:rbac:groups=kubeopencode.io,resources=contexts,verbs=get;list;watch
 // +kubebuilder:rbac:groups=kubeopencode.io,resources=kubeopencodeconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
