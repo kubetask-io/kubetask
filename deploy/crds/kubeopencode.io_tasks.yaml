@@ -297,17 +297,17 @@ spec:
                 type: string
               outputs:
                 description: |-
-                  Outputs defines output parameters specific to this Task.
-                  These are merged with Agent.spec.outputs (Task takes precedence).
-
-                  Merge behavior:
-                    - Parameters with same name: Task definition overrides Agent
-                    - Parameters with different names: Both are kept
+                  Outputs defines output parameters to capture from this Task.
+                  The controller creates a sidecar to capture these outputs from files.
 
                   Example:
-                    Agent defines: pr-url, summary
-                    Task defines: summary (different path), custom-metric
-                    Result: pr-url (from Agent), summary (from Task), custom-metric (from Task)
+                    outputs:
+                      parameters:
+                        - name: pr-url
+                          path: ".outputs/pr-url"
+                        - name: summary
+                          path: ".outputs/summary"
+                          default: "No summary provided"
                 properties:
                   parameters:
                     description: |-
@@ -325,7 +325,7 @@ spec:
                         name:
                           description: |-
                             Name is the parameter name, used as the key in status.outputs.parameters.
-                            Must be unique within the merged output parameters.
+                            Must be unique within the output parameters.
                           type: string
                         path:
                           description: |-
@@ -422,7 +422,7 @@ spec:
                       type: string
                     description: |-
                       Parameters is a key-value map of outputs captured from files.
-                      Keys are defined in Agent.spec.outputs and Task.spec.outputs.
+                      Keys are defined in Task.spec.outputs.
                       Values are read from the corresponding file paths by the sidecar.
 
                       Example usage:

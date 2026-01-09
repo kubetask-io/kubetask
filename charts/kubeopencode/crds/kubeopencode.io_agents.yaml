@@ -398,55 +398,6 @@ spec:
                     maxConcurrentTasks: 3  # Only 3 Tasks can run at once
                 format: int32
                 type: integer
-              outputs:
-                description: |-
-                  Outputs defines default output parameters for tasks using this Agent.
-                  These can be overridden or extended by Task.spec.outputs.
-                  The controller creates a sidecar to capture these outputs from files.
-
-                  Merge behavior with Task.spec.outputs:
-                    - Parameters with same name: Task definition overrides Agent
-                    - Parameters with different names: Both are kept
-
-                  Example:
-                    outputs:
-                      parameters:
-                        - name: pr-url
-                          path: ".outputs/pr-url"
-                        - name: summary
-                          path: ".outputs/summary"
-                          default: "No summary provided"
-                properties:
-                  parameters:
-                    description: |-
-                      Parameters defines the output parameters to capture from files.
-                      Each parameter specifies a name and file path to read from.
-                    items:
-                      description: OutputParameterSpec defines a single output parameter
-                        to capture from a file.
-                      properties:
-                        default:
-                          description: |-
-                            Default is the default value if the file doesn't exist.
-                            If not specified and file doesn't exist, parameter is omitted from output.
-                          type: string
-                        name:
-                          description: |-
-                            Name is the parameter name, used as the key in status.outputs.parameters.
-                            Must be unique within the merged output parameters.
-                          type: string
-                        path:
-                          description: |-
-                            Path is the file path to read the parameter value from.
-                            Relative paths are prefixed with workspaceDir.
-                            Example: ".outputs/pr-url" -> ${WORKSPACE_DIR}/.outputs/pr-url
-                          type: string
-                      required:
-                      - name
-                      - path
-                      type: object
-                    type: array
-                type: object
               podSpec:
                 description: |-
                   PodSpec defines advanced Pod configuration for agent pods.

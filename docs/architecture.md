@@ -134,8 +134,7 @@ Agent (execution configuration)
     ├── podSpec: *AgentPodSpec
     ├── serviceAccountName: string
     ├── allowedNamespaces: []string  (restrict cross-namespace access)
-    ├── maxConcurrentTasks: *int32   (limit concurrent Tasks, nil/0 = unlimited)
-    └── outputs: *OutputSpec         (default output parameters)
+    └── maxConcurrentTasks: *int32   (limit concurrent Tasks, nil/0 = unlimited)
 
 KubeOpenCodeConfig (system configuration)
 └── KubeOpenCodeConfigSpec
@@ -157,7 +156,7 @@ type TaskSpec struct {
     Description *string          // Syntactic sugar for /workspace/task.md
     Contexts    []ContextItem    // Inline context definitions
     AgentRef    *AgentReference  // Cross-namespace Agent reference
-    Outputs     *OutputSpec      // Task-specific output parameters (merged with Agent outputs)
+    Outputs     *OutputSpec      // Task-specific output parameters
 }
 
 // AgentReference supports cross-namespace Agent references
@@ -251,7 +250,6 @@ type AgentSpec struct {
     ServiceAccountName string
     AllowedNamespaces  []string         // Restrict which namespaces can use this Agent
     MaxConcurrentTasks *int32           // Limit concurrent Tasks (nil/0 = unlimited)
-    Outputs            *OutputSpec      // Default output parameters for tasks
 }
 
 // KubeOpenCodeConfig defines system-level configuration
@@ -355,7 +353,7 @@ spec:
   # Optional: Reference to Agent (defaults to "default")
   agentRef: my-agent
 
-  # Optional: Task-specific output parameters (merged with Agent outputs)
+  # Optional: Task output parameters
   outputs:
     parameters:
       - name: test-coverage
@@ -389,7 +387,7 @@ status:
 | `spec.description` | String | No | Task instruction (creates /workspace/task.md) |
 | `spec.contexts` | []ContextItem | No | Inline context definitions (see below) |
 | `spec.agentRef` | *AgentReference | No | Cross-namespace Agent reference (default: "default" in Task's namespace) |
-| `spec.outputs` | *OutputSpec | No | Task-specific output parameters (merged with Agent outputs) |
+| `spec.outputs` | *OutputSpec | No | Task output parameters |
 
 **Status Field Description:**
 
@@ -571,17 +569,6 @@ spec:
   # Optional: Limit concurrent Tasks using this Agent
   maxConcurrentTasks: 3
 
-  # Optional: Default output parameters for tasks using this Agent
-  outputs:
-    parameters:
-      - name: pr-url
-        path: ".outputs/pr-url"
-      - name: commit-sha
-        path: ".outputs/commit-sha"
-      - name: summary
-        path: ".outputs/summary"
-        default: "No summary provided"
-
   # Required: ServiceAccount for agent pods
   serviceAccountName: kubeopencode-agent
 ```
@@ -599,7 +586,6 @@ spec:
 | `spec.podSpec` | *AgentPodSpec | No | Advanced Pod configuration (labels, scheduling, runtimeClass) |
 | `spec.allowedNamespaces` | []String | No | Restrict which namespaces can use this Agent (empty = all allowed) |
 | `spec.maxConcurrentTasks` | *int32 | No | Limit concurrent Tasks (nil/0 = unlimited) |
-| `spec.outputs` | *OutputSpec | No | Default output parameters for tasks (see Output System) |
 | `spec.serviceAccountName` | String | Yes | ServiceAccount for agent pods |
 
 **Task Stop:**
@@ -784,7 +770,7 @@ Task Created
 
 ### Output System
 
-KubeOpenCode provides a file-based output capture system using a sidecar container pattern. Agents and Tasks can define output parameters that are automatically captured from files after task execution.
+KubeOpenCode provides a file-based output capture system using a sidecar container pattern. Tasks can define output parameters that are automatically captured from files after task execution.
 
 **How It Works:**
 
@@ -810,19 +796,6 @@ KubeOpenCode provides a file-based output capture system using a sidecar contain
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Output Merge Logic:**
-
-Outputs can be defined at both Agent and Task level:
-
-| Priority | Source | Description |
-|----------|--------|-------------|
-| Low | `Agent.spec.outputs` | Default parameters for all Tasks using this Agent |
-| High | `Task.spec.outputs` | Task-specific parameters (overrides Agent by name) |
-
-When merging, parameters are matched by `name`:
-- Same name: Task definition overrides Agent definition
-- Different names: Both are kept
-
 **OutputSpec Fields:**
 
 | Field | Type | Required | Description |
@@ -837,26 +810,7 @@ When merging, parameters are matched by `name`:
 | `path` | String | Yes | File path to read value from (relative to workspaceDir) |
 | `default` | *String | No | Default value if file doesn't exist |
 
-**Example - Agent with Default Outputs:**
-
-```yaml
-apiVersion: kubeopencode.io/v1alpha1
-kind: Agent
-metadata:
-  name: pr-agent
-spec:
-  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
-  serviceAccountName: kubeopencode-agent
-  outputs:
-    parameters:
-      - name: pr-url
-        path: ".outputs/pr-url"
-      - name: summary
-        path: ".outputs/summary"
-        default: "No summary provided"
-```
-
-**Example - Task Extending/Overriding Agent Outputs:**
+**Example - Task with Outputs:**
 
 ```yaml
 apiVersion: kubeopencode.io/v1alpha1
@@ -864,25 +818,24 @@ kind: Task
 metadata:
   name: update-deps
 spec:
-  agentRef: pr-agent
+  agentRef:
+    name: pr-agent
   description: |
     Update dependencies and save results:
     - PR URL to .outputs/pr-url
-    - Detailed summary to .outputs/detailed-summary
+    - Summary to .outputs/summary
     - Coverage to .outputs/coverage
   outputs:
     parameters:
+      - name: pr-url
+        path: ".outputs/pr-url"
       - name: summary
-        path: ".outputs/detailed-summary"  # Overrides Agent's path
+        path: ".outputs/summary"
+        default: "No summary provided"
       - name: coverage
         path: ".outputs/coverage"
         default: "N/A"
 ```
-
-**Merged Result:**
-- `pr-url` - from Agent (path: .outputs/pr-url)
-- `summary` - from Task, overrides Agent (path: .outputs/detailed-summary)
-- `coverage` - from Task, new parameter (path: .outputs/coverage)
 
 **Sidecar Behavior:**
 
@@ -894,7 +847,7 @@ spec:
 
 **No Sidecar When No Outputs:**
 
-If neither Agent nor Task defines outputs, no sidecar container is created, reducing resource overhead.
+If the Task does not define outputs, no sidecar container is created, reducing resource overhead.
 
 ---
 
@@ -1104,7 +1057,7 @@ kubectl get agent default -o yaml
 
 **Output System**:
 - File-based output capture via sidecar container
-- Define outputs at Agent level (defaults) or Task level (overrides)
+- Define outputs at Task level
 - Sidecar reads files after agent exits and writes to termination-log
 - Controller captures outputs to `Task.status.outputs.parameters`
 - No sidecar created when no outputs defined

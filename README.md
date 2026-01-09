@@ -350,7 +350,7 @@ kubectl get task my-task -o jsonpath='{.status.outputs.parameters.pr-url}'
 kubectl get task my-task -o jsonpath='{.status.outputs.parameters}'
 ```
 
-Task-level outputs can override Agent-level defaults:
+Tasks can define multiple output parameters:
 ```yaml
 apiVersion: kubeopencode.io/v1alpha1
 kind: Task
@@ -362,6 +362,8 @@ spec:
   description: "Create a PR for the feature"
   outputs:
     parameters:
+      - name: pr-url
+        path: ".outputs/pr-url"
       - name: custom-metric
         path: ".outputs/custom-metric"
 ```

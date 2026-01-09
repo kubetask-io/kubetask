@@ -339,17 +339,17 @@ type TaskSpec struct {
 	// +optional
 	AgentRef *AgentReference `json:"agentRef,omitempty"`
 
-	// Outputs defines output parameters specific to this Task.
-	// These are merged with Agent.spec.outputs (Task takes precedence).
-	//
-	// Merge behavior:
-	//   - Parameters with same name: Task definition overrides Agent
-	//   - Parameters with different names: Both are kept
+	// Outputs defines output parameters to capture from this Task.
+	// The controller creates a sidecar to capture these outputs from files.
 	//
 	// Example:
-	//   Agent defines: pr-url, summary
-	//   Task defines: summary (different path), custom-metric
-	//   Result: pr-url (from Agent), summary (from Task), custom-metric (from Task)
+	//   outputs:
+	//     parameters:
+	//       - name: pr-url
+	//         path: ".outputs/pr-url"
+	//       - name: summary
+	//         path: ".outputs/summary"
+	//         default: "No summary provided"
 	// +optional
 	Outputs *OutputSpec `json:"outputs,omitempty"`
 }
@@ -404,7 +404,7 @@ type TaskExecutionStatus struct {
 //   - For larger outputs, consider using external storage (future feature)
 type TaskOutputs struct {
 	// Parameters is a key-value map of outputs captured from files.
-	// Keys are defined in Agent.spec.outputs and Task.spec.outputs.
+	// Keys are defined in Task.spec.outputs.
 	// Values are read from the corresponding file paths by the sidecar.
 	//
 	// Example usage:
@@ -414,8 +414,6 @@ type TaskOutputs struct {
 }
 
 // OutputSpec defines output parameters to capture from task execution.
-// Used by both Agent (defaults) and Task (overrides).
-// The controller merges Agent and Task outputs, with Task taking precedence.
 type OutputSpec struct {
 	// Parameters defines the output parameters to capture from files.
 	// Each parameter specifies a name and file path to read from.
@@ -426,7 +424,7 @@ type OutputSpec struct {
 // OutputParameterSpec defines a single output parameter to capture from a file.
 type OutputParameterSpec struct {
 	// Name is the parameter name, used as the key in status.outputs.parameters.
-	// Must be unique within the merged output parameters.
+	// Must be unique within the output parameters.
 	// +required
 	Name string `json:"name"`
 
@@ -585,25 +583,6 @@ type AgentSpec struct {
 	//   maxConcurrentTasks: 3  # Only 3 Tasks can run at once
 	// +optional
 	MaxConcurrentTasks *int32 `json:"maxConcurrentTasks,omitempty"`
-
-	// Outputs defines default output parameters for tasks using this Agent.
-	// These can be overridden or extended by Task.spec.outputs.
-	// The controller creates a sidecar to capture these outputs from files.
-	//
-	// Merge behavior with Task.spec.outputs:
-	//   - Parameters with same name: Task definition overrides Agent
-	//   - Parameters with different names: Both are kept
-	//
-	// Example:
-	//   outputs:
-	//     parameters:
-	//       - name: pr-url
-	//         path: ".outputs/pr-url"
-	//       - name: summary
-	//         path: ".outputs/summary"
-	//         default: "No summary provided"
-	// +optional
-	Outputs *OutputSpec `json:"outputs,omitempty"`
 }
 
 // AgentStatus defines the observed state of Agent

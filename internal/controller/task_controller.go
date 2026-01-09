@@ -304,12 +304,9 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 	// Use Agent's namespace for system config lookup
 	sysCfg := r.getSystemConfig(ctx, agentNamespace)
 
-	// Merge Agent and Task output specifications (Task takes precedence)
-	mergedOutputs := mergeOutputSpecs(agentConfig.outputs, task.Spec.Outputs)
-
 	// Create Pod with agent configuration, context mounts, and output collector sidecar
 	// Pod is created in Agent's namespace
-	pod := buildPod(task, podName, agentNamespace, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, mergedOutputs, sysCfg)
+	pod := buildPod(task, podName, agentNamespace, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, task.Spec.Outputs, sysCfg)
 
 	if err := r.Create(ctx, pod); err != nil {
 		log.Error(err, "unable to create Pod", "pod", podName, "namespace", agentNamespace)
@@ -461,7 +458,6 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubeo
 		podSpec:            agent.Spec.PodSpec,
 		serviceAccountName: agent.Spec.ServiceAccountName,
 		maxConcurrentTasks: agent.Spec.MaxConcurrentTasks,
-		outputs:            agent.Spec.Outputs,
 	}, agentName, agentNamespace, nil
 }
 

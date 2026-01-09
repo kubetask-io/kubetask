@@ -1356,7 +1356,7 @@ var _ = Describe("TaskController", func() {
 			description := "# Test outputs capture"
 			prURLDefault := "N/A"
 
-			By("Creating Agent with outputs")
+			By("Creating Agent without outputs")
 			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
@@ -1366,17 +1366,11 @@ var _ = Describe("TaskController", func() {
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo done"},
-					Outputs: &kubeopenv1alpha1.OutputSpec{
-						Parameters: []kubeopenv1alpha1.OutputParameterSpec{
-							{Name: "pr-url", Path: ".outputs/pr-url", Default: &prURLDefault},
-							{Name: "commit-sha", Path: ".outputs/commit-sha"},
-						},
-					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
-			By("Creating Task")
+			By("Creating Task with outputs")
 			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
@@ -1385,6 +1379,12 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
 					Description: &description,
+					Outputs: &kubeopenv1alpha1.OutputSpec{
+						Parameters: []kubeopenv1alpha1.OutputParameterSpec{
+							{Name: "pr-url", Path: ".outputs/pr-url", Default: &prURLDefault},
+							{Name: "commit-sha", Path: ".outputs/commit-sha"},
+						},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -1458,7 +1458,7 @@ var _ = Describe("TaskController", func() {
 			agentName := "test-agent-outputs-fail"
 			description := "# Test outputs capture on failure"
 
-			By("Creating Agent with outputs")
+			By("Creating Agent without outputs")
 			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
@@ -1468,16 +1468,11 @@ var _ = Describe("TaskController", func() {
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "exit 1"},
-					Outputs: &kubeopenv1alpha1.OutputSpec{
-						Parameters: []kubeopenv1alpha1.OutputParameterSpec{
-							{Name: "error-code", Path: ".outputs/error-code"},
-						},
-					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
-			By("Creating Task")
+			By("Creating Task with outputs")
 			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
@@ -1486,6 +1481,11 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.TaskSpec{
 					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
 					Description: &description,
+					Outputs: &kubeopenv1alpha1.OutputSpec{
+						Parameters: []kubeopenv1alpha1.OutputParameterSpec{
+							{Name: "error-code", Path: ".outputs/error-code"},
+						},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
@@ -1629,13 +1629,13 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 
-		It("Should merge Agent and Task outputs with Task taking precedence", func() {
-			taskName := "test-task-outputs-merge"
-			agentName := "test-agent-outputs-merge"
-			description := "# Test output merging"
+		It("Should capture multiple Task outputs", func() {
+			taskName := "test-task-outputs-multiple"
+			agentName := "test-agent-outputs-multiple"
+			description := "# Test multiple outputs"
 			defaultSummary := "No summary"
 
-			By("Creating Agent with outputs")
+			By("Creating Agent without outputs")
 			agent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
@@ -1645,17 +1645,11 @@ var _ = Describe("TaskController", func() {
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
 					Command:            []string{"sh", "-c", "echo done"},
-					Outputs: &kubeopenv1alpha1.OutputSpec{
-						Parameters: []kubeopenv1alpha1.OutputParameterSpec{
-							{Name: "pr-url", Path: ".outputs/pr-url"},
-							{Name: "summary", Path: ".outputs/summary", Default: &defaultSummary},
-						},
-					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
 
-			By("Creating Task with outputs that override and extend Agent outputs")
+			By("Creating Task with multiple output parameters")
 			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
@@ -1666,8 +1660,9 @@ var _ = Describe("TaskController", func() {
 					Description: &description,
 					Outputs: &kubeopenv1alpha1.OutputSpec{
 						Parameters: []kubeopenv1alpha1.OutputParameterSpec{
-							{Name: "summary", Path: ".outputs/detailed-summary"}, // Override Agent's summary
-							{Name: "coverage", Path: ".outputs/coverage"},         // New parameter
+							{Name: "pr-url", Path: ".outputs/pr-url"},
+							{Name: "summary", Path: ".outputs/summary", Default: &defaultSummary},
+							{Name: "coverage", Path: ".outputs/coverage"},
 						},
 					},
 				},
@@ -1682,7 +1677,7 @@ var _ = Describe("TaskController", func() {
 				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying Pod has output-collector sidecar with merged outputs")
+			By("Verifying Pod has output-collector sidecar")
 			var outputCollector *corev1.Container
 			for i := range createdPod.Spec.Containers {
 				if createdPod.Spec.Containers[i].Name == "output-collector" {
@@ -1692,7 +1687,7 @@ var _ = Describe("TaskController", func() {
 			}
 			Expect(outputCollector).ShouldNot(BeNil())
 
-			By("Simulating Pod success with merged output parameters")
+			By("Simulating Pod success with output parameters")
 			createdPod.Status.Phase = corev1.PodSucceeded
 			createdPod.Status.ContainerStatuses = []corev1.ContainerStatus{
 				{
@@ -1708,7 +1703,6 @@ var _ = Describe("TaskController", func() {
 					State: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 0,
-							// Merged: pr-url from Agent, summary from Task (overridden path), coverage from Task
 							Message: `{"parameters": {"pr-url": "https://github.com/org/repo/pull/42", "summary": "Detailed summary here", "coverage": "85%"}}`,
 						},
 					},
@@ -1726,7 +1720,7 @@ var _ = Describe("TaskController", func() {
 				return updatedTask.Status.Phase
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 
-			By("Verifying all merged parameters are captured")
+			By("Verifying all parameters are captured")
 			finalTask := &kubeopenv1alpha1.Task{}
 			Expect(k8sClient.Get(ctx, taskLookupKey, finalTask)).Should(Succeed())
 			Expect(finalTask.Status.Outputs).ShouldNot(BeNil())

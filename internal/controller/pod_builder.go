@@ -5,7 +5,6 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -26,7 +25,6 @@ type agentConfig struct {
 	podSpec            *kubeopenv1alpha1.AgentPodSpec
 	serviceAccountName string
 	maxConcurrentTasks *int32
-	outputs            *kubeopenv1alpha1.OutputSpec // Agent-level output parameters
 }
 
 // systemConfig holds resolved system-level configuration from KubeOpenCodeConfig.
@@ -125,54 +123,6 @@ func boolPtr(b bool) *bool {
 // int32Ptr returns a pointer to the given int32 value
 func int32Ptr(i int32) *int32 {
 	return &i
-}
-
-// mergeOutputSpecs merges Agent and Task output specifications.
-// Task outputs take precedence over Agent outputs (by parameter name).
-// Returns nil if both inputs are nil or have no parameters.
-func mergeOutputSpecs(agentOutputs, taskOutputs *kubeopenv1alpha1.OutputSpec) *kubeopenv1alpha1.OutputSpec {
-	if agentOutputs == nil && taskOutputs == nil {
-		return nil
-	}
-
-	// Use a map to handle overwrites by name
-	paramMap := make(map[string]kubeopenv1alpha1.OutputParameterSpec)
-
-	// Add Agent outputs first (lower priority)
-	if agentOutputs != nil {
-		for _, p := range agentOutputs.Parameters {
-			paramMap[p.Name] = p
-		}
-	}
-
-	// Add/override with Task outputs (higher priority)
-	if taskOutputs != nil {
-		for _, p := range taskOutputs.Parameters {
-			paramMap[p.Name] = p // Overwrites if same name exists
-		}
-	}
-
-	if len(paramMap) == 0 {
-		return nil
-	}
-
-	// Convert map back to slice (sorted for deterministic output)
-	merged := &kubeopenv1alpha1.OutputSpec{
-		Parameters: make([]kubeopenv1alpha1.OutputParameterSpec, 0, len(paramMap)),
-	}
-
-	// Get sorted keys for deterministic order
-	names := make([]string, 0, len(paramMap))
-	for name := range paramMap {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		merged.Parameters = append(merged.Parameters, paramMap[name])
-	}
-
-	return merged
 }
 
 const (
