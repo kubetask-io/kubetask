@@ -128,10 +128,10 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return r.handleQueuedTask(ctx, task)
 	}
 
-	// If completed/failed, nothing to do
+	// If completed/failed, handle cleanup based on KubeOpenCodeConfig
 	if task.Status.Phase == kubeopenv1alpha1.TaskPhaseCompleted ||
 		task.Status.Phase == kubeopenv1alpha1.TaskPhaseFailed {
-		return ctrl.Result{}, nil
+		return r.handleTaskCleanup(ctx, task)
 	}
 
 	// Check for user-initiated stop (only for Running tasks)
@@ -1269,4 +1269,173 @@ func parseTerminationMessage(msg string) *terminationMessageOutput {
 		return nil
 	}
 	return &output
+}
+
+// handleTaskCleanup handles automatic cleanup of completed/failed Tasks based on KubeOpenCodeConfig.
+// It checks both TTL-based and retention-based cleanup policies.
+// Returns a Result with RequeueAfter if TTL cleanup is scheduled for the future.
+func (r *TaskReconciler) handleTaskCleanup(ctx context.Context, task *kubeopenv1alpha1.Task) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
+	// Get cleanup configuration from KubeOpenCodeConfig
+	cleanupConfig := r.getCleanupConfig(ctx, task.Namespace)
+	if cleanupConfig == nil {
+		// No cleanup configured, nothing to do
+		return ctrl.Result{}, nil
+	}
+
+	// Check TTL-based cleanup
+	if cleanupConfig.TTLSecondsAfterFinished != nil {
+		result, deleted, err := r.checkTTLCleanup(ctx, task, *cleanupConfig.TTLSecondsAfterFinished)
+		if err != nil {
+			log.Error(err, "failed to check TTL cleanup")
+			return ctrl.Result{}, err
+		}
+		if deleted {
+			// Task was deleted, nothing more to do
+			return result, nil
+		}
+		// If TTL is set but not expired, we need to requeue
+		// Continue to check retention limit
+		if result.RequeueAfter > 0 {
+			// Schedule requeue for TTL expiration
+			// Also check retention cleanup before returning
+			if cleanupConfig.MaxRetainedTasks != nil {
+				if err := r.checkRetentionCleanup(ctx, task.Namespace, *cleanupConfig.MaxRetainedTasks); err != nil {
+					log.Error(err, "failed to check retention cleanup")
+					return ctrl.Result{}, err
+				}
+			}
+			return result, nil
+		}
+	}
+
+	// Check retention-based cleanup
+	if cleanupConfig.MaxRetainedTasks != nil {
+		if err := r.checkRetentionCleanup(ctx, task.Namespace, *cleanupConfig.MaxRetainedTasks); err != nil {
+			log.Error(err, "failed to check retention cleanup")
+			return ctrl.Result{}, err
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// getCleanupConfig retrieves cleanup configuration from KubeOpenCodeConfig.
+// Returns nil if no cleanup is configured.
+func (r *TaskReconciler) getCleanupConfig(ctx context.Context, namespace string) *kubeopenv1alpha1.CleanupConfig {
+	log := log.FromContext(ctx)
+
+	// Try to get KubeOpenCodeConfig from the task's namespace
+	config := &kubeopenv1alpha1.KubeOpenCodeConfig{}
+	configKey := types.NamespacedName{Name: "default", Namespace: namespace}
+
+	if err := r.Get(ctx, configKey, config); err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, "unable to get KubeOpenCodeConfig for cleanup config")
+		}
+		// Config not found, no cleanup configured
+		return nil
+	}
+
+	return config.Spec.Cleanup
+}
+
+// checkTTLCleanup checks if the Task should be deleted based on TTL.
+// Returns (result, deleted, error) where deleted is true if the Task was deleted.
+func (r *TaskReconciler) checkTTLCleanup(ctx context.Context, task *kubeopenv1alpha1.Task, ttlSeconds int32) (ctrl.Result, bool, error) {
+	log := log.FromContext(ctx)
+
+	// CompletionTime must be set for TTL calculation
+	if task.Status.CompletionTime == nil {
+		// This shouldn't happen for completed/failed tasks, but handle gracefully
+		return ctrl.Result{}, false, nil
+	}
+
+	// Calculate elapsed time since completion
+	elapsed := time.Since(task.Status.CompletionTime.Time)
+	ttlDuration := time.Duration(ttlSeconds) * time.Second
+
+	if elapsed >= ttlDuration {
+		// TTL expired, delete the Task
+		log.Info("deleting Task due to TTL expiration",
+			"task", task.Name,
+			"ttlSeconds", ttlSeconds,
+			"elapsedSeconds", int(elapsed.Seconds()))
+
+		if err := r.Delete(ctx, task); err != nil {
+			if errors.IsNotFound(err) {
+				// Already deleted, that's fine
+				return ctrl.Result{}, true, nil
+			}
+			return ctrl.Result{}, false, err
+		}
+		return ctrl.Result{}, true, nil
+	}
+
+	// TTL not expired yet, schedule requeue for when it expires
+	remaining := ttlDuration - elapsed
+	log.V(1).Info("scheduling TTL cleanup",
+		"task", task.Name,
+		"remainingSeconds", int(remaining.Seconds()))
+
+	return ctrl.Result{RequeueAfter: remaining}, false, nil
+}
+
+// checkRetentionCleanup checks if any Tasks should be deleted based on retention count.
+// Deletes the oldest completed/failed Tasks (by CompletionTime) if count exceeds limit.
+func (r *TaskReconciler) checkRetentionCleanup(ctx context.Context, namespace string, maxRetained int32) error {
+	log := log.FromContext(ctx)
+
+	// List all Tasks in the namespace
+	taskList := &kubeopenv1alpha1.TaskList{}
+	if err := r.List(ctx, taskList, client.InNamespace(namespace)); err != nil {
+		return err
+	}
+
+	// Filter completed/failed Tasks with CompletionTime set
+	var completedTasks []kubeopenv1alpha1.Task
+	for _, t := range taskList.Items {
+		if (t.Status.Phase == kubeopenv1alpha1.TaskPhaseCompleted ||
+			t.Status.Phase == kubeopenv1alpha1.TaskPhaseFailed) &&
+			t.Status.CompletionTime != nil {
+			completedTasks = append(completedTasks, t)
+		}
+	}
+
+	// Check if we're over the limit
+	excess := len(completedTasks) - int(maxRetained)
+	if excess <= 0 {
+		// Under limit, nothing to delete
+		return nil
+	}
+
+	// Sort by CompletionTime (oldest first)
+	sort.Slice(completedTasks, func(i, j int) bool {
+		return completedTasks[i].Status.CompletionTime.Before(completedTasks[j].Status.CompletionTime)
+	})
+
+	// Delete excess Tasks (oldest first)
+	log.Info("deleting Tasks due to retention limit",
+		"namespace", namespace,
+		"count", len(completedTasks),
+		"maxRetained", maxRetained,
+		"toDelete", excess)
+
+	for i := 0; i < excess; i++ {
+		taskToDelete := &completedTasks[i]
+		log.Info("deleting Task due to retention limit",
+			"task", taskToDelete.Name,
+			"completionTime", taskToDelete.Status.CompletionTime.Time)
+
+		if err := r.Delete(ctx, taskToDelete); err != nil {
+			if errors.IsNotFound(err) {
+				// Already deleted, continue
+				continue
+			}
+			return err
+		}
+	}
+
+	return nil
 }

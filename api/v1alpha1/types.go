@@ -907,6 +907,41 @@ type KubeOpenCodeConfigSpec struct {
 	// If not specified, uses the built-in default image with IfNotPresent policy.
 	// +optional
 	SystemImage *SystemImageConfig `json:"systemImage,omitempty"`
+
+	// Cleanup configures automatic cleanup of completed Tasks.
+	// When configured, completed/failed Tasks are automatically deleted based on
+	// TTL (time-to-live) and/or retention count policies.
+	// If not specified, Tasks are not automatically deleted (default behavior).
+	// +optional
+	Cleanup *CleanupConfig `json:"cleanup,omitempty"`
+}
+
+// CleanupConfig defines cleanup policies for completed/failed Tasks.
+// Both TTL and retention-based cleanup can be configured independently or combined.
+// When both are configured, TTL is checked first, then retention count.
+type CleanupConfig struct {
+	// TTLSecondsAfterFinished specifies the TTL for cleaning up finished Tasks.
+	// If set, completed/failed Tasks will be deleted after this duration from CompletionTime.
+	// If unset or nil, TTL-based cleanup is disabled.
+	//
+	// Example:
+	//   ttlSecondsAfterFinished: 3600  # Delete after 1 hour
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
+
+	// MaxRetainedTasks specifies the maximum number of completed/failed Tasks to retain
+	// per namespace. When exceeded, the oldest Tasks (by CompletionTime) are deleted first.
+	// If unset or nil, retention-based cleanup is disabled.
+	//
+	// Note: TTL cleanup takes precedence - Tasks exceeding TTL are deleted regardless
+	// of this limit. This count only applies to Tasks that haven't exceeded TTL yet.
+	//
+	// Example:
+	//   maxRetainedTasks: 100  # Keep at most 100 completed Tasks
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MaxRetainedTasks *int32 `json:"maxRetainedTasks,omitempty"`
 }
 
 // SystemImageConfig configures the KubeOpenCode system image used for internal components

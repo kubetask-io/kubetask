@@ -644,6 +644,38 @@ kubectl get task my-task -o jsonpath='{.status.outputs.parameters.pr-url}'
 
 **Note:** Due to Kubernetes termination message 4KB limit, total output must be under 4KB. For larger outputs, consider using external storage.
 
+### Task Cleanup
+
+KubeOpenCode supports automatic cleanup of completed/failed Tasks via `KubeOpenCodeConfig`. When configured, Tasks are automatically deleted based on TTL (time-to-live) and/or retention count policies.
+
+**CleanupConfig fields:**
+- `ttlSecondsAfterFinished`: Delete Tasks after N seconds from completion
+- `maxRetainedTasks`: Keep at most N completed Tasks per namespace (deletes oldest first)
+
+**Example KubeOpenCodeConfig with cleanup:**
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: KubeOpenCodeConfig
+metadata:
+  name: default
+  namespace: kubeopencode-system
+spec:
+  cleanup:
+    # Delete completed Tasks after 1 hour
+    ttlSecondsAfterFinished: 3600
+    # Keep at most 100 completed Tasks
+    maxRetainedTasks: 100
+```
+
+**Cleanup behavior:**
+- Both policies can be used independently or combined
+- When combined, TTL is checked first, then retention count
+- Tasks are sorted by `CompletionTime` for retention-based cleanup (oldest deleted first)
+- Cleanup is namespace-scoped (each namespace can have different policies)
+- No cleanup is performed if `KubeOpenCodeConfig` is not present (default behavior)
+
+**Note:** Deleting a Task cascades to its Pod and ConfigMap via OwnerReference or Finalizer.
+
 ### TaskTemplate
 
 TaskTemplate defines a reusable template for Task creation. Similar to Argo Workflows' WorkflowTemplate.

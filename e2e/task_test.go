@@ -897,6 +897,176 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
 		})
 	})
+
+	Context("Task Cleanup with KubeOpenCodeConfig", func() {
+		It("should delete Task after TTL expires", func() {
+			configName := "default"
+			taskName := uniqueName("task-ttl")
+			description := "Task for TTL cleanup test"
+
+			By("Creating KubeOpenCodeConfig with TTL cleanup (5 seconds)")
+			ttlSeconds := int32(5)
+			config := &kubeopenv1alpha1.KubeOpenCodeConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configName,
+					Namespace: testNS,
+				},
+				Spec: kubeopenv1alpha1.KubeOpenCodeConfigSpec{
+					Cleanup: &kubeopenv1alpha1.CleanupConfig{
+						TTLSecondsAfterFinished: &ttlSeconds,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, config)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: testNS,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Waiting for Task to complete")
+			taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				createdTask := &kubeopenv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
+
+			By("Waiting for Task to be deleted due to TTL")
+			Eventually(func() bool {
+				task := &kubeopenv1alpha1.Task{}
+				err := k8sClient.Get(ctx, taskKey, task)
+				return err != nil // Task should be deleted (NotFound)
+			}, timeout, interval).Should(BeTrue())
+
+			By("Cleaning up KubeOpenCodeConfig")
+			Expect(k8sClient.Delete(ctx, config)).Should(Succeed())
+		})
+
+		It("should not delete Task when no cleanup is configured", func() {
+			taskName := uniqueName("task-no-cleanup")
+			description := "Task without cleanup config"
+
+			By("Creating Task without KubeOpenCodeConfig")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: testNS,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Waiting for Task to complete")
+			taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				createdTask := &kubeopenv1alpha1.Task{}
+				if err := k8sClient.Get(ctx, taskKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
+
+			By("Verifying Task still exists after waiting")
+			Consistently(func() bool {
+				task := &kubeopenv1alpha1.Task{}
+				err := k8sClient.Get(ctx, taskKey, task)
+				return err == nil // Task should still exist
+			}, "5s", interval).Should(BeTrue())
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+		})
+
+		It("should delete oldest Tasks when retention limit is exceeded", func() {
+			configName := "default"
+			description := "Task for retention test"
+
+			By("Creating KubeOpenCodeConfig with retention limit of 2")
+			maxRetained := int32(2)
+			config := &kubeopenv1alpha1.KubeOpenCodeConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configName,
+					Namespace: testNS,
+				},
+				Spec: kubeopenv1alpha1.KubeOpenCodeConfigSpec{
+					Cleanup: &kubeopenv1alpha1.CleanupConfig{
+						MaxRetainedTasks: &maxRetained,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, config)).Should(Succeed())
+
+			By("Creating and completing 3 Tasks sequentially")
+			taskNames := []string{
+				uniqueName("task-ret-1"),
+				uniqueName("task-ret-2"),
+				uniqueName("task-ret-3"),
+			}
+
+			for _, taskName := range taskNames {
+				task := &kubeopenv1alpha1.Task{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      taskName,
+						Namespace: testNS,
+					},
+					Spec: kubeopenv1alpha1.TaskSpec{
+						AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+						Description: &description,
+					},
+				}
+				Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+				// Wait for Task to complete
+				taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
+				Eventually(func() kubeopenv1alpha1.TaskPhase {
+					createdTask := &kubeopenv1alpha1.Task{}
+					if err := k8sClient.Get(ctx, taskKey, createdTask); err != nil {
+						return ""
+					}
+					return createdTask.Status.Phase
+				}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
+			}
+
+			By("Waiting for oldest Task to be deleted due to retention limit")
+			oldestTaskKey := types.NamespacedName{Name: taskNames[0], Namespace: testNS}
+			Eventually(func() bool {
+				task := &kubeopenv1alpha1.Task{}
+				err := k8sClient.Get(ctx, oldestTaskKey, task)
+				return err != nil // Should be deleted (NotFound)
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying newer Tasks still exist")
+			for _, taskName := range taskNames[1:] {
+				taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
+				task := &kubeopenv1alpha1.Task{}
+				Expect(k8sClient.Get(ctx, taskKey, task)).Should(Succeed())
+			}
+
+			By("Cleaning up")
+			for _, taskName := range taskNames[1:] {
+				task := &kubeopenv1alpha1.Task{}
+				taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
+				if err := k8sClient.Get(ctx, taskKey, task); err == nil {
+					Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+				}
+			}
+			Expect(k8sClient.Delete(ctx, config)).Should(Succeed())
+		})
+	})
 })
 
 // getPodLogs retrieves logs from the Pod associated with a Task

@@ -138,9 +138,12 @@ Agent (execution configuration)
 
 KubeOpenCodeConfig (system configuration)
 └── KubeOpenCodeConfigSpec
-    └── systemImage: *SystemImageConfig       (internal KubeOpenCode components)
-        ├── image: string                     (default: DefaultKubeOpenCodeImage)
-        └── imagePullPolicy: PullPolicy       (default: IfNotPresent)
+    ├── systemImage: *SystemImageConfig       (internal KubeOpenCode components)
+    │   ├── image: string                     (default: DefaultKubeOpenCodeImage)
+    │   └── imagePullPolicy: PullPolicy       (default: IfNotPresent)
+    └── cleanup: *CleanupConfig               (Task cleanup policies)
+        ├── ttlSecondsAfterFinished: *int32   (TTL for finished Tasks, nil = disabled)
+        └── maxRetainedTasks: *int32          (max Tasks to retain, nil = unlimited)
 ```
 
 ### Complete Type Definitions
@@ -259,12 +262,19 @@ type KubeOpenCodeConfig struct {
 
 type KubeOpenCodeConfigSpec struct {
     SystemImage *SystemImageConfig // System image for internal components
+    Cleanup     *CleanupConfig     // Task cleanup configuration
 }
 
 // SystemImageConfig configures the KubeOpenCode system image
 type SystemImageConfig struct {
     Image           string            // System image (default: built-in DefaultKubeOpenCodeImage)
     ImagePullPolicy corev1.PullPolicy // Pull policy: Always/Never/IfNotPresent (default: IfNotPresent)
+}
+
+// CleanupConfig defines cleanup policies for completed/failed Tasks
+type CleanupConfig struct {
+    TTLSecondsAfterFinished *int32 // TTL for cleaning up finished Tasks (nil = disabled)
+    MaxRetainedTasks        *int32 // Max completed Tasks to retain per namespace (nil = unlimited)
 }
 ```
 
@@ -855,7 +865,7 @@ If the Task does not define outputs, no sidecar container is created, reducing r
 
 ### KubeOpenCodeConfig (System-level Configuration)
 
-KubeOpenCodeConfig provides cluster or namespace-level settings for container image configuration.
+KubeOpenCodeConfig provides cluster or namespace-level settings for container image configuration and Task cleanup policies.
 
 ```yaml
 apiVersion: kubeopencode.io/v1alpha1
@@ -869,6 +879,13 @@ spec:
   systemImage:
     image: quay.io/kubeopencode/kubeopencode:latest  # Default system image
     imagePullPolicy: Always  # Always/Never/IfNotPresent (default: IfNotPresent)
+
+  # Task cleanup configuration (optional)
+  cleanup:
+    # Delete completed/failed Tasks after 1 hour
+    ttlSecondsAfterFinished: 3600
+    # Keep at most 100 completed Tasks per namespace
+    maxRetainedTasks: 100
 ```
 
 **Field Description:**
@@ -877,6 +894,8 @@ spec:
 |-------|------|----------|-------------|
 | `spec.systemImage.image` | string | No | System image for internal components (default: built-in DefaultKubeOpenCodeImage) |
 | `spec.systemImage.imagePullPolicy` | string | No | Pull policy for system containers: Always, Never, IfNotPresent (default: IfNotPresent) |
+| `spec.cleanup.ttlSecondsAfterFinished` | int32 | No | TTL in seconds for cleaning up finished Tasks. Tasks are deleted after this duration from CompletionTime. |
+| `spec.cleanup.maxRetainedTasks` | int32 | No | Maximum number of completed/failed Tasks to retain per namespace. Oldest Tasks (by CompletionTime) are deleted first. |
 
 **Image Pull Policy:**
 
@@ -888,6 +907,17 @@ Setting `imagePullPolicy: Always` is recommended when:
 The `systemImage` configuration affects all internal KubeOpenCode containers:
 - `git-init`: Clones Git repositories for Context
 - `context-init`: Copies ConfigMap content to writable workspace
+
+**Task Cleanup:**
+
+The cleanup configuration enables automatic garbage collection of completed/failed Tasks:
+
+- **TTL-based cleanup**: Tasks are deleted after `ttlSecondsAfterFinished` seconds from completion
+- **Retention-based cleanup**: Only the most recent `maxRetainedTasks` completed Tasks are retained
+- **Combined**: Both policies can be used together. TTL is checked first, then retention count
+- **Cascading deletion**: Deleting a Task automatically deletes its associated Pod and ConfigMap
+
+Cleanup is disabled by default. When `KubeOpenCodeConfig` is not present or `cleanup` is not specified, Tasks are never automatically deleted
 
 ---
 
@@ -1035,7 +1065,7 @@ kubectl get agent default -o yaml
 **API**:
 - **Task** - primary API for single task execution
 - **Agent** - stable, project-independent configuration
-- **KubeOpenCodeConfig** - system-level settings (systemImage)
+- **KubeOpenCodeConfig** - system-level settings (systemImage, cleanup)
 
 **Context Types** (via ContextItem):
 - `Text` - Content directly in YAML

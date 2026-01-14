@@ -47,6 +47,39 @@ spec:
           spec:
             description: Spec defines the KubeOpenCode configuration
             properties:
+              cleanup:
+                description: |-
+                  Cleanup configures automatic cleanup of completed Tasks.
+                  When configured, completed/failed Tasks are automatically deleted based on
+                  TTL (time-to-live) and/or retention count policies.
+                  If not specified, Tasks are not automatically deleted (default behavior).
+                properties:
+                  maxRetainedTasks:
+                    description: |-
+                      MaxRetainedTasks specifies the maximum number of completed/failed Tasks to retain
+                      per namespace. When exceeded, the oldest Tasks (by CompletionTime) are deleted first.
+                      If unset or nil, retention-based cleanup is disabled.
+
+                      Note: TTL cleanup takes precedence - Tasks exceeding TTL are deleted regardless
+                      of this limit. This count only applies to Tasks that haven't exceeded TTL yet.
+
+                      Example:
+                        maxRetainedTasks: 100  # Keep at most 100 completed Tasks
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  ttlSecondsAfterFinished:
+                    description: |-
+                      TTLSecondsAfterFinished specifies the TTL for cleaning up finished Tasks.
+                      If set, completed/failed Tasks will be deleted after this duration from CompletionTime.
+                      If unset or nil, TTL-based cleanup is disabled.
+
+                      Example:
+                        ttlSecondsAfterFinished: 3600  # Delete after 1 hour
+                    format: int32
+                    minimum: 0
+                    type: integer
+                type: object
               systemImage:
                 description: |-
                   SystemImage configures the KubeOpenCode system image used for internal components
