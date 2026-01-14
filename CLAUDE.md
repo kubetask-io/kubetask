@@ -425,6 +425,7 @@ Key Agent spec fields:
 - `command`: **Required** - Entrypoint command that defines HOW the agent executes tasks
 - `workspaceDir`: **Required** - Working directory where task.md and context files are mounted
 - `contexts`: Inline ContextItems applied to all tasks using this Agent
+- `config`: OpenCode configuration as inline JSON string (written to `/tools/opencode.json`)
 - `credentials`: Secrets as env vars or file mounts (supports single key or entire secret)
 - `serviceAccountName`: Kubernetes ServiceAccount for RBAC
 - `allowedNamespaces`: Restrict which namespaces can reference this Agent (supports glob patterns)
@@ -458,6 +459,37 @@ spec:
     - /tools/opencode run --format json "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
 ```
+
+**OpenCode Configuration:**
+
+The `config` field allows you to provide OpenCode configuration as an inline JSON string.
+This configuration is written to `/tools/opencode.json` and the `OPENCODE_CONFIG` environment
+variable is set to point to this file.
+
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: opencode-agent
+spec:
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  workspaceDir: /workspace
+  command:
+    - sh
+    - -c
+    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+  serviceAccountName: kubeopencode-agent
+  config: |
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "model": "google/gemini-2.5-pro",
+      "small_model": "google/gemini-2.5-flash"
+    }
+```
+
+The config must be valid JSON. Invalid JSON will cause the Task to fail with an error.
+See https://opencode.ai/config.json for the full configuration schema.
 
 **Concurrency Control:**
 

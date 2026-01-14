@@ -482,6 +482,7 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubeo
 		command:            agent.Spec.Command,
 		workspaceDir:       workspaceDir,
 		contexts:           agent.Spec.Contexts,
+		config:             agent.Spec.Config,
 		credentials:        agent.Spec.Credentials,
 		podSpec:            agent.Spec.PodSpec,
 		serviceAccountName: agent.Spec.ServiceAccountName,
@@ -761,6 +762,17 @@ func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubeopenv
 		taskMdContent := strings.Join(taskMdParts, "\n\n")
 		configMapData["workspace-task.md"] = taskMdContent
 		fileMounts = append(fileMounts, fileMount{filePath: taskMdPath})
+	}
+
+	// Add OpenCode config to ConfigMap if provided
+	if cfg.config != nil && *cfg.config != "" {
+		// Validate JSON syntax
+		var jsonCheck interface{}
+		if err := json.Unmarshal([]byte(*cfg.config), &jsonCheck); err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("invalid JSON in Agent config: %w", err)
+		}
+		configMapData[OpenCodeConfigKey] = *cfg.config
+		fileMounts = append(fileMounts, fileMount{filePath: OpenCodeConfigPath})
 	}
 
 	// Create ConfigMap if there's any content

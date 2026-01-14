@@ -618,6 +618,23 @@ type AgentSpec struct {
 	// +optional
 	Contexts []ContextItem `json:"contexts,omitempty"`
 
+	// Config provides OpenCode configuration as a JSON string.
+	// This configuration is written to /tools/opencode.json and the OPENCODE_CONFIG
+	// environment variable is set to point to this file.
+	//
+	// The config should be a valid JSON object compatible with OpenCode's config schema.
+	// See: https://opencode.ai/config.json for the schema.
+	//
+	// Example:
+	//   config: |
+	//     {
+	//       "$schema": "https://opencode.ai/config.json",
+	//       "model": "google/gemini-2.5-pro",
+	//       "small_model": "google/gemini-2.5-flash"
+	//     }
+	// +optional
+	Config *string `json:"config,omitempty"`
+
 	// Credentials defines secrets that should be available to the agent.
 	// Similar to GitHub Actions secrets, these can be mounted as files or
 	// exposed as environment variables.

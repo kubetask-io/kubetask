@@ -21,6 +21,7 @@ type agentConfig struct {
 	command            []string
 	workspaceDir       string
 	contexts           []kubeopenv1alpha1.ContextItem
+	config             *string // OpenCode config JSON string
 	credentials        []kubeopenv1alpha1.Credential
 	podSpec            *kubeopenv1alpha1.AgentPodSpec
 	serviceAccountName string
@@ -135,6 +136,15 @@ const (
 
 	// ToolsMountPath is the mount path for the tools volume
 	ToolsMountPath = "/tools"
+
+	// OpenCodeConfigPath is the path where OpenCode config is written
+	OpenCodeConfigPath = "/tools/opencode.json"
+
+	// OpenCodeConfigEnvVar is the environment variable name for OpenCode config path
+	OpenCodeConfigEnvVar = "OPENCODE_CONFIG"
+
+	// OpenCodeConfigKey is the ConfigMap key for the OpenCode config content
+	OpenCodeConfigKey = "opencode-config"
 )
 
 // buildOpenCodeInitContainer creates an init container that copies OpenCode binary to /tools.
@@ -366,6 +376,14 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 		corev1.EnvVar{Name: "WORKSPACE_DIR", Value: cfg.workspaceDir},
 	)
 
+	// If OpenCode config is provided, set OPENCODE_CONFIG env var
+	if cfg.config != nil && *cfg.config != "" {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  OpenCodeConfigEnvVar,
+			Value: OpenCodeConfigPath,
+		})
+	}
+
 	// envFromSources collects secretRef entries for mounting entire secrets
 	var envFromSources []corev1.EnvFromSource
 
@@ -518,6 +536,16 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 			MountPath: cfg.workspaceDir,
 		})
 
+		// If OpenCode config is provided, mount /tools volume in context-init
+		// so it can write the config file. The /tools volume is already created
+		// for sharing the OpenCode binary between containers.
+		if cfg.config != nil && *cfg.config != "" {
+			contextInit.VolumeMounts = append(contextInit.VolumeMounts, corev1.VolumeMount{
+				Name:      ToolsVolumeName,
+				MountPath: ToolsMountPath,
+			})
+		}
+
 		// For files outside /workspace, we need to create shared emptyDir volumes
 		// so that the context-init container can write files that persist to the agent container.
 		// Group files by their parent directory to minimize the number of volumes.
@@ -525,6 +553,10 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 		for _, fm := range fileMounts {
 			if !isUnderPath(fm.filePath, cfg.workspaceDir) {
 				parentDir := getParentDir(fm.filePath)
+				// Skip /tools as it already exists for the OpenCode binary
+				if parentDir == ToolsMountPath {
+					continue
+				}
 				externalDirs[parentDir] = true
 			}
 		}

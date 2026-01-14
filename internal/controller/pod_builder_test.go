@@ -1427,3 +1427,113 @@ func TestResolveMountPath(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildPod_WithOpenCodeConfig(t *testing.T) {
+	task := &kubeopenv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+	}
+	task.APIVersion = "kubeopencode.io/v1alpha1"
+	task.Kind = "Task"
+
+	configJSON := `{"model": "google/gemini-2.5-pro", "small_model": "google/gemini-2.5-flash"}`
+	cfg := agentConfig{
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
+		config:             &configJSON,
+	}
+
+	// Create a ConfigMap with the config content
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task-context",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			OpenCodeConfigKey: configJSON,
+		},
+	}
+
+	// Include the config file in fileMounts
+	fileMounts := []fileMount{
+		{filePath: OpenCodeConfigPath},
+	}
+
+	pod := buildPod(task, "test-task-pod", task.Namespace, cfg, configMap, fileMounts, nil, nil, nil, defaultSystemConfig())
+
+	// Verify OPENCODE_CONFIG env var is set
+	container := pod.Spec.Containers[0]
+	var foundOpenCodeConfigEnv bool
+	for _, env := range container.Env {
+		if env.Name == OpenCodeConfigEnvVar {
+			if env.Value != OpenCodeConfigPath {
+				t.Errorf("OPENCODE_CONFIG env value = %q, want %q", env.Value, OpenCodeConfigPath)
+			}
+			foundOpenCodeConfigEnv = true
+			break
+		}
+	}
+	if !foundOpenCodeConfigEnv {
+		t.Errorf("OPENCODE_CONFIG env var not found in container env")
+	}
+
+	// Verify context-init container has /tools volume mount
+	var contextInitContainer *corev1.Container
+	for i, initC := range pod.Spec.InitContainers {
+		if initC.Name == "context-init" {
+			contextInitContainer = &pod.Spec.InitContainers[i]
+			break
+		}
+	}
+	if contextInitContainer == nil {
+		t.Fatalf("context-init container not found")
+	}
+
+	var hasToolsMount bool
+	for _, vm := range contextInitContainer.VolumeMounts {
+		if vm.Name == ToolsVolumeName && vm.MountPath == ToolsMountPath {
+			hasToolsMount = true
+			break
+		}
+	}
+	if !hasToolsMount {
+		t.Errorf("context-init container should mount /tools volume for config file")
+	}
+}
+
+func TestBuildPod_WithoutOpenCodeConfig(t *testing.T) {
+	task := &kubeopenv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+	}
+	task.APIVersion = "kubeopencode.io/v1alpha1"
+	task.Kind = "Task"
+
+	cfg := agentConfig{
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+		command:            []string{"sh", "-c", "echo test"},
+		config:             nil, // No config provided
+	}
+
+	pod := buildPod(task, "test-task-pod", task.Namespace, cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
+
+	// Verify OPENCODE_CONFIG env var is NOT set
+	container := pod.Spec.Containers[0]
+	for _, env := range container.Env {
+		if env.Name == OpenCodeConfigEnvVar {
+			t.Errorf("OPENCODE_CONFIG env var should not be set when config is nil")
+		}
+	}
+}

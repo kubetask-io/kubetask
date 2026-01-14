@@ -97,6 +97,23 @@ spec:
                   type: string
                 minItems: 1
                 type: array
+              config:
+                description: |-
+                  Config provides OpenCode configuration as a JSON string.
+                  This configuration is written to /tools/opencode.json and the OPENCODE_CONFIG
+                  environment variable is set to point to this file.
+
+                  The config should be a valid JSON object compatible with OpenCode's config schema.
+                  See: https://opencode.ai/config.json for the schema.
+
+                  Example:
+                    config: |
+                      {
+                        "$schema": "https://opencode.ai/config.json",
+                        "model": "google/gemini-2.5-pro",
+                        "small_model": "google/gemini-2.5-flash"
+                      }
+                type: string
               contexts:
                 description: |-
                   Contexts provides default contexts for all tasks using this Agent.

@@ -2174,4 +2174,160 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
+
+	Context("When creating a Task with Agent that has OpenCode config", func() {
+		It("Should set OPENCODE_CONFIG env var and mount config file", func() {
+			agentName := "agent-with-config"
+			taskName := "test-task-with-config"
+			description := "Test task with config"
+
+			configJSON := `{"model": "google/gemini-2.5-pro", "small_model": "google/gemini-2.5-flash"}`
+
+			// Create Agent with Config
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					AgentImage:         "test-opencode:latest",
+					ExecutorImage:      "test-executor:latest",
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "/tools/opencode run task.md"},
+					ServiceAccountName: "default",
+					Config:             &configJSON,
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			// Create Task referencing the Agent
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					Description: &description,
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Pod is created")
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
+			createdPod := &corev1.Pod{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying OPENCODE_CONFIG env var is set")
+			agentContainer := createdPod.Spec.Containers[0]
+			var foundOpenCodeConfigEnv bool
+			for _, env := range agentContainer.Env {
+				if env.Name == OpenCodeConfigEnvVar {
+					Expect(env.Value).Should(Equal(OpenCodeConfigPath))
+					foundOpenCodeConfigEnv = true
+					break
+				}
+			}
+			Expect(foundOpenCodeConfigEnv).Should(BeTrue(), "OPENCODE_CONFIG env var should be set")
+
+			By("Verifying context-init container mounts /tools volume")
+			var contextInitContainer *corev1.Container
+			for i, initC := range createdPod.Spec.InitContainers {
+				if initC.Name == "context-init" {
+					contextInitContainer = &createdPod.Spec.InitContainers[i]
+					break
+				}
+			}
+			Expect(contextInitContainer).ShouldNot(BeNil(), "context-init container should exist")
+
+			var hasToolsMount bool
+			for _, vm := range contextInitContainer.VolumeMounts {
+				if vm.Name == ToolsVolumeName && vm.MountPath == ToolsMountPath {
+					hasToolsMount = true
+					break
+				}
+			}
+			Expect(hasToolsMount).Should(BeTrue(), "context-init should mount /tools volume for config")
+
+			By("Verifying ConfigMap contains config content")
+			configMapName := taskName + ContextConfigMapSuffix
+			configMapLookupKey := types.NamespacedName{Name: configMapName, Namespace: taskNamespace}
+			createdConfigMap := &corev1.ConfigMap{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, configMapLookupKey, createdConfigMap) == nil
+			}, timeout, interval).Should(BeTrue())
+			Expect(createdConfigMap.Data).Should(HaveKey(OpenCodeConfigKey))
+			Expect(createdConfigMap.Data[OpenCodeConfigKey]).Should(Equal(configJSON))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+
+		It("Should reject invalid JSON in config", func() {
+			agentName := "agent-invalid-config"
+			taskName := "test-task-invalid-config"
+			description := "Test task with invalid config"
+
+			invalidConfigJSON := `{"model": "google/gemini-2.5-pro", invalid json}`
+
+			// Create Agent with invalid Config
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					AgentImage:         "test-opencode:latest",
+					ExecutorImage:      "test-executor:latest",
+					WorkspaceDir:       "/workspace",
+					Command:            []string{"sh", "-c", "/tools/opencode run task.md"},
+					ServiceAccountName: "default",
+					Config:             &invalidConfigJSON,
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			// Create Task referencing the Agent
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					Description: &description,
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task status shows error due to invalid JSON")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseFailed))
+
+			By("Verifying error condition mentions invalid JSON")
+			var readyCondition *metav1.Condition
+			for i, cond := range createdTask.Status.Conditions {
+				if cond.Type == "Ready" {
+					readyCondition = &createdTask.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(readyCondition).ShouldNot(BeNil())
+			Expect(readyCondition.Message).Should(ContainSubstring("invalid JSON"))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+	})
 })

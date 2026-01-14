@@ -5,6 +5,7 @@
 #
 # Current API resources (v1alpha1):
 #   - Task: Single task execution
+#   - TaskTemplate: Reusable task template
 #   - Agent: AI agent configuration
 #   - KubeOpenCodeConfig: System-level configuration
 #
@@ -44,6 +45,10 @@ rules:
   # Allow agent to read KubeOpenCodeConfig (system configuration)
   - apiGroups: ["kubeopencode.io"]
     resources: ["kubeopencodeconfigs"]
+    verbs: ["get", "list", "watch"]
+  # Allow agent to read TaskTemplate resources (for understanding task configurations)
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasktemplates"]
     verbs: ["get", "list", "watch"]
   # Allow agent to read Pods and Pod logs (for analyzing previous task results)
   - apiGroups: [""]
