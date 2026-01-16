@@ -87,20 +87,37 @@ spec:
         app: smee-client
     spec:
       containers:
-      - name: smee-client
+      # Bot agent smee-client - forwards webhooks to github-bot EventSource
+      - name: smee-bot
         image: deltaprojects/smee-client:latest
         args:
           - "--url"
           - "$(SMEE_URL)"
           - "--target"
-          - "http://github-eventsource-svc:12000/webhooks/github"
+          - "http://github-bot-eventsource-svc:12000/webhooks/github"
         env:
         - name: SMEE_URL
           valueFrom:
             secretKeyRef:
               name: smee-bot-config
               key: url
-        - name: SMEE_DEV_URL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      # Dev agent smee-client - forwards webhooks to github-dev EventSource
+      - name: smee-dev
+        image: deltaprojects/smee-client:latest
+        args:
+          - "--url"
+          - "$(SMEE_URL)"
+          - "--target"
+          - "http://github-dev-eventsource-svc:12001/webhooks/github"
+        env:
+        - name: SMEE_URL
           valueFrom:
             secretKeyRef:
               name: smee-dev-config
