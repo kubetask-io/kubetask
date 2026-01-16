@@ -3,19 +3,16 @@
 apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
-  name: default
+  name: bot
 spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+  # command is optional - uses default: /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
   maxConcurrentTasks: 3
-  # OpenCode configuration using OpenCode Zen provider with MiniMax M2.1 (free)
-  # See: https://opencode.ai/docs/zen/
+  # OpenCode configuration using Google Gemini 2.5 Pro
+  # See: https://opencode.ai/docs/providers/
   config: |
     {
       "$schema": "https://opencode.ai/config.json",
@@ -24,6 +21,22 @@ spec:
       "share": "disabled",
       "autoupdate": false
     }
+  # Contexts for bot agent
+  contexts:
+    # Instructions for handling GitHub events
+    - name: bot-instructions
+      description: "Instructions for handling GitHub events"
+      type: ConfigMap
+      configMap:
+        name: bot-instructions
+    # KubeOpenCode source code repository
+    - name: kubeopencode
+      description: "KubeOpenCode source code repository"
+      type: Git
+      git:
+        repository: https://github.com/kubeopencode/kubeopencode.git
+        ref: main
+      mountPath: kubeopencode
   credentials:
     # Mount entire secret - all keys become env vars automatically
     - name: git
@@ -37,5 +50,4 @@ spec:
     # for transparent gh CLI and git authentication
     - name: github-app
       secretRef:
-        name: github-app-credentials
-      mountPath: /etc/github-app
+        name: github-bot-credentials

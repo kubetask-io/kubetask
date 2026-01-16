@@ -4,8 +4,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: EventSource
 metadata:
-  name: github
-  namespace: kubeopencode-system
+  name: github-bot
 spec:
   service:
     ports:

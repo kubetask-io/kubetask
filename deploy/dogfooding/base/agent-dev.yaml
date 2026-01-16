@@ -1,0 +1,59 @@
+# Copyright Contributors to the KubeOpenCode project
+# Agent configuration for AI agent with credentials
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: dev
+spec:
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  workspaceDir: /workspace
+  # command is optional - uses default: /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+  serviceAccountName: kubeopencode-agent
+  maxConcurrentTasks: 3
+  # OpenCode configuration using Google Gemini 2.5 Pro
+  # See: https://opencode.ai/docs/providers/
+  config: |
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "model": "opencode/gemini-3-pro",
+      "small_model": "opencode/gemini-3-flash",
+      "share": "disabled",
+      "autoupdate": false
+    }
+  # Contexts for dev agent
+  contexts:
+    # Common instructions (shared with bot agent)
+    - name: bot-instructions
+      description: "Common instructions for handling GitHub events (output methods, context gathering)"
+      type: ConfigMap
+      configMap:
+        name: bot-instructions
+    # Dev-specific instructions (code changes capability)
+    - name: dev-instructions
+      description: "Dev-specific instructions for code modifications"
+      type: ConfigMap
+      configMap:
+        name: dev-instructions
+    # KubeOpenCode source code repository
+    - name: kubeopencode
+      description: "KubeOpenCode source code repository"
+      type: Git
+      git:
+        repository: https://github.com/kubeopencode/kubeopencode.git
+        ref: main
+      mountPath: kubeopencode
+  credentials:
+    # Mount entire secret - all keys become env vars automatically
+    - name: git
+      secretRef:
+        name: git-settings
+    - name: opencode
+      secretRef:
+        name: opencode-credentials
+    # GitHub App credentials mounted as directory
+    # The devbox image has built-in scripts that automatically use these
+    # for transparent gh CLI and git authentication
+    - name: github-app
+      secretRef:
+        name: github-dev-credentials

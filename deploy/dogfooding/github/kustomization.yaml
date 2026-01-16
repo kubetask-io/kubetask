@@ -7,9 +7,13 @@
 # 2. Ensure the EventBus controller is running
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: kubeopencode-system
+namespace: kubeopencode-github
 resources:
   - eventbus.yaml
   - rbac.yaml
-  - eventsource-github.yaml
-  - sensor-github.yaml
+  - eventsource-bot.yaml
+  - eventsource-dev.yaml
+  - sensor-bot.yaml
+  - sensor-dev.yaml
+  - deployment-smee-client.yaml
+  - secrets.yaml

@@ -1,0 +1,40 @@
+# Copyright Contributors to the KubeOpenCode project
+# EventSource for receiving GitHub webhooks.
+# GitHub sends webhooks to this endpoint, which are then published to the EventBus.
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: github-dev
+spec:
+  service:
+    ports:
+      - port: 12001
+        targetPort: 12001
+  github:
+    kubeopencode:
+      # Repository configuration
+      repositories:
+        - owner: kubeopencode
+          names:
+            - kubeopencode
+      # Webhook endpoint configuration
+      webhook:
+        endpoint: /webhooks/github
+        port: "12001"
+        method: POST
+      # Events to listen for
+      events:
+        - pull_request
+        - issue_comment
+        - pull_request_review_comment
+        - discussion_comment
+      # Webhook secret for HMAC validation (X-Hub-Signature-256)
+      webhookSecret:
+        name: github-webhook-secret
+        key: hmacKey
+      # Content type
+      contentType: json
+      # Active state
+      active: true
+      # Disable SSL verification for self-signed certs (smee.io forwarding)
+      insecure: false

@@ -1,0 +1,320 @@
+# Copyright Contributors to the KubeOpenCode project
+# Sensor that creates KubeOpenCode Tasks in response to GitHub events.
+# This replaces the WebhookTrigger CRD functionality.
+#
+# Note: This bot agent has read-only GitHub permissions (no code write access).
+# All users are treated equally - the bot can answer questions and provide
+# guidance but cannot make code changes for anyone.
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: github-bot
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: argo-events-sensor
+  dependencies:
+    - name: github-event
+      eventSourceName: github-bot
+      eventName: kubeopencode
+  triggers:
+    # Rule 1: PR opened - auto review
+    - template:
+        name: pr-opened
+        conditions: pr-opened-condition
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: kubeopencode.io/v1alpha1
+              kind: Task
+              metadata:
+                generateName: github-pr-opened-
+                namespace: kubeopencode-system
+              spec:
+                agentRef:
+                  name: bot
+                  namespace: kubeopencode-system
+                description: ""
+          parameters:
+            - src:
+                dependencyName: github-event
+                dataTemplate: |
+                  # GitHub Event: PR Opened
+
+                  ## Repository
+                  - Full Name: {{ .Input.body.repository.full_name }}
+                  - Clone URL: {{ .Input.body.repository.clone_url }}
+
+                  ## Pull Request
+                  - Number: {{ .Input.body.pull_request.number }}
+                  - Title: {{ .Input.body.pull_request.title }}
+                  - URL: {{ .Input.body.pull_request.html_url }}
+                  - Author: {{ .Input.body.sender.login }}
+                  - Base Branch: {{ .Input.body.pull_request.base.ref }}
+                  - Head Branch: {{ .Input.body.pull_request.head.ref }}
+
+                  ## Description
+                  {{ .Input.body.pull_request.body }}
+
+                  ---
+                  **Instructions**: Follow `.instructions/pr-review.md`
+
+                  Use the following variables in commands:
+                  - REPO={{ .Input.body.repository.full_name }}
+                  - PR_NUMBER={{ .Input.body.pull_request.number }}
+              dest: spec.description
+
+    # Rule 2: Issue comment
+    - template:
+        name: comment-issue
+        conditions: comment-issue-condition
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: kubeopencode.io/v1alpha1
+              kind: Task
+              metadata:
+                generateName: github-comment-issue-
+                namespace: kubeopencode-system
+              spec:
+                agentRef:
+                  name: bot
+                  namespace: kubeopencode-system
+                description: ""
+          parameters:
+            - src:
+                dependencyName: github-event
+                dataTemplate: |
+                  # GitHub Event: Issue Comment (@kubeopencode-bot mention)
+
+                  ## Repository
+                  - Full Name: {{ .Input.body.repository.full_name }}
+                  - Clone URL: {{ .Input.body.repository.clone_url }}
+
+                  ## Issue
+                  - Number: {{ .Input.body.issue.number }}
+                  - Title: {{ .Input.body.issue.title }}
+                  - URL: {{ .Input.body.issue.html_url }}
+                  - State: {{ .Input.body.issue.state }}
+
+                  ## Comment
+                  - Author: {{ .Input.body.comment.user.login }}
+                  - URL: {{ .Input.body.comment.html_url }}
+
+                  ### Body
+                  {{ .Input.body.comment.body }}
+
+                  ---
+                  **Instructions**: Follow `.instructions/comment-issue.md`
+
+                  Use the following variables in commands:
+                  - REPO={{ .Input.body.repository.full_name }}
+                  - NUMBER={{ .Input.body.issue.number }}
+                  - COMMENTER={{ .Input.body.comment.user.login }}
+              dest: spec.description
+
+    # Rule 3: PR comment (issue-level)
+    - template:
+        name: comment-pr
+        conditions: comment-pr-condition
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: kubeopencode.io/v1alpha1
+              kind: Task
+              metadata:
+                generateName: github-comment-pr-
+                namespace: kubeopencode-system
+              spec:
+                agentRef:
+                  name: bot
+                  namespace: kubeopencode-system
+                description: ""
+          parameters:
+            - src:
+                dependencyName: github-event
+                dataTemplate: |
+                  # GitHub Event: PR Comment (@kubeopencode-bot mention)
+
+                  ## Repository
+                  - Full Name: {{ .Input.body.repository.full_name }}
+                  - Clone URL: {{ .Input.body.repository.clone_url }}
+
+                  ## Pull Request
+                  - Number: {{ .Input.body.issue.number }}
+                  - Title: {{ .Input.body.issue.title }}
+                  - URL: {{ .Input.body.issue.html_url }}
+                  - State: {{ .Input.body.issue.state }}
+
+                  ## Comment
+                  - Author: {{ .Input.body.comment.user.login }}
+                  - URL: {{ .Input.body.comment.html_url }}
+
+                  ### Body
+                  {{ .Input.body.comment.body }}
+
+                  ---
+                  **Instructions**: Follow `.instructions/comment-pr.md`
+
+                  Use the following variables in commands:
+                  - REPO={{ .Input.body.repository.full_name }}
+                  - NUMBER={{ .Input.body.issue.number }}
+                  - COMMENTER={{ .Input.body.comment.user.login }}
+              dest: spec.description
+
+    # Rule 4: PR review comment (inline)
+    - template:
+        name: comment-pr-review
+        conditions: comment-pr-review-condition
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: kubeopencode.io/v1alpha1
+              kind: Task
+              metadata:
+                generateName: github-comment-pr-review-
+                namespace: kubeopencode-system
+              spec:
+                agentRef:
+                  name: bot
+                  namespace: kubeopencode-system
+                description: ""
+          parameters:
+            - src:
+                dependencyName: github-event
+                dataTemplate: |
+                  # GitHub Event: PR Review Comment (@kubeopencode-bot mention)
+
+                  ## Repository
+                  - Full Name: {{ .Input.body.repository.full_name }}
+                  - Clone URL: {{ .Input.body.repository.clone_url }}
+
+                  ## Pull Request
+                  - Number: {{ .Input.body.pull_request.number }}
+                  - Title: {{ .Input.body.pull_request.title }}
+                  - URL: {{ .Input.body.pull_request.html_url }}
+
+                  ## Review Comment Location
+                  - File: {{ .Input.body.comment.path }}
+                  - Line: {{ .Input.body.comment.line }}
+                  - Diff Hunk: {{ .Input.body.comment.diff_hunk }}
+
+                  ## Comment
+                  - Author: {{ .Input.body.comment.user.login }}
+                  - URL: {{ .Input.body.comment.html_url }}
+
+                  ### Body
+                  {{ .Input.body.comment.body }}
+
+                  ---
+                  **Instructions**: Follow `.instructions/comment-pr-review.md`
+
+                  Use the following variables in commands:
+                  - REPO={{ .Input.body.repository.full_name }}
+                  - NUMBER={{ .Input.body.pull_request.number }}
+                  - FILE_PATH={{ .Input.body.comment.path }}
+                  - LINE={{ .Input.body.comment.line }}
+                  - COMMENTER={{ .Input.body.comment.user.login }}
+              dest: spec.description
+
+    # Rule 5: Discussion comment
+    - template:
+        name: comment-discussion
+        conditions: comment-discussion-condition
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: kubeopencode.io/v1alpha1
+              kind: Task
+              metadata:
+                generateName: github-comment-discussion-
+                namespace: kubeopencode-system
+              spec:
+                agentRef:
+                  name: bot
+                  namespace: kubeopencode-system
+                description: ""
+          parameters:
+            - src:
+                dependencyName: github-event
+                dataTemplate: |
+                  # GitHub Event: Discussion Comment (@kubeopencode-bot mention)
+
+                  ## Repository
+                  - Full Name: {{ .Input.body.repository.full_name }}
+                  - Clone URL: {{ .Input.body.repository.clone_url }}
+                  - Owner: {{ .Input.body.repository.owner.login }}
+                  - Name: {{ .Input.body.repository.name }}
+
+                  ## Discussion
+                  - Number: {{ .Input.body.discussion.number }}
+                  - Title: {{ .Input.body.discussion.title }}
+                  - URL: {{ .Input.body.discussion.html_url }}
+                  - Category: {{ .Input.body.discussion.category.name }}
+
+                  ## Comment
+                  - Author: {{ .Input.body.comment.user.login }}
+                  - URL: {{ .Input.body.comment.html_url }}
+
+                  ### Body
+                  {{ .Input.body.comment.body }}
+
+                  ---
+                  **Instructions**: Follow `.instructions/comment-discussion.md`
+
+                  Use the following variables in commands:
+                  - REPO={{ .Input.body.repository.full_name }}
+                  - OWNER={{ .Input.body.repository.owner.login }}
+                  - REPO_NAME={{ .Input.body.repository.name }}
+                  - NUMBER={{ .Input.body.discussion.number }}
+                  - COMMENTER={{ .Input.body.comment.user.login }}
+              dest: spec.description
+
+  # Conditions for filtering events
+  # Note: Argo Events uses expr-lang expressions, not CEL
+  # See: https://expr.medv.io/docs/Language-Definition
+  conditions:
+    # PR opened condition
+    - name: pr-opened-condition
+      expression: >-
+        Input.headers["X-Github-Event"] == "pull_request" &&
+        Input.body.action == "opened"
+
+    # Issue comment (not PR)
+    - name: comment-issue-condition
+      expression: >-
+        Input.headers["X-Github-Event"] == "issue_comment" &&
+        Input.body.action == "created" &&
+        Input.body.issue.pull_request == nil &&
+        contains(Input.body.comment.body, "@kubeopencode-bot") &&
+        Input.body.comment.user.type != "Bot"
+
+    # PR comment (issue-level, not review)
+    - name: comment-pr-condition
+      expression: >-
+        Input.headers["X-Github-Event"] == "issue_comment" &&
+        Input.body.action == "created" &&
+        Input.body.issue.pull_request != nil &&
+        contains(Input.body.comment.body, "@kubeopencode-bot") &&
+        Input.body.comment.user.type != "Bot"
+
+    # PR review comment (inline)
+    - name: comment-pr-review-condition
+      expression: >-
+        Input.headers["X-Github-Event"] == "pull_request_review_comment" &&
+        Input.body.action == "created" &&
+        contains(Input.body.comment.body, "@kubeopencode-bot") &&
+        Input.body.comment.user.type != "Bot"
+
+    # Discussion comment
+    - name: comment-discussion-condition
+      expression: >-
+        Input.headers["X-Github-Event"] == "discussion_comment" &&
+        Input.body.action == "created" &&
+        contains(Input.body.comment.body, "@kubeopencode-bot") &&
+        Input.body.comment.user.type != "Bot"

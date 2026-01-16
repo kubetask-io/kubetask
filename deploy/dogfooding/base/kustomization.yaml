@@ -9,7 +9,10 @@ resources:
   - rbac.yaml
   - secrets.yaml
   - kubeopencodeconfig.yaml
-  - agent-default.yaml
+  - agent-bot.yaml
+  - agent-dev.yaml
+  - context-bot-instructions.yaml
+  - context-dev-instructions.yaml
 
 # Note: Webhook functionality has been migrated to Argo Events.
 # See ../argo-events/ for EventSource and Sensor configuration.

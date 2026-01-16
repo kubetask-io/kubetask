@@ -1,0 +1,114 @@
+# Smee.io client for forwarding GitHub webhooks
+#
+# Smee.io provides a public URL with valid TLS certificate.
+# This client receives webhooks from smee.io and forwards them
+# to the local EventSource service.
+#
+# Required because ROSA cluster uses self-signed certificates
+# that GitHub webhook delivery does not trust.
+#
+# Architecture:
+#   GitHub App ──HTTPS──▶ Smee.io (valid cert) ──SSE──▶ smee-client ──HTTP──▶ EventSource
+#
+# Note: Smee.io is suitable for development/testing. For production or
+# higher reliability, consider these alternatives:
+#
+# ------------------------------------------------------------------------------
+# Alternative: Cloudflare Tunnel (recommended for production)
+# ------------------------------------------------------------------------------
+# Cloudflare Tunnel creates an outbound connection from your cluster to
+# Cloudflare Edge, avoiding the need for a public certificate on your cluster.
+#
+# Architecture:
+#   GitHub App ──HTTPS──▶ Cloudflare Edge (valid cert) ──tunnel──▶ EventSource
+#
+# To use Cloudflare Tunnel instead of Smee.io:
+#
+# 1. Create a Cloudflare account and tunnel:
+#    $ cloudflared tunnel create github-webhook
+#    $ cloudflared tunnel route dns github-webhook webhook.yourdomain.com
+#
+# 2. Replace this Deployment with:
+#
+#    apiVersion: apps/v1
+#    kind: Deployment
+#    metadata:
+#      name: cloudflared
+#    spec:
+#      replicas: 1
+#      selector:
+#        matchLabels:
+#          app: cloudflared
+#      template:
+#        metadata:
+#          labels:
+#            app: cloudflared
+#        spec:
+#          containers:
+#          - name: cloudflared
+#            image: cloudflare/cloudflared:latest
+#            args:
+#              - tunnel
+#              - --no-autoupdate
+#              - run
+#              - --token
+#              - $(TUNNEL_TOKEN)
+#            env:
+#            - name: TUNNEL_TOKEN
+#              valueFrom:
+#                secretKeyRef:
+#                  name: cloudflared-config
+#                  key: token
+#
+# 3. Create the secret:
+#    $ kubectl create secret generic cloudflared-config \
+#        --from-literal=token=<your-tunnel-token> -n acm
+#
+# 4. Update GitHub App webhook URL to: https://webhook.yourdomain.com/webhooks/github
+#
+# Benefits of Cloudflare Tunnel over Smee.io:
+#   - More reliable (Cloudflare SLA)
+#   - Better for production use
+#   - Fixed domain name (with Cloudflare DNS)
+#   - Built-in monitoring and logs
+# ------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smee-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smee-client
+  template:
+    metadata:
+      labels:
+        app: smee-client
+    spec:
+      containers:
+      - name: smee-client
+        image: deltaprojects/smee-client:latest
+        args:
+          - "--url"
+          - "$(SMEE_URL)"
+          - "--target"
+          - "http://github-eventsource-svc:12000/webhooks/github"
+        env:
+        - name: SMEE_URL
+          valueFrom:
+            secretKeyRef:
+              name: smee-bot-config
+              key: url
+        - name: SMEE_DEV_URL
+          valueFrom:
+            secretKeyRef:
+              name: smee-dev-config
+              key: url
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
