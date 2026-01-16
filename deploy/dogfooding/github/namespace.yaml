@@ -1,0 +1,7 @@
+# Copyright Contributors to the KubeOpenCode project
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeopencode-github
+  labels:
+    app.kubernetes.io/part-of: kubeopencode-github
