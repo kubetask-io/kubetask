@@ -621,19 +621,20 @@ type AgentSpec struct {
 	WorkspaceDir string `json:"workspaceDir"`
 
 	// Command specifies the entrypoint command for the agent container.
-	// This is REQUIRED and overrides the default ENTRYPOINT of the container image.
+	// This is optional and overrides the default ENTRYPOINT of the container image.
 	//
-	// The command defines HOW the agent executes tasks. Different users can
-	// customize execution behavior (e.g., output format, flags) without
-	// modifying the agent image. The agent image only provides the tools.
+	// If not specified, defaults to:
+	//   ["sh", "-c", "/tools/opencode run \"$(cat ${WORKSPACE_DIR}/task.md)\""]
+	//
+	// The command defines HOW the agent executes tasks. Most users should not
+	// need to customize this. Override only if you need custom execution behavior.
 	//
 	// ## Example
 	//
-	//   command: ["sh", "-c", "/tools/opencode run \"$(cat /workspace/task.md)\""]
+	//   command: ["sh", "-c", "/tools/opencode run --format json \"$(cat /workspace/task.md)\""]
 	//
-	// +required
-	// +kubebuilder:validation:MinItems=1
-	Command []string `json:"command"`
+	// +optional
+	Command []string `json:"command,omitempty"`
 
 	// Contexts provides default contexts for all tasks using this Agent.
 	// These have the lowest priority in context merging.

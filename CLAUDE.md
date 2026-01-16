@@ -10,6 +10,10 @@ This document provides guidelines for AI assistants (like Claude) working on the
 
 KubeOpenCode brings Agentic AI capabilities into the Kubernetes ecosystem. By leveraging Kubernetes, it enables AI agents to be deployed as services, run in isolated virtual environments, and integrate with enterprise management and governance frameworks.
 
+**Local OpenCode Source Code:**
+
+> **IMPORTANT FOR AI ASSISTANTS**: The OpenCode project source code is located at `../opencode/` (sibling directory to kubeopencode). When answering questions about OpenCode's code, implementation details, or internal behavior, **always prioritize searching the local OpenCode codebase first** before using web search or making assumptions.
+
 **Key Technologies:**
 - Kubernetes Custom Resource Definitions (CRDs)
 - Controller Runtime (kubebuilder)
@@ -422,7 +426,7 @@ internal/controller/
 Key Agent spec fields:
 - `agentImage`: OpenCode init container image (copies binary to `/tools`)
 - `executorImage`: Main worker container image for task execution
-- `command`: **Required** - Entrypoint command that defines HOW the agent executes tasks
+- `command`: Optional entrypoint command (defaults to `/tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"`)
 - `workspaceDir`: **Required** - Working directory where task.md and context files are mounted
 - `contexts`: Inline ContextItems applied to all tasks using this Agent
 - `config`: OpenCode configuration as inline JSON string (written to `/tools/opencode.json`)
@@ -437,11 +441,15 @@ KubeOpenCode uses a two-container pattern:
 1. **Init Container** (`agentImage`): Copies OpenCode binary to `/tools` shared volume
 2. **Worker Container** (`executorImage`): Runs tasks using `/tools/opencode`
 
-**Command Field (Required):**
+**Command Field (Optional):**
 
-The `command` field is required and defines how the agent executes tasks. This design:
-- Decouples agent images from execution logic (images provide tools, command defines usage)
-- Allows users to customize execution behavior (e.g., output format, flags)
+The `command` field is optional and defaults to:
+```
+["sh", "-c", "/tools/opencode run \"$(cat ${WORKSPACE_DIR}/task.md)\""]
+```
+
+Most users don't need to customize this. Override only if you need custom execution behavior
+(e.g., different output format, additional flags, or non-opencode commands for testing).
 
 ```yaml
 apiVersion: kubeopencode.io/v1alpha1
@@ -453,10 +461,11 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   # Executor container (optional, has default)
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
-  command:
-    - sh
-    - -c
-    - /tools/opencode run --format json "$(cat ${WORKSPACE_DIR}/task.md)"
+  # command is optional - uses default if not specified
+  # command:
+  #   - sh
+  #   - -c
+  #   - /tools/opencode run --format json "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
 ```
 
@@ -475,10 +484,7 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+  # command is optional - uses default if not specified
   serviceAccountName: kubeopencode-agent
   config: |
     {
@@ -504,10 +510,8 @@ metadata:
 spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
-  command:
-    - sh
-    - -c
-    - /tools/opencode run --format json "$(cat ${WORKSPACE_DIR}/task.md)"
+  workspaceDir: /workspace
+  # command is optional - uses default if not specified
   serviceAccountName: kubeopencode-agent
   maxConcurrentTasks: 3  # Only 3 Tasks can run concurrently
 ```
@@ -533,10 +537,7 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+  # command is optional - uses default: /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
   quota:
     maxTaskStarts: 10     # Maximum 10 task starts

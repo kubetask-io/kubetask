@@ -116,7 +116,6 @@ var _ = Describe("TaskController", func() {
 					ExecutorImage:      customExecutorImage,
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -208,7 +207,6 @@ var _ = Describe("TaskController", func() {
 						},
 					},
 					WorkspaceDir: "/workspace",
-					Command:      []string{"sh", "-c", "echo test"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -281,7 +279,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 					PodSpec: &kubeopenv1alpha1.AgentPodSpec{
 						Labels: map[string]string{
 							"network-policy": "agent-restricted",
@@ -342,7 +339,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 					PodSpec: &kubeopenv1alpha1.AgentPodSpec{
 						Scheduling: &kubeopenv1alpha1.PodScheduling{
 							NodeSelector: map[string]string{
@@ -426,7 +422,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 					PodSpec: &kubeopenv1alpha1.AgentPodSpec{
 						RuntimeClassName: &runtimeClassName,
 					},
@@ -638,7 +633,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 					Contexts: []kubeopenv1alpha1.ContextItem{
 						{
 							Type: kubeopenv1alpha1.ContextTypeText,
@@ -800,7 +794,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 					MaxConcurrentTasks: &maxConcurrent,
 				},
 			}
@@ -921,7 +914,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 					MaxConcurrentTasks: &maxConcurrent,
 				},
 			}
@@ -993,7 +985,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 					// MaxConcurrentTasks not set (nil)
 				},
 			}
@@ -1067,7 +1058,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "sleep 3600"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -1166,7 +1156,6 @@ var _ = Describe("TaskController", func() {
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
 					AgentImage:         "test-agent:v1.0.0",
-					Command:            []string{"echo", "test"},
 					WorkspaceDir:       "/workspace",
 					ServiceAccountName: "default",
 				},
@@ -1234,7 +1223,6 @@ var _ = Describe("TaskController", func() {
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
 					AgentImage:         "test-agent:v1.0.0",
-					Command:            []string{"echo", "test"},
 					WorkspaceDir:       "/workspace",
 					ServiceAccountName: "default",
 				},
@@ -1304,7 +1292,6 @@ var _ = Describe("TaskController", func() {
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
 					AgentImage:         "test-agent:v1.0.0",
-					Command:            []string{"echo", "test"},
 					WorkspaceDir:       "/workspace",
 					ServiceAccountName: "default",
 				},
@@ -1365,7 +1352,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo done"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -1467,7 +1453,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "exit 1"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -1556,7 +1541,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo done"},
 					// No Outputs defined
 				},
 			}
@@ -1644,7 +1628,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo done"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -1751,7 +1734,6 @@ var _ = Describe("TaskController", func() {
 				},
 				Spec: kubeopenv1alpha1.AgentSpec{
 					AgentImage:         "test-agent:v1.0.0",
-					Command:            []string{"echo", "test"},
 					WorkspaceDir:       "/workspace",
 					ServiceAccountName: "default",
 				},
@@ -1832,7 +1814,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -1921,7 +1902,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -1996,7 +1976,6 @@ var _ = Describe("TaskController", func() {
 					ServiceAccountName: "test-agent",
 					AgentImage:         customAgentImage,
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -2106,7 +2085,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -2193,7 +2171,6 @@ var _ = Describe("TaskController", func() {
 					AgentImage:         "test-opencode:latest",
 					ExecutorImage:      "test-executor:latest",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "/tools/opencode run task.md"},
 					ServiceAccountName: "default",
 					Config:             &configJSON,
 				},
@@ -2284,7 +2261,6 @@ var _ = Describe("TaskController", func() {
 					AgentImage:         "test-opencode:latest",
 					ExecutorImage:      "test-executor:latest",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "/tools/opencode run task.md"},
 					ServiceAccountName: "default",
 					Config:             &invalidConfigJSON,
 				},
@@ -2346,7 +2322,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -2443,7 +2418,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -2525,7 +2499,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
@@ -2647,7 +2620,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 					Quota: &kubeopenv1alpha1.QuotaConfig{
 						MaxTaskStarts: maxTaskStarts,
 						WindowSeconds: windowSeconds,
@@ -2770,7 +2742,6 @@ var _ = Describe("TaskController", func() {
 				Spec: kubeopenv1alpha1.AgentSpec{
 					ServiceAccountName: "test-agent",
 					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo test"},
 					MaxConcurrentTasks: &maxConcurrent,
 					Quota: &kubeopenv1alpha1.QuotaConfig{
 						MaxTaskStarts: maxTaskStarts,

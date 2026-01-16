@@ -225,7 +225,6 @@ func TestBuildPod_BasicTask(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	pod := buildPod(task, "test-task-pod", task.Namespace, cfg, nil, nil, nil, nil, nil, defaultSystemConfig())
@@ -356,7 +355,6 @@ func TestBuildPod_WithCredentials(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 		credentials: []kubeopenv1alpha1.Credential{
 			{
 				Name: "api-token",
@@ -441,7 +439,6 @@ func TestBuildPod_WithEntireSecretCredential(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 		credentials: []kubeopenv1alpha1.Credential{
 			{
 				// No Key specified - mount entire secret as env vars
@@ -489,7 +486,6 @@ func TestBuildPod_WithMixedCredentials(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 		credentials: []kubeopenv1alpha1.Credential{
 			{
 				// Entire secret mount (no key)
@@ -563,7 +559,6 @@ func TestBuildPod_WithEntireSecretAsDirectory(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 		credentials: []kubeopenv1alpha1.Credential{
 			{
 				// No Key specified + MountPath = mount entire secret as directory
@@ -648,7 +643,6 @@ func TestBuildPod_WithPodScheduling(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 		podSpec: &kubeopenv1alpha1.AgentPodSpec{
 			Labels: map[string]string{
 				"custom-label": "custom-value",
@@ -716,7 +710,6 @@ func TestBuildPod_WithContextConfigMap(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	contextConfigMap := &corev1.ConfigMap{
@@ -818,7 +811,6 @@ func TestBuildPod_WithDirMounts(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	dirMounts := []dirMount{
@@ -912,7 +904,6 @@ func TestBuildPod_WithGitMounts(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	gitMounts := []gitMount{
@@ -1010,7 +1001,6 @@ func TestBuildPod_WithGitMountsAndAuth(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	gitMounts := []gitMount{
@@ -1267,7 +1257,6 @@ func TestBuildPod_WithExternalFileMounts(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 	}
 
 	contextConfigMap := &corev1.ConfigMap{
@@ -1445,7 +1434,6 @@ func TestBuildPod_WithOpenCodeConfig(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 		config:             &configJSON,
 	}
 
@@ -1523,7 +1511,6 @@ func TestBuildPod_WithoutOpenCodeConfig(t *testing.T) {
 		executorImage:      "test-executor:v1.0.0",
 		workspaceDir:       "/workspace",
 		serviceAccountName: "test-sa",
-		command:            []string{"sh", "-c", "echo test"},
 		config:             nil, // No config provided
 	}
 

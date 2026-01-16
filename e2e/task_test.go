@@ -28,8 +28,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 
 	BeforeEach(func() {
 		// Create an Agent with echo executor image for all tests
-		// Note: In the two-container pattern, ExecutorImage is the main worker container,
-		// while AgentImage is the OpenCode init container that copies the binary
+		// We use a custom command that echoes task content instead of running opencode
 		agentName = uniqueName("echo-ws")
 		agent = &kubeopenv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{
@@ -430,7 +429,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 		It("should terminate a running task when terminate annotation is added", func() {
 			taskName := uniqueName("task-term")
 
-			By("Creating an Agent that runs a long-running command")
+			By("Creating an Agent for stop test")
 			longRunAgentName := uniqueName("long-run-agent")
 			longRunAgent := &kubeopenv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{

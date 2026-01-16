@@ -16,9 +16,9 @@ import (
 
 // agentConfig holds the resolved configuration from Agent
 type agentConfig struct {
-	agentImage         string // OpenCode init container image (copies binary to /tools)
-	executorImage      string // Worker container image for task execution
-	command            []string
+	agentImage         string   // OpenCode init container image (copies binary to /tools)
+	executorImage      string   // Worker container image for task execution
+	command            []string // Command for agent container (optional, has default)
 	workspaceDir       string
 	contexts           []kubeopenv1alpha1.ContextItem
 	config             *string // OpenCode config JSON string
@@ -656,11 +656,20 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 
 	// Build agent container using executorImage (the worker container)
 	// The OpenCode binary is available at /tools/opencode from the init container
+	// Use custom command if provided, otherwise use default
+	agentCommand := cfg.command
+	if len(agentCommand) == 0 {
+		// Default command: /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+		agentCommand = []string{
+			"sh", "-c",
+			fmt.Sprintf(`/tools/opencode run "$(cat %s/task.md)"`, cfg.workspaceDir),
+		}
+	}
 	agentContainer := corev1.Container{
 		Name:            "agent",
 		Image:           cfg.executorImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         cfg.command,
+		Command:         agentCommand,
 		Env:             envVars,
 		EnvFrom:         envFromSources,
 		VolumeMounts:    volumeMounts,
