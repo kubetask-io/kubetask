@@ -1,8 +1,5 @@
 # Copyright Contributors to the KubeOpenCode project
 # KubeOpenCodeConfig for dogfooding environment
-#
-# This configuration has been simplified - it now only supports systemImage settings.
-# Session persistence, task lifecycle, and agent image pull policies have been removed.
 apiVersion: kubeopencode.io/v1alpha1
 kind: KubeOpenCodeConfig
 metadata:
@@ -12,3 +9,8 @@ spec:
   # Use Always to ensure fresh images are pulled, avoiding stale cached images on nodes
   systemImage:
     imagePullPolicy: Always
+
+  # Automatic cleanup of completed/failed Tasks
+  # Tasks are deleted after 1 day (86400 seconds) from completion
+  cleanup:
+    ttlSecondsAfterFinished: 86400
