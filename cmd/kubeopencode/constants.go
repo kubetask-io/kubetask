@@ -15,9 +15,3 @@ const (
 	envFileMappings  = "FILE_MAPPINGS"
 	envDirMappings   = "DIR_MAPPINGS"
 )
-
-// Environment variable names for save-session
-const (
-	envPVCMountPath = "PVC_MOUNT_PATH"
-	envSignalFile   = "SIGNAL_FILE"
-)

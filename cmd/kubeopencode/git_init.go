@@ -95,7 +95,10 @@ func runGitInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Ensure root directory exists
-	if err := os.MkdirAll(root, 0750); err != nil {
+	// Use 0755 to ensure accessibility in environments where containers run with
+	// random UIDs (e.g., restricted security contexts). The random UID may rely
+	// on group or others permissions to access directories.
+	if err := os.MkdirAll(root, 0755); err != nil { //nolint:gosec // Needs group/others access for random UID environments
 		return fmt.Errorf("failed to create root directory: %w", err)
 	}
 

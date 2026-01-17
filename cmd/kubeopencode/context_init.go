@@ -71,7 +71,8 @@ func runContextInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  ConfigMap path: %s\n", configMapPath)
 
 	// Ensure workspace directory exists
-	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+	// Use 0755 for environments where containers run with random UIDs
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil { //nolint:gosec // Needs group/others access for random UID environments
 		return fmt.Errorf("failed to create workspace directory: %w", err)
 	}
 
@@ -145,24 +146,24 @@ func copyFileWithMode(src, dst string, fileMode *int32) error {
 	// Create parent directory if needed
 	dstDir := filepath.Dir(dst)
 	if dstDir != "" && dstDir != "." {
-		if err := os.MkdirAll(dstDir, 0755); err != nil {
+		if err := os.MkdirAll(dstDir, 0755); err != nil { //nolint:gosec // Needs group/others access for random UID environments
 			return fmt.Errorf("failed to create parent directory: %w", err)
 		}
 	}
 
 	// Open source file
-	srcFile, err := os.Open(src)
+	srcFile, err := os.Open(src) //nolint:gosec // src is a controlled path from ConfigMap
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	// Create destination file
-	dstFile, err := os.Create(dst)
+	dstFile, err := os.Create(dst) //nolint:gosec // dst is a controlled path from ConfigMap
 	if err != nil {
 		return fmt.Errorf("failed to create destination file: %w", err)
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	// Copy content
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
@@ -172,7 +173,7 @@ func copyFileWithMode(src, dst string, fileMode *int32) error {
 	// Set permissions - use provided fileMode or default to 0644
 	mode := os.FileMode(0644)
 	if fileMode != nil {
-		mode = os.FileMode(*fileMode)
+		mode = os.FileMode(uint32(*fileMode)) //nolint:gosec // fileMode is validated by Kubernetes API
 	}
 	if err := os.Chmod(dst, mode); err != nil {
 		return fmt.Errorf("failed to set permissions: %w", err)
@@ -193,7 +194,7 @@ func copyDir(src, dst string) error {
 	}
 
 	// Create destination directory
-	if err := os.MkdirAll(dst, 0755); err != nil {
+	if err := os.MkdirAll(dst, 0755); err != nil { //nolint:gosec // Needs group/others access for random UID environments
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 

@@ -24,9 +24,9 @@ const (
 	envURLTimeout  = "URL_TIMEOUT"
 	envURLInsecure = "URL_INSECURE"
 	// Auth credentials from Secret (mounted as env vars)
-	envURLToken    = "URL_AUTH_TOKEN"
-	envURLUsername = "URL_AUTH_USERNAME"
-	envURLPassword = "URL_AUTH_PASSWORD"
+	envURLToken    = "URL_AUTH_TOKEN"    //nolint:gosec // This is an env var name, not a credential
+	envURLUsername = "URL_AUTH_USERNAME" //nolint:gosec // This is an env var name, not a credential
+	envURLPassword = "URL_AUTH_PASSWORD" //nolint:gosec // This is an env var name, not a credential
 )
 
 // Default values for url-fetch
@@ -123,7 +123,7 @@ func runURLFetch(cmd *cobra.Command, args []string) error {
 	// Create HTTP client
 	transport := &http.Transport{}
 	if insecure {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // User explicitly requested insecure mode
 	}
 	client := &http.Client{
 		Timeout:   time.Duration(timeout) * time.Second,
@@ -142,15 +142,16 @@ func runURLFetch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Add authentication (priority: token > basic auth > headers)
-	if authToken != "" {
+	switch {
+	case authToken != "":
 		req.Header.Set("Authorization", "Bearer "+authToken)
 		fmt.Println("  Auth: Bearer token")
-	} else if authUsername != "" && authPassword != "" {
+	case authUsername != "" && authPassword != "":
 		req.SetBasicAuth(authUsername, authPassword)
 		fmt.Println("  Auth: HTTP Basic")
-	} else if headers["Authorization"] != "" {
+	case headers["Authorization"] != "":
 		fmt.Println("  Auth: Custom header")
-	} else {
+	default:
 		fmt.Println("  Auth: None")
 	}
 
@@ -160,7 +161,7 @@ func runURLFetch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -173,17 +174,17 @@ func runURLFetch(cmd *cobra.Command, args []string) error {
 	// Create target directory if needed
 	targetDir := filepath.Dir(target)
 	if targetDir != "" && targetDir != "." {
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
+		if err := os.MkdirAll(targetDir, 0755); err != nil { //nolint:gosec // Needs group/others access for random UID environments
 			return fmt.Errorf("failed to create target directory: %w", err)
 		}
 	}
 
 	// Write content to target file
-	file, err := os.Create(target)
+	file, err := os.Create(target) //nolint:gosec // target is a controlled path from Task spec
 	if err != nil {
 		return fmt.Errorf("failed to create target file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	written, err := io.Copy(file, resp.Body)
 	if err != nil {

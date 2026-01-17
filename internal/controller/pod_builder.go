@@ -550,7 +550,9 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 	if len(fileMounts) > 0 || len(dirMounts) > 0 {
 		contextInit := buildContextInitContainer(cfg.workspaceDir, fileMounts, dirMounts, sysCfg)
 		// Add workspace mount so init container can write to it
-		contextInit.VolumeMounts = append(contextInitMounts, corev1.VolumeMount{
+		// Start with contextInitMounts (ConfigMap volume mounts) and add workspace mount
+		contextInit.VolumeMounts = contextInitMounts
+		contextInit.VolumeMounts = append(contextInit.VolumeMounts, corev1.VolumeMount{
 			Name:      "workspace",
 			MountPath: cfg.workspaceDir,
 		})

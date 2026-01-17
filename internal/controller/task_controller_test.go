@@ -1219,7 +1219,7 @@ var _ = Describe("TaskController", func() {
 				}
 			}
 			Expect(readyCondition).ShouldNot(BeNil())
-			Expect(readyCondition.Message).Should(ContainSubstring("Git context requires mountPath"))
+			Expect(readyCondition.Message).Should(ContainSubstring("git context requires mountPath"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())

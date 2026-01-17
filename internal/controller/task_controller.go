@@ -955,7 +955,7 @@ func (r *TaskReconciler) resolveContextItem(ctx context.Context, item *kubeopenv
 	// Validate: Git context requires mountPath to be specified
 	// Without mountPath, multiple Git contexts would conflict with the default "git-context" path.
 	if item.Type == kubeopenv1alpha1.ContextTypeGit && item.MountPath == "" {
-		return nil, nil, nil, fmt.Errorf("Git context requires mountPath to be specified")
+		return nil, nil, nil, fmt.Errorf("git context requires mountPath to be specified")
 	}
 
 	// Use a generated name for contexts
@@ -1588,7 +1588,7 @@ func pruneTaskStartHistory(history []kubeopenv1alpha1.TaskStartRecord, windowSec
 	windowStart := time.Now().Add(-time.Duration(windowSeconds) * time.Second)
 	var pruned []kubeopenv1alpha1.TaskStartRecord
 	for _, record := range history {
-		if record.StartTime.Time.After(windowStart) {
+		if record.StartTime.Time.After(windowStart) { //nolint:staticcheck // Using embedded time.Time's After method
 			pruned = append(pruned, record)
 		}
 	}
@@ -1616,13 +1616,13 @@ func calculateQuotaRequeueDelay(history []kubeopenv1alpha1.TaskStartRecord, wind
 
 	// Sort by StartTime to find the oldest
 	sort.Slice(activeRecords, func(i, j int) bool {
-		return activeRecords[i].StartTime.Time.Before(activeRecords[j].StartTime.Time)
+		return activeRecords[i].StartTime.Time.Before(activeRecords[j].StartTime.Time) //nolint:staticcheck // Using embedded time.Time's Before method
 	})
 
 	// Calculate when the oldest record expires
 	oldestRecord := activeRecords[0]
 	windowDuration := time.Duration(windowSeconds) * time.Second
-	expiresAt := oldestRecord.StartTime.Time.Add(windowDuration)
+	expiresAt := oldestRecord.StartTime.Time.Add(windowDuration) //nolint:staticcheck // Using embedded time.Time's Add method
 	delay := time.Until(expiresAt)
 
 	// Ensure minimum delay
@@ -1646,7 +1646,7 @@ func (r *TaskReconciler) checkAgentQuota(ctx context.Context, agent *kubeopenv1a
 
 	quota := agent.Spec.Quota
 	activeRecords := getActiveRecordsInWindow(agent.Status.TaskStartHistory, quota.WindowSeconds)
-	currentCount := int32(len(activeRecords))
+	currentCount := int32(len(activeRecords)) //nolint:gosec // len() is always non-negative and bounded by slice capacity
 
 	log.V(1).Info("quota check",
 		"agent", agent.Name,

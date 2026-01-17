@@ -103,13 +103,14 @@ func runCollectOutputs(cmd *cobra.Command, args []string) error {
 	params := make(map[string]string)
 	for _, p := range spec.Parameters {
 		value, found := readOutputParameter(workspaceDir, p)
-		if found {
+		switch {
+		case found:
 			params[p.Name] = value
 			fmt.Printf("collect-outputs: Collected %s = %q\n", p.Name, truncateForLog(value, 50))
-		} else if p.Default != nil {
+		case p.Default != nil:
 			params[p.Name] = *p.Default
 			fmt.Printf("collect-outputs: Using default for %s = %q\n", p.Name, *p.Default)
-		} else {
+		default:
 			fmt.Printf("collect-outputs: Skipping %s (file not found, no default)\n", p.Name)
 		}
 	}
@@ -203,7 +204,7 @@ func isAgentContainerRunning() (bool, error) {
 
 		// Check if this is a main process (not a thread) by checking if /proc/[pid]/cmdline exists
 		cmdlinePath := filepath.Join("/proc", name, "cmdline")
-		cmdline, err := os.ReadFile(cmdlinePath)
+		cmdline, err := os.ReadFile(cmdlinePath) //nolint:gosec // cmdlinePath is constructed from /proc entries
 		if err != nil {
 			// Process may have exited, continue
 			continue
@@ -237,7 +238,7 @@ func readOutputParameter(workspaceDir string, param OutputParameterSpec) (string
 		path = filepath.Join(workspaceDir, path)
 	}
 
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) //nolint:gosec // path is constructed from workspace and controlled spec
 	if err != nil {
 		return "", false
 	}
@@ -259,7 +260,7 @@ func writeTerminationLog(output terminationOutput) error {
 		return fmt.Errorf("output exceeds 4KB termination log limit (%d bytes)", len(data))
 	}
 
-	if err := os.WriteFile("/dev/termination-log", data, 0644); err != nil {
+	if err := os.WriteFile("/dev/termination-log", data, 0600); err != nil {
 		return fmt.Errorf("failed to write termination log: %w", err)
 	}
 
