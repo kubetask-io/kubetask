@@ -1,0 +1,95 @@
+# Copyright Contributors to the KubeOpenCode project
+# CronWorkflow that creates a daily KubeOpenCode Task for tiny refactoring.
+#
+# This workflow runs daily at 8:00 AM UTC and creates a Task that:
+# 1. Clones the kubeopencode repository
+# 2. Identifies one small refactoring opportunity
+# 3. Implements the change
+# 4. Runs tests to verify no behavior change
+# 5. Creates a PR if tests pass
+#
+# Prerequisites:
+# 1. Argo Workflows installed
+# 2. base resources applied (Agent, ConfigMaps, Secrets)
+# 3. RBAC permissions for cross-namespace Task creation
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: tiny-refactor
+  labels:
+    app.kubernetes.io/name: kubeopencode
+    app.kubernetes.io/component: scheduled
+    app.kubernetes.io/part-of: dogfooding
+spec:
+  # Daily at 8:00 AM UTC
+  schedule: "0 8 * * *"
+  # Keep last 3 successful and 3 failed workflows for debugging
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  # Timezone for the schedule (defaults to UTC)
+  timezone: "UTC"
+  # Concurrency policy: don't start new if previous is still running
+  concurrencyPolicy: "Forbid"
+  # Workflow template
+  workflowSpec:
+    serviceAccountName: argo-workflow-executor
+    # Clean up completed workflows after 7 days
+    ttlStrategy:
+      secondsAfterCompletion: 604800
+      secondsAfterSuccess: 604800
+      secondsAfterFailure: 604800
+    # Timeout for the entire workflow (4 hours max for AI task)
+    activeDeadlineSeconds: 14400
+    entrypoint: create-refactor-task
+    templates:
+      - name: create-refactor-task
+        resource:
+          action: create
+          # Fail the workflow if Task creation fails
+          failureCondition: status.phase == "Failed"
+          # Succeed when Task completes
+          successCondition: status.phase == "Completed"
+          # Manifest for the KubeOpenCode Task
+          manifest: |
+            apiVersion: kubeopencode.io/v1alpha1
+            kind: Task
+            metadata:
+              generateName: tiny-refactor-
+              namespace: kubeopencode-dogfooding
+              labels:
+                app.kubernetes.io/name: kubeopencode
+                app.kubernetes.io/component: refactor
+                app.kubernetes.io/part-of: dogfooding
+                kubeopencode.io/scheduled: "true"
+              annotations:
+                kubeopencode.io/triggered-by: "CronWorkflow/tiny-refactor"
+            spec:
+              agentRef:
+                name: refactor
+                namespace: kubeopencode-dogfooding
+              description: |
+                # Daily Tiny Refactor Task
+
+                ## Objective
+
+                Identify and implement ONE small, safe refactoring in the kubeopencode
+                repository that improves code quality without changing behavior.
+
+                ## Instructions
+
+                1. Navigate to the cloned `kubeopencode` directory
+                2. Follow the refactoring guidelines in your context
+                3. Follow the workflow steps in your context
+                4. If no safe refactoring is found, follow the no-refactoring instructions
+
+                ## Important
+
+                - Make only ONE small change
+                - Always run `make lint` and `make test`
+                - Only create PR if ALL tests pass
+                - Use signoff flag: `git commit -s`
+
+                ## Context
+
+                - Trigger: Scheduled CronWorkflow (daily at 8:00 UTC)
+                - Repository: kubeopencode/kubeopencode

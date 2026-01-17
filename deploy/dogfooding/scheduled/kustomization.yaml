@@ -1,0 +1,14 @@
+# Copyright Contributors to the KubeOpenCode project
+# Kustomization for scheduled Argo Workflow resources.
+#
+# Prerequisites:
+# 1. Install Argo Workflows: https://argoproj.github.io/argo-workflows/quick-start/
+# 2. Ensure the Workflow Controller is running
+# 3. Apply base resources first: kubectl apply -k ../base
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kubeopencode-scheduled
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - cronworkflow-tiny-refactor.yaml

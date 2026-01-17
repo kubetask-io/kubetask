@@ -11,9 +11,11 @@ resources:
   - kubeopencodeconfig.yaml
   - agent-bot.yaml
   - agent-dev.yaml
+  - agent-refactor.yaml
   - context-bot-instructions.yaml
   - context-dev-instructions.yaml
+  - context-refactor-instructions.yaml
 
 # Note: Webhook functionality has been migrated to Argo Events.
-# See ../argo-events/ for EventSource and Sensor configuration.
-# See ../system/ for supporting infrastructure (smee-client, route).
+# See ../github/ for EventSource and Sensor configuration.
+# See ../scheduled/ for CronWorkflow configuration.

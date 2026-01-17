@@ -1,0 +1,8 @@
+# Copyright Contributors to the KubeOpenCode project
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeopencode-scheduled
+  labels:
+    app.kubernetes.io/name: kubeopencode
+    app.kubernetes.io/component: scheduled

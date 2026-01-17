@@ -1,0 +1,56 @@
+# Copyright Contributors to the KubeOpenCode project
+# Agent configuration for automated refactoring tasks.
+# This agent performs daily tiny refactoring operations on the kubeopencode repository.
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: refactor
+spec:
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  workspaceDir: /workspace
+  # command is optional - uses default: /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
+  serviceAccountName: kubeopencode-agent
+  # Strict concurrency: only one refactor task at a time
+  maxConcurrentTasks: 1
+  # Rate limiting: max 2 task starts per day (allows retry + manual trigger)
+  quota:
+    maxTaskStarts: 2
+    windowSeconds: 86400
+  # Use Gemini 3 Flash for balanced speed and code understanding
+  config: |
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "model": "opencode/gemini-3-flash",
+      "small_model": "opencode/gemini-3-flash",
+      "share": "disabled",
+      "autoupdate": false
+    }
+  # Contexts for refactor agent
+  contexts:
+    # Refactoring-specific instructions
+    - name: refactor-instructions
+      description: "Guidelines for tiny refactoring operations"
+      type: ConfigMap
+      configMap:
+        name: refactor-instructions
+    # KubeOpenCode source code repository
+    - name: kubeopencode
+      description: "KubeOpenCode source code repository"
+      type: Git
+      git:
+        repository: https://github.com/kubeopencode/kubeopencode.git
+        ref: main
+      mountPath: kubeopencode
+  credentials:
+    # Mount entire secret - all keys become env vars automatically
+    - name: git
+      secretRef:
+        name: git-settings
+    - name: opencode
+      secretRef:
+        name: opencode-credentials
+    # GitHub App credentials (same as dev agent - needs write access)
+    - name: github-app
+      secretRef:
+        name: github-dev-credentials

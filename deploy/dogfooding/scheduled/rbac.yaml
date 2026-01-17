@@ -1,0 +1,64 @@
+# Copyright Contributors to the KubeOpenCode project
+# RBAC for Argo Workflows to create KubeOpenCode Tasks.
+#
+# The Argo Workflow controller runs in its own namespace but needs
+# permission to create Tasks in the kubeopencode-dogfooding namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-workflow-executor
+---
+# Role in the scheduled namespace for Argo Workflow operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-workflow-executor
+rules:
+  # Argo Workflows needs to manage pods for workflow steps
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+  # For resource templates that create/monitor external resources
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflowtaskresults"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-workflow-executor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-workflow-executor
+subjects:
+  - kind: ServiceAccount
+    name: argo-workflow-executor
+---
+# ClusterRole for cross-namespace Task creation
+# The CronWorkflow runs in kubeopencode-scheduled but creates Tasks
+# in kubeopencode-dogfooding (where the Agent lives)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeopencode-task-creator
+rules:
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasks"]
+    verbs: ["create", "get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-workflow-task-creator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeopencode-task-creator
+subjects:
+  - kind: ServiceAccount
+    name: argo-workflow-executor
+    namespace: kubeopencode-scheduled

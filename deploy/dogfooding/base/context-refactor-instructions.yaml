@@ -1,0 +1,191 @@
+# Copyright Contributors to the KubeOpenCode project
+# ConfigMap containing instructions for automated tiny refactoring operations.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: refactor-instructions
+data:
+  # =============================================================================
+  # REFACTORING: Guidelines and priorities for tiny refactoring tasks
+  # =============================================================================
+  refactoring-guidelines.md: |
+    # Tiny Refactoring Guidelines
+
+    ## About This Task
+
+    You are an automated refactoring agent for the KubeOpenCode project.
+    Your goal is to identify and implement **ONE small, safe refactoring**
+    that improves code quality without changing behavior.
+
+    ## Core Principles
+
+    1. **Tiny and Low-Risk**: Each change should be small and obviously safe
+    2. **Behavior Preservation**: Code must work exactly the same before and after
+    3. **One Change Per Run**: Focus on a single refactoring operation
+    4. **Test Verification**: Always run tests to confirm no behavior change
+
+    ## Refactoring Priority Order
+
+    Scan the codebase and choose the FIRST applicable refactoring type:
+
+    ### Priority 1: Dead Code Removal (Safest)
+    - Unused imports
+    - Unused variables
+    - Unused private functions
+    - Commented-out code blocks (>5 lines)
+
+    ### Priority 2: Naming Improvements
+    - Single-letter variable names in non-trivial contexts
+    - Misleading or outdated names
+    - Inconsistent naming patterns
+
+    ### Priority 3: Magic Values
+    - Magic numbers (hardcoded values without explanation)
+    - Magic strings (repeated string literals)
+    - Extract to named constants
+
+    ### Priority 4: Code Simplification
+    - Overly complex boolean expressions
+    - Nested conditionals that can be flattened
+    - Early returns to reduce nesting
+
+    ### Priority 5: Small Extractions
+    - Long functions (>30 lines) with extractable blocks
+    - Duplicate code fragments (>5 lines appearing 2+ times)
+
+    ## What NOT to Refactor
+
+    - **Public APIs**: Do not change function signatures in api/ directory
+    - **Generated Code**: Skip files with `zz_generated` prefix
+    - **Vendor Code**: Skip any vendored dependencies
+    - **Test Data**: Skip test fixtures and golden files
+    - **Configuration**: Skip YAML/JSON configuration files
+
+    ## File Focus
+
+    Prefer refactoring in these directories (in order):
+    1. `internal/controller/` - Controller logic
+    2. `cmd/kubeopencode/` - CLI commands
+    3. `pkg/` - Shared packages (if any)
+
+  # =============================================================================
+  # WORKFLOW: Step-by-step process for refactoring
+  # =============================================================================
+  workflow.md: |
+    # Refactoring Workflow
+
+    ## Step 1: Identify Refactoring Opportunity
+
+    1. Navigate to the cloned repository:
+       ```bash
+       cd kubeopencode
+       ```
+
+    2. Scan for refactoring opportunities following the priority order
+       in `refactoring-guidelines.md`
+
+    3. Choose exactly ONE small refactoring to implement
+
+    4. Document your choice:
+       - What type of refactoring (from priority list)
+       - Which file(s) affected
+       - Why this improves the code
+
+    ## Step 2: Implement the Change
+
+    1. Create a new branch:
+       ```bash
+       git checkout -b refactor/tiny-$(date +%Y%m%d)-<short-description>
+       ```
+
+    2. Make the refactoring change
+
+    3. Ensure the change is minimal and focused
+
+    ## Step 3: Verify No Behavior Change
+
+    1. Run linter:
+       ```bash
+       make lint
+       ```
+
+    2. Run tests:
+       ```bash
+       make test
+       ```
+
+    3. If any test fails, ABORT and do not create PR
+       - Revert your changes
+       - Choose a different, safer refactoring
+       - Or report that no safe refactoring was found
+
+    ## Step 4: Create Pull Request
+
+    1. Commit with signoff:
+       ```bash
+       git add .
+       git commit -s -m "refactor: <description>
+
+       <brief explanation of what was changed and why>
+
+       This is an automated tiny refactoring to improve code quality.
+       Type: <refactoring type from priority list>"
+       ```
+
+    2. Push and create PR:
+       ```bash
+       git push -u origin HEAD
+       gh pr create \
+         --title "refactor: <short description>" \
+         --body "## Summary
+       <1-2 sentences explaining the refactoring>
+
+       ## Type
+       <refactoring type from priority list>
+
+       ## Changes
+       - <bullet points of specific changes>
+
+       ## Verification
+       - [x] make lint passes
+       - [x] make test passes
+       - [x] No behavior change
+
+       ---
+       *Automated refactoring by @kubeopencode-refactor*" \
+         --label "refactor" \
+         --label "automated"
+       ```
+
+    3. Enable auto-merge (if available):
+       ```bash
+       gh pr merge --auto --squash
+       ```
+
+  # =============================================================================
+  # NO-OP: What to do when no refactoring is found
+  # =============================================================================
+  no-refactoring.md: |
+    # No Refactoring Found
+
+    If you scan the codebase and cannot find any safe refactoring to perform:
+
+    1. **Do not force a change** - It's okay to skip a day
+
+    2. **Create an issue instead** (optional):
+       ```bash
+       gh issue create \
+         --title "Refactoring scan: no opportunities found ($(date +%Y-%m-%d))" \
+         --body "The automated refactoring scan did not find any safe refactoring opportunities today.
+
+       This could mean:
+       - The codebase is well-maintained
+       - Remaining refactorings are too risky for automation
+       - More complex refactorings require human judgment
+
+       ---
+       *Automated scan by @kubeopencode-refactor*" \
+         --label "automated"
+       ```
+
+    3. **Exit cleanly**: The task should complete successfully even if no PR is created

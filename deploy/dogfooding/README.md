@@ -51,14 +51,20 @@ deploy/dogfooding/
 │   ├── namespace.yaml
 │   ├── rbac.yaml
 │   ├── secrets.yaml          # Contains github-webhook-secret
-│   ├── agent-default.yaml    # Default Agent configuration
-│   └── context-*.yaml        # Context resources
-├── system/                   # Resources for kubeopencode-system namespace
+│   ├── agent-bot.yaml        # Read-only Agent configuration
+│   ├── agent-dev.yaml        # Dev Agent with write permissions
+│   ├── agent-refactor.yaml   # Automated refactoring Agent
+│   └── context-*.yaml        # Context resources (instructions for agents)
+├── github/                   # Argo Events resources (webhook-triggered)
 │   ├── kustomization.yaml
-│   ├── deployment-smee-client.yaml  # Smee.io webhook proxy
-│   └── route-webhook.yaml    # OpenShift Route (optional)
-├── resources/                # WebhookTrigger definitions
-│   └── webhooktrigger-github.yaml
+│   ├── eventbus.yaml
+│   ├── eventsource-*.yaml    # GitHub webhook listeners
+│   └── sensor-*.yaml         # Event-to-Task triggers
+├── scheduled/                # Argo Workflows resources (cron-triggered)
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   ├── rbac.yaml
+│   └── cronworkflow-tiny-refactor.yaml  # Daily refactoring workflow
 └── examples/                 # Example Tasks
 ```
 
@@ -310,3 +316,62 @@ spec:
 3. **Task Cleanup**: Completed Tasks remain in the cluster. Configure `KubeOpenCodeConfig.spec.cleanup` or use Argo's `ttlStrategy` to clean up workflows.
 
 4. **Cross-Namespace**: If the Task runs in a different namespace than the Workflow, ensure proper RBAC permissions for Argo to read Task status.
+
+## Scheduled Refactoring (CronWorkflow)
+
+KubeOpenCode includes a daily automated refactoring workflow that identifies and implements small code improvements.
+
+### What is Tiny Refactoring?
+
+Tiny refactoring consists of small, behavior-preserving code transformations:
+- Remove dead code (unused imports, variables, functions)
+- Improve unclear variable/function names
+- Extract magic numbers to named constants
+- Simplify complex conditionals
+- Extract methods from long functions
+
+### Deploy Scheduled Resources
+
+```bash
+# Prerequisites: Argo Workflows must be installed
+# See: https://argoproj.github.io/argo-workflows/quick-start/
+
+# Step 1: Apply base resources (includes refactor agent)
+kubectl apply -k deploy/dogfooding/base
+
+# Step 2: Apply scheduled resources
+kubectl apply -k deploy/dogfooding/scheduled
+
+# Step 3: Verify CronWorkflow is created
+kubectl get cronworkflows -n kubeopencode-scheduled
+```
+
+### Manual Trigger (Testing)
+
+```bash
+# Create a one-off workflow from the CronWorkflow
+argo submit --from cronwf/tiny-refactor -n kubeopencode-scheduled
+
+# Watch the workflow
+argo watch @latest -n kubeopencode-scheduled
+
+# Check the created Task
+kubectl get tasks -n kubeopencode-dogfooding -l kubeopencode.io/scheduled=true
+```
+
+### CronWorkflow Details
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| Schedule | `0 8 * * *` | Daily at 8:00 AM UTC |
+| Concurrency | `Forbid` | Skip if previous run is still active |
+| Timeout | 4 hours | Maximum runtime for AI task |
+| Retention | 3 | Keep last 3 successful/failed workflows |
+
+### Refactor Agent
+
+The `refactor` agent is configured with:
+- **Model**: Gemini 3 Flash (balanced speed/quality)
+- **Concurrency**: 1 task at a time
+- **Rate Limit**: Max 2 task starts per day
+- **Credentials**: Same as dev agent (GitHub write access)
