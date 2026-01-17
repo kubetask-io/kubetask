@@ -260,6 +260,32 @@ const (
 	TaskPhaseFailed TaskPhase = "Failed"
 )
 
+const (
+	// ConditionTypeReady is the condition type for Task readiness
+	ConditionTypeReady = "Ready"
+	// ConditionTypeQueued is the condition type for Task queuing
+	ConditionTypeQueued = "Queued"
+	// ConditionTypeStopped is the condition type for Task stop
+	ConditionTypeStopped = "Stopped"
+
+	// ReasonTaskTemplateError is the reason for TaskTemplate errors
+	ReasonTaskTemplateError = "TaskTemplateError"
+	// ReasonAgentError is the reason for Agent errors
+	ReasonAgentError = "AgentError"
+	// ReasonAgentAtCapacity is the reason for Agent capacity limit
+	ReasonAgentAtCapacity = "AgentAtCapacity"
+	// ReasonQuotaExceeded is the reason for Agent quota limit
+	ReasonQuotaExceeded = "QuotaExceeded"
+	// ReasonContextError is the reason for Context errors
+	ReasonContextError = "ContextError"
+	// ReasonUserStopped is the reason for user-initiated stop
+	ReasonUserStopped = "UserStopped"
+	// ReasonNoLimits is the reason for no limits configured
+	ReasonNoLimits = "NoLimits"
+	// ReasonCapacityAvailable is the reason for capacity availability
+	ReasonCapacityAvailable = "CapacityAvailable"
+)
+
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:subresource:status
