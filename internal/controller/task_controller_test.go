@@ -12,7 +12,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -874,14 +874,14 @@ var _ = Describe("TaskController", func() {
 			// Check for Queued condition
 			var queuedCondition *metav1.Condition
 			for i := range task2Updated.Status.Conditions {
-				if task2Updated.Status.Conditions[i].Type == "Queued" {
+				if task2Updated.Status.Conditions[i].Type == kubeopenv1alpha1.ConditionTypeQueued {
 					queuedCondition = &task2Updated.Status.Conditions[i]
 					break
 				}
 			}
 			Expect(queuedCondition).ShouldNot(BeNil())
 			Expect(queuedCondition.Status).Should(Equal(metav1.ConditionTrue))
-			Expect(queuedCondition.Reason).Should(Equal("AgentAtCapacity"))
+			Expect(queuedCondition.Reason).Should(Equal(kubeopenv1alpha1.ReasonAgentAtCapacity))
 
 			By("Simulating first Task completion")
 			pod1Name := fmt.Sprintf("%s-pod", "test-task-concurrent-1")
@@ -1141,14 +1141,14 @@ var _ = Describe("TaskController", func() {
 
 			var stoppedCondition *metav1.Condition
 			for i := range finalTask.Status.Conditions {
-				if finalTask.Status.Conditions[i].Type == "Stopped" {
+				if finalTask.Status.Conditions[i].Type == kubeopenv1alpha1.ConditionTypeStopped {
 					stoppedCondition = &finalTask.Status.Conditions[i]
 					break
 				}
 			}
 			Expect(stoppedCondition).ShouldNot(BeNil())
 			Expect(stoppedCondition.Status).Should(Equal(metav1.ConditionTrue))
-			Expect(stoppedCondition.Reason).Should(Equal("UserStopped"))
+			Expect(stoppedCondition.Reason).Should(Equal(kubeopenv1alpha1.ReasonUserStopped))
 
 			By("Checking CompletionTime is set")
 			Expect(finalTask.Status.CompletionTime).ShouldNot(BeNil())
@@ -1213,7 +1213,7 @@ var _ = Describe("TaskController", func() {
 			By("Verifying error message mentions mountPath requirement")
 			var readyCondition *metav1.Condition
 			for i := range createdTask.Status.Conditions {
-				if createdTask.Status.Conditions[i].Type == "Ready" {
+				if createdTask.Status.Conditions[i].Type == kubeopenv1alpha1.ConditionTypeReady {
 					readyCondition = &createdTask.Status.Conditions[i]
 					break
 				}
@@ -1283,7 +1283,7 @@ var _ = Describe("TaskController", func() {
 			By("Verifying error message mentions mount path conflict")
 			var readyCondition *metav1.Condition
 			for i := range createdTask.Status.Conditions {
-				if createdTask.Status.Conditions[i].Type == "Ready" {
+				if createdTask.Status.Conditions[i].Type == kubeopenv1alpha1.ConditionTypeReady {
 					readyCondition = &createdTask.Status.Conditions[i]
 					break
 				}
@@ -1702,7 +1702,7 @@ var _ = Describe("TaskController", func() {
 					State: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 0,
-							Message: `{"parameters": {"pr-url": "https://github.com/org/repo/pull/42", "summary": "Detailed summary here", "coverage": "85%"}}`,
+							Message:  `{"parameters": {"pr-url": "https://github.com/org/repo/pull/42", "summary": "Detailed summary here", "coverage": "85%"}}`,
 						},
 					},
 				},
@@ -2077,13 +2077,13 @@ var _ = Describe("TaskController", func() {
 			By("Checking error message mentions TaskTemplate not found")
 			var readyCondition *metav1.Condition
 			for i := range createdTask.Status.Conditions {
-				if createdTask.Status.Conditions[i].Type == "Ready" {
+				if createdTask.Status.Conditions[i].Type == kubeopenv1alpha1.ConditionTypeReady {
 					readyCondition = &createdTask.Status.Conditions[i]
 					break
 				}
 			}
 			Expect(readyCondition).ShouldNot(BeNil())
-			Expect(readyCondition.Reason).Should(Equal("TaskTemplateError"))
+			Expect(readyCondition.Reason).Should(Equal(kubeopenv1alpha1.ReasonTaskTemplateError))
 			Expect(readyCondition.Message).Should(ContainSubstring("TaskTemplate"))
 			Expect(readyCondition.Message).Should(ContainSubstring("not found"))
 
@@ -2315,7 +2315,7 @@ var _ = Describe("TaskController", func() {
 			By("Verifying error condition mentions invalid JSON")
 			var readyCondition *metav1.Condition
 			for i, cond := range createdTask.Status.Conditions {
-				if cond.Type == "Ready" {
+				if cond.Type == kubeopenv1alpha1.ConditionTypeReady {
 					readyCondition = &createdTask.Status.Conditions[i]
 					break
 				}
@@ -2725,14 +2725,14 @@ var _ = Describe("TaskController", func() {
 
 			var queuedCondition *metav1.Condition
 			for i := range task3Updated.Status.Conditions {
-				if task3Updated.Status.Conditions[i].Type == "Queued" {
+				if task3Updated.Status.Conditions[i].Type == kubeopenv1alpha1.ConditionTypeQueued {
 					queuedCondition = &task3Updated.Status.Conditions[i]
 					break
 				}
 			}
 			Expect(queuedCondition).ShouldNot(BeNil())
 			Expect(queuedCondition.Status).Should(Equal(metav1.ConditionTrue))
-			Expect(queuedCondition.Reason).Should(Equal("QuotaExceeded"))
+			Expect(queuedCondition.Reason).Should(Equal(kubeopenv1alpha1.ReasonQuotaExceeded))
 
 			By("Verifying Agent has TaskStartHistory populated")
 			agentLookupKey := types.NamespacedName{Name: agentName, Namespace: taskNamespace}
@@ -2825,14 +2825,14 @@ var _ = Describe("TaskController", func() {
 
 			var queuedCondition *metav1.Condition
 			for i := range task2Updated.Status.Conditions {
-				if task2Updated.Status.Conditions[i].Type == "Queued" {
+				if task2Updated.Status.Conditions[i].Type == kubeopenv1alpha1.ConditionTypeQueued {
 					queuedCondition = &task2Updated.Status.Conditions[i]
 					break
 				}
 			}
 			Expect(queuedCondition).ShouldNot(BeNil())
 			Expect(queuedCondition.Status).Should(Equal(metav1.ConditionTrue))
-			Expect(queuedCondition.Reason).Should(Equal("AgentAtCapacity"))
+			Expect(queuedCondition.Reason).Should(Equal(kubeopenv1alpha1.ReasonAgentAtCapacity))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task1)).Should(Succeed())

@@ -170,11 +170,12 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
 		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-			Type:    "Ready",
+			Type:    kubeopenv1alpha1.ConditionTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "TaskTemplateError",
+			Reason:  kubeopenv1alpha1.ReasonTaskTemplateError,
 			Message: err.Error(),
 		})
+
 		if updateErr := r.Status().Update(ctx, task); updateErr != nil {
 			log.Error(updateErr, "unable to update Task status")
 			return ctrl.Result{}, updateErr
@@ -198,9 +199,9 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
 		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-			Type:    "Ready",
+			Type:    kubeopenv1alpha1.ConditionTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "AgentError",
+			Reason:  kubeopenv1alpha1.ReasonAgentError,
 			Message: err.Error(),
 		})
 		if updateErr := r.Status().Update(ctx, task); updateErr != nil {
@@ -260,9 +261,9 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 			task.Status.Phase = kubeopenv1alpha1.TaskPhaseQueued
 
 			meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-				Type:    "Queued",
+				Type:    kubeopenv1alpha1.ConditionTypeQueued,
 				Status:  metav1.ConditionTrue,
-				Reason:  "AgentAtCapacity",
+				Reason:  kubeopenv1alpha1.ReasonAgentAtCapacity,
 				Message: fmt.Sprintf("Waiting for agent %q capacity (max: %d)", agentName, *agentConfig.maxConcurrentTasks),
 			})
 
@@ -302,9 +303,9 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 			task.Status.Phase = kubeopenv1alpha1.TaskPhaseQueued
 
 			meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-				Type:   "Queued",
+				Type:   kubeopenv1alpha1.ConditionTypeQueued,
 				Status: metav1.ConditionTrue,
-				Reason: "QuotaExceeded",
+				Reason: kubeopenv1alpha1.ReasonQuotaExceeded,
 				Message: fmt.Sprintf("Waiting for agent %q quota (max: %d per %ds)",
 					agentName, agentConfig.quota.MaxTaskStarts, agentConfig.quota.WindowSeconds),
 			})
@@ -359,11 +360,12 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
 		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-			Type:    "Ready",
+			Type:    kubeopenv1alpha1.ConditionTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "ContextError",
+			Reason:  kubeopenv1alpha1.ReasonTaskTemplateError,
 			Message: err.Error(),
 		})
+
 		if updateErr := r.Status().Update(ctx, task); updateErr != nil {
 			log.Error(updateErr, "unable to update Task status")
 			return ctrl.Result{}, updateErr
@@ -1189,9 +1191,9 @@ func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubeopenv1a
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
 		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-			Type:    "Ready",
+			Type:    kubeopenv1alpha1.ConditionTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "AgentError",
+			Reason:  kubeopenv1alpha1.ReasonAgentError,
 			Message: err.Error(),
 		})
 		if updateErr := r.Status().Update(ctx, task); updateErr != nil {
@@ -1210,9 +1212,9 @@ func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubeopenv1a
 		log.Info("no limits configured, proceeding with task", "agent", agentName)
 		task.Status.Phase = ""
 		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-			Type:    "Queued",
+			Type:    kubeopenv1alpha1.ConditionTypeQueued,
 			Status:  metav1.ConditionFalse,
-			Reason:  "NoLimits",
+			Reason:  kubeopenv1alpha1.ReasonNoLimits,
 			Message: fmt.Sprintf("Agent %q has no capacity or quota limits", agentName),
 		})
 		if err := r.Status().Update(ctx, task); err != nil {
@@ -1258,9 +1260,9 @@ func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubeopenv1a
 				"windowSeconds", agentConfig.quota.WindowSeconds)
 
 			meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-				Type:   "Queued",
+				Type:   kubeopenv1alpha1.ConditionTypeQueued,
 				Status: metav1.ConditionTrue,
-				Reason: "QuotaExceeded",
+				Reason: kubeopenv1alpha1.ReasonQuotaExceeded,
 				Message: fmt.Sprintf("Waiting for agent %q quota (max: %d per %ds)",
 					agentName, agentConfig.quota.MaxTaskStarts, agentConfig.quota.WindowSeconds),
 			})
@@ -1278,9 +1280,9 @@ func (r *TaskReconciler) handleQueuedTask(ctx context.Context, task *kubeopenv1a
 	log.Info("agent capacity available, transitioning to initialize", "agent", agentName)
 	task.Status.Phase = ""
 	meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-		Type:    "Queued",
+		Type:    kubeopenv1alpha1.ConditionTypeQueued,
 		Status:  metav1.ConditionFalse,
-		Reason:  "CapacityAvailable",
+		Reason:  kubeopenv1alpha1.ReasonCapacityAvailable,
 		Message: fmt.Sprintf("Agent %q capacity now available", agentName),
 	})
 
@@ -1324,9 +1326,9 @@ func (r *TaskReconciler) handleStop(ctx context.Context, task *kubeopenv1alpha1.
 	task.Status.CompletionTime = &now
 
 	meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
-		Type:    "Stopped",
+		Type:    kubeopenv1alpha1.ConditionTypeStopped,
 		Status:  metav1.ConditionTrue,
-		Reason:  "UserStopped",
+		Reason:  kubeopenv1alpha1.ReasonUserStopped,
 		Message: "Task stopped by user via kubeopencode.io/stop annotation",
 	})
 
