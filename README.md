@@ -268,7 +268,7 @@ contexts:
     mountPath: specs/openapi.yaml
 ```
 
-- **Content Aggregation**: Contexts without `mountPath` are aggregated into `/workspace/AGENTS.md` with XML tags (loaded as system prompt, never compacted)
+- **Content Aggregation**: Contexts without `mountPath` are written to `.kubeopencode/context.md` with XML tags. OpenCode loads this via `OPENCODE_CONFIG_CONTENT`, preserving any existing `AGENTS.md` in the repository
 
 ### Agent Configuration
 

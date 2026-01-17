@@ -1526,3 +1526,91 @@ func TestBuildPod_WithoutOpenCodeConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildPod_WithContextFile(t *testing.T) {
+	task := &kubeopenv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+	}
+	task.APIVersion = "kubeopencode.io/v1alpha1"
+	task.Kind = "Task"
+
+	cfg := agentConfig{
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+	}
+
+	// Create context file mount (simulates context without mountPath)
+	contextFilePath := cfg.workspaceDir + "/" + ContextFileRelPath
+	fileMounts := []fileMount{
+		{filePath: contextFilePath},
+	}
+
+	contextConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task-context",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			sanitizeConfigMapKey(contextFilePath): "<context>test content</context>",
+		},
+	}
+
+	pod := buildPod(task, "test-task-pod", task.Namespace, cfg, contextConfigMap, fileMounts, nil, nil, nil, defaultSystemConfig())
+
+	// Verify OPENCODE_CONFIG_CONTENT env var is set
+	container := pod.Spec.Containers[0]
+	foundConfigContentEnv := false
+	for _, env := range container.Env {
+		if env.Name == OpenCodeConfigContentEnvVar {
+			foundConfigContentEnv = true
+			expectedValue := `{"instructions":["` + ContextFileRelPath + `"]}`
+			if env.Value != expectedValue {
+				t.Errorf("OPENCODE_CONFIG_CONTENT env value = %q, want %q", env.Value, expectedValue)
+			}
+			break
+		}
+	}
+	if !foundConfigContentEnv {
+		t.Errorf("OPENCODE_CONFIG_CONTENT env var not found in container env")
+	}
+}
+
+func TestBuildPod_WithoutContextFile(t *testing.T) {
+	task := &kubeopenv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+	}
+	task.APIVersion = "kubeopencode.io/v1alpha1"
+	task.Kind = "Task"
+
+	cfg := agentConfig{
+		agentImage:         "test-opencode:v1.0.0",
+		executorImage:      "test-executor:v1.0.0",
+		workspaceDir:       "/workspace",
+		serviceAccountName: "test-sa",
+	}
+
+	// No context file mount - only task.md
+	fileMounts := []fileMount{
+		{filePath: "/workspace/task.md"},
+	}
+
+	pod := buildPod(task, "test-task-pod", task.Namespace, cfg, nil, fileMounts, nil, nil, nil, defaultSystemConfig())
+
+	// Verify OPENCODE_CONFIG_CONTENT env var is NOT set
+	container := pod.Spec.Containers[0]
+	for _, env := range container.Env {
+		if env.Name == OpenCodeConfigContentEnvVar {
+			t.Errorf("OPENCODE_CONFIG_CONTENT env var should not be set when no context file")
+		}
+	}
+}

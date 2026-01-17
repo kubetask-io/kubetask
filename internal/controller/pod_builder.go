@@ -138,6 +138,16 @@ const (
 
 	// OpenCodeConfigEnvVar is the environment variable name for OpenCode config path
 	OpenCodeConfigEnvVar = "OPENCODE_CONFIG"
+
+	// OpenCodeConfigContentEnvVar is the environment variable for injecting config content
+	// This is used to inject instructions for loading context files without conflicting
+	// with repository's AGENTS.md. OpenCode merges OPENCODE_CONFIG_CONTENT with OPENCODE_CONFIG.
+	OpenCodeConfigContentEnvVar = "OPENCODE_CONFIG_CONTENT"
+
+	// ContextFileRelPath is the relative path (from workspaceDir) for KubeOpenCode context file.
+	// This path is chosen to avoid conflicts with repository's AGENTS.md or CLAUDE.md files.
+	// OpenCode loads this file via the instructions config injected through OPENCODE_CONFIG_CONTENT.
+	ContextFileRelPath = ".kubeopencode/context.md"
 )
 
 // buildOpenCodeInitContainer creates an init container that copies OpenCode binary to /tools.
@@ -375,6 +385,22 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 			Name:  OpenCodeConfigEnvVar,
 			Value: OpenCodeConfigPath,
 		})
+	}
+
+	// Check if context file is being mounted and inject OPENCODE_CONFIG_CONTENT.
+	// This allows OpenCode to load KubeOpenCode's context file without conflicting
+	// with repository's AGENTS.md. The context file path is relative to workspaceDir.
+	contextFilePath := cfg.workspaceDir + "/" + ContextFileRelPath
+	for _, fm := range fileMounts {
+		if fm.filePath == contextFilePath {
+			// Inject instructions to load the context file
+			// OpenCode will merge this with OPENCODE_CONFIG (if set)
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  OpenCodeConfigContentEnvVar,
+				Value: `{"instructions":["` + ContextFileRelPath + `"]}`,
+			})
+			break
+		}
 	}
 
 	// envFromSources collects secretRef entries for mounting entire secrets

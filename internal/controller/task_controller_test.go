@@ -505,7 +505,7 @@ var _ = Describe("TaskController", func() {
 	})
 
 	Context("When creating a Task with inline ConfigMap Context without key and mountPath", func() {
-		It("Should aggregate all ConfigMap keys to AGENTS.md", func() {
+		It("Should aggregate all ConfigMap keys to context file", func() {
 			taskName := "test-task-configmap-all-keys"
 			configMapName := "test-guides-configmap"
 			description := "Review the guides"
@@ -538,14 +538,14 @@ var _ = Describe("TaskController", func() {
 								Name: configMapName,
 								// No Key specified - should aggregate all keys
 							},
-							// No MountPath - should aggregate to AGENTS.md
+							// No MountPath - should aggregate to context file
 						},
 					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
-			By("Checking all ConfigMap keys are aggregated to AGENTS.md")
+			By("Checking all ConfigMap keys are aggregated to context file")
 			contextConfigMapName := taskName + ContextConfigMapSuffix
 			contextConfigMapLookupKey := types.NamespacedName{Name: contextConfigMapName, Namespace: taskNamespace}
 			createdContextConfigMap := &corev1.ConfigMap{}
@@ -559,17 +559,17 @@ var _ = Describe("TaskController", func() {
 			// task.md should NOT contain context
 			Expect(taskMdContent).ShouldNot(ContainSubstring("<context"))
 
-			// Context should be in AGENTS.md
-			agentsMdContent := createdContextConfigMap.Data["workspace-AGENTS.md"]
+			// Context should be in context file
+			contextFileContent := createdContextConfigMap.Data["workspace-.kubeopencode-context.md"]
 			// Context wrapper should be present
-			Expect(agentsMdContent).Should(ContainSubstring("<context"))
-			Expect(agentsMdContent).Should(ContainSubstring("</context>"))
+			Expect(contextFileContent).Should(ContainSubstring("<context"))
+			Expect(contextFileContent).Should(ContainSubstring("</context>"))
 			// All ConfigMap keys should be wrapped in <file> tags
-			Expect(agentsMdContent).Should(ContainSubstring(`<file name="security-guide.md">`))
-			Expect(agentsMdContent).Should(ContainSubstring("# Security Guide"))
-			Expect(agentsMdContent).Should(ContainSubstring(`<file name="style-guide.md">`))
-			Expect(agentsMdContent).Should(ContainSubstring("# Style Guide"))
-			Expect(agentsMdContent).Should(ContainSubstring("</file>"))
+			Expect(contextFileContent).Should(ContainSubstring(`<file name="security-guide.md">`))
+			Expect(contextFileContent).Should(ContainSubstring("# Security Guide"))
+			Expect(contextFileContent).Should(ContainSubstring(`<file name="style-guide.md">`))
+			Expect(contextFileContent).Should(ContainSubstring("# Style Guide"))
+			Expect(contextFileContent).Should(ContainSubstring("</file>"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -578,7 +578,7 @@ var _ = Describe("TaskController", func() {
 	})
 
 	Context("When creating a Task with inline Text context without mountPath", func() {
-		It("Should append context to AGENTS.md with XML tags", func() {
+		It("Should append context to context file with XML tags", func() {
 			taskName := "test-task-context-aggregate"
 			contextContent := "# Security Guidelines\n\nFollow security best practices."
 			description := "Review security compliance"
@@ -595,14 +595,14 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubeopenv1alpha1.ContextTypeText,
 							Text: contextContent,
-							// No MountPath - should be appended to AGENTS.md
+							// No MountPath - should be appended to context file
 						},
 					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
-			By("Checking context is appended to AGENTS.md with XML tags")
+			By("Checking context is appended to context file with XML tags")
 			contextConfigMapName := taskName + ContextConfigMapSuffix
 			contextConfigMapLookupKey := types.NamespacedName{Name: contextConfigMapName, Namespace: taskNamespace}
 			createdContextConfigMap := &corev1.ConfigMap{}
@@ -616,11 +616,11 @@ var _ = Describe("TaskController", func() {
 			// task.md should NOT contain context
 			Expect(taskMdContent).ShouldNot(ContainSubstring("<context"))
 
-			// Context should be in AGENTS.md
-			agentsMdContent := createdContextConfigMap.Data["workspace-AGENTS.md"]
-			Expect(agentsMdContent).Should(ContainSubstring("<context"))
-			Expect(agentsMdContent).Should(ContainSubstring(contextContent))
-			Expect(agentsMdContent).Should(ContainSubstring("</context>"))
+			// Context should be in context file
+			contextFileContent := createdContextConfigMap.Data["workspace-.kubeopencode-context.md"]
+			Expect(contextFileContent).Should(ContainSubstring("<context"))
+			Expect(contextFileContent).Should(ContainSubstring(contextContent))
+			Expect(contextFileContent).Should(ContainSubstring("</context>"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -628,7 +628,7 @@ var _ = Describe("TaskController", func() {
 	})
 
 	Context("When creating a Task with Agent that has inline contexts", func() {
-		It("Should merge agent contexts with task contexts in AGENTS.md", func() {
+		It("Should merge agent contexts with task contexts in context file", func() {
 			taskName := "test-task-agent-contexts"
 			agentName := "test-agent-with-contexts"
 			agentContextContent := "# Agent Guidelines\n\nThese are default guidelines."
@@ -648,7 +648,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubeopenv1alpha1.ContextTypeText,
 							Text: agentContextContent,
-							// No mountPath - should be appended to AGENTS.md
+							// No mountPath - should be appended to context file
 						},
 					},
 				},
@@ -668,7 +668,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubeopenv1alpha1.ContextTypeText,
 							Text: taskContextContent,
-							// No mountPath - should be appended to AGENTS.md
+							// No mountPath - should be appended to context file
 						},
 					},
 				},
@@ -690,10 +690,10 @@ var _ = Describe("TaskController", func() {
 			Expect(taskMdContent).ShouldNot(ContainSubstring(agentContextContent))
 			Expect(taskMdContent).ShouldNot(ContainSubstring(taskContextContent))
 
-			// Both contexts should be in AGENTS.md
-			agentsMdContent := createdContextConfigMap.Data["workspace-AGENTS.md"]
-			Expect(agentsMdContent).Should(ContainSubstring(agentContextContent))
-			Expect(agentsMdContent).Should(ContainSubstring(taskContextContent))
+			// Both contexts should be in context file
+			contextFileContent := createdContextConfigMap.Data["workspace-.kubeopencode-context.md"]
+			Expect(contextFileContent).Should(ContainSubstring(agentContextContent))
+			Expect(contextFileContent).Should(ContainSubstring(taskContextContent))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -1796,14 +1796,14 @@ var _ = Describe("TaskController", func() {
 				return cm.Data != nil
 			}, timeout, interval).Should(BeTrue())
 
-			// Verify ConfigMap contains RuntimeSystemPrompt content in AGENTS.md
-			// Runtime context (like all contexts without mountPath) goes to AGENTS.md
-			agentsMdContent, exists := cm.Data["workspace-AGENTS.md"]
-			Expect(exists).To(BeTrue(), "workspace-AGENTS.md key should exist in ConfigMap")
-			Expect(agentsMdContent).To(ContainSubstring("KubeOpenCode Runtime Context"))
-			Expect(agentsMdContent).To(ContainSubstring("TASK_NAME"))
-			Expect(agentsMdContent).To(ContainSubstring("TASK_NAMESPACE"))
-			Expect(agentsMdContent).To(ContainSubstring("kubectl get task"))
+			// Verify ConfigMap contains RuntimeSystemPrompt content in context file
+			// Runtime context (like all contexts without mountPath) goes to context file
+			contextFileContent, exists := cm.Data["workspace-.kubeopencode-context.md"]
+			Expect(exists).To(BeTrue(), "workspace-.kubeopencode-context.md key should exist in ConfigMap")
+			Expect(contextFileContent).To(ContainSubstring("KubeOpenCode Runtime Context"))
+			Expect(contextFileContent).To(ContainSubstring("TASK_NAME"))
+			Expect(contextFileContent).To(ContainSubstring("TASK_NAMESPACE"))
+			Expect(contextFileContent).To(ContainSubstring("kubectl get task"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -1897,10 +1897,10 @@ var _ = Describe("TaskController", func() {
 			Expect(taskMdContent).ShouldNot(ContainSubstring(templateContext))
 			Expect(taskMdContent).ShouldNot(ContainSubstring(taskContext))
 
-			// Both contexts should be in AGENTS.md
-			agentsMdContent := createdConfigMap.Data["workspace-AGENTS.md"]
-			Expect(agentsMdContent).Should(ContainSubstring(templateContext))
-			Expect(agentsMdContent).Should(ContainSubstring(taskContext))
+			// Both contexts should be in context file
+			contextFileContent := createdConfigMap.Data["workspace-.kubeopencode-context.md"]
+			Expect(contextFileContent).Should(ContainSubstring(templateContext))
+			Expect(contextFileContent).Should(ContainSubstring(taskContext))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
