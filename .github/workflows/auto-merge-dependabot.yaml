@@ -1,0 +1,51 @@
+# Copyright Contributors to the KubeOpenCode project
+
+name: Auto-merge Dependabot PRs
+
+on:
+  # Run every Sunday at 00:00 UTC (same as weekly-agent-build)
+  schedule:
+    - cron: '0 0 * * 0'
+  # Support manual trigger
+  workflow_dispatch:
+  # Trigger when Dependabot opens/updates a PR
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    # Only process Dependabot PRs, or schedule/manual triggers
+    if: github.actor == 'dependabot[bot]' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable auto-merge for Dependabot PRs
+        if: github.event_name == 'pull_request_target'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge all pending Dependabot PRs
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          # Get all open Dependabot PRs with passing checks
+          prs=$(gh pr list --author "app/dependabot" --state open --json number,statusCheckRollup --jq '.[] | select(.statusCheckRollup != null and (.statusCheckRollup | length > 0) and (.statusCheckRollup | all(.conclusion == "SUCCESS" or .conclusion == "NEUTRAL" or .conclusion == "SKIPPED"))) | .number')
+
+          if [ -z "$prs" ]; then
+            echo "No Dependabot PRs with passing checks found"
+            exit 0
+          fi
+
+          for pr in $prs; do
+            echo "Enabling auto-merge for PR #$pr"
+            gh pr merge --auto --squash "$pr" || echo "Failed to enable auto-merge for PR #$pr"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
