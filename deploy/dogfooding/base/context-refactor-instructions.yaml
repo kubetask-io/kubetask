@@ -157,11 +157,6 @@ data:
          --label "automated"
        ```
 
-    3. Enable auto-merge (if available):
-       ```bash
-       gh pr merge --auto --squash
-       ```
-
   # =============================================================================
   # NO-OP: What to do when no refactoring is found
   # =============================================================================
