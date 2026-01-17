@@ -1,11 +1,26 @@
 #!/bin/bash
-# Stream JSON Reader for opencode CLI output
+# OpenCode Stream JSON Reader
 #
-# Converts stream-json format to human-readable output.
-# Usage: opencode run ... --format json | opencode-stream-json-reader
+# A utility script for reading and formatting OpenCode's stream-json output
+# into human-readable format. This is NOT part of the container image build -
+# it's a standalone tool for debugging and log analysis.
+#
+# Usage:
+#   # Read from kubectl logs
+#   kubectl logs <pod-name> -n kubeopencode-system | ./hack/opencode-stream-reader.sh
+#
+#   # Read from a saved log file
+#   cat task-output.log | ./hack/opencode-stream-reader.sh
+#
+#   # Directly pipe from opencode CLI (for local development)
+#   opencode run --format json "your prompt" | ./hack/opencode-stream-reader.sh
 #
 # Key principle: Never swallow unknown output - if a line cannot be parsed,
 # print it as-is to ensure no information is lost.
+#
+# Requirements:
+#   - bash
+#   - jq (for JSON parsing)
 
 set -euo pipefail
 
