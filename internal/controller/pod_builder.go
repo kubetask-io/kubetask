@@ -153,10 +153,10 @@ const (
 	// In Kubernetes/CI environments, we need to allow all permissions to avoid interactive prompts
 	// that would block task execution. Users can still restrict permissions via Agent.spec.config.
 	//
-	// OpenCode supports a shorthand: passing "allow" is automatically transformed to {"*":"allow"}.
-	// This sets all tools to "allow" mode, enabling full autonomous operation.
+	// The value must be valid JSON since OpenCode parses it with JSON.parse().
+	// {"*":"allow"} sets all tools to "allow" mode, enabling full autonomous operation.
 	// For restricted permissions, users should configure them in Agent.spec.config's permission field.
-	DefaultOpenCodePermission = `"allow"`
+	DefaultOpenCodePermission = `{"*":"allow"}`
 
 	// ContextFileRelPath is the relative path (from workspaceDir) for KubeOpenCode context file.
 	// This path is chosen to avoid conflicts with repository's AGENTS.md or CLAUDE.md files.
