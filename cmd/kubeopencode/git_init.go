@@ -130,7 +130,7 @@ func runGitInit(cmd *cobra.Command, args []string) error {
 	// Create a shared .gitconfig in the target directory for safe.directory
 	sharedGitConfig := filepath.Join(root, ".gitconfig")
 	gitConfigContent := fmt.Sprintf("[safe]\n\tdirectory = %s\n\tdirectory = *\n", targetDir)
-	if err := os.WriteFile(sharedGitConfig, []byte(gitConfigContent), 0600); err != nil {
+	if err := os.WriteFile(sharedGitConfig, []byte(gitConfigContent), 0644); err != nil { //nolint:gosec // Needs to be readable by other UIDs in multi-container pods
 		fmt.Printf("git-init: Warning: could not write shared .gitconfig: %v\n", err)
 	} else {
 		fmt.Printf("git-init: Created shared .gitconfig at %s\n", sharedGitConfig)

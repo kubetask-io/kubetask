@@ -144,6 +144,20 @@ const (
 	// with repository's AGENTS.md. OpenCode merges OPENCODE_CONFIG_CONTENT with OPENCODE_CONFIG.
 	OpenCodeConfigContentEnvVar = "OPENCODE_CONFIG_CONTENT"
 
+	// OpenCodePermissionEnvVar is the environment variable for OpenCode permission configuration.
+	// This allows overriding permission settings to enable non-interactive/automated mode.
+	// The value is a JSON object mapping tool names to permission actions (allow/ask/deny).
+	OpenCodePermissionEnvVar = "OPENCODE_PERMISSION"
+
+	// DefaultOpenCodePermission is the default permission configuration for automated execution.
+	// In Kubernetes/CI environments, we need to allow all permissions to avoid interactive prompts
+	// that would block task execution. Users can still restrict permissions via Agent.spec.config.
+	//
+	// OpenCode supports a shorthand: passing "allow" is automatically transformed to {"*":"allow"}.
+	// This sets all tools to "allow" mode, enabling full autonomous operation.
+	// For restricted permissions, users should configure them in Agent.spec.config's permission field.
+	DefaultOpenCodePermission = `"allow"`
+
 	// ContextFileRelPath is the relative path (from workspaceDir) for KubeOpenCode context file.
 	// This path is chosen to avoid conflicts with repository's AGENTS.md or CLAUDE.md files.
 	// OpenCode loads this file via the instructions config injected through OPENCODE_CONFIG_CONTENT.
@@ -386,6 +400,17 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 			Value: OpenCodeConfigPath,
 		})
 	}
+
+	// Set OPENCODE_PERMISSION to enable all permissions by default.
+	// This is required for non-interactive/automated execution in Kubernetes.
+	// Without this, OpenCode would prompt for permission approval which would
+	// block task execution in a Pod environment.
+	// Users can still configure restrictive permissions via Agent.spec.config's permission field,
+	// which takes precedence over this environment variable.
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  OpenCodePermissionEnvVar,
+		Value: DefaultOpenCodePermission,
+	})
 
 	// Check if context file is being mounted and inject OPENCODE_CONFIG_CONTENT.
 	// This allows OpenCode to load KubeOpenCode's context file without conflicting
