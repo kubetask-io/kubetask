@@ -671,83 +671,26 @@ For detailed guidance on building custom agent images, see the [Agent Developer 
 
 ## Development
 
-### Building from Source
+See [Local Development Guide](docs/local-development.md) for detailed setup instructions including Kind cluster setup, image building, and iterative development.
+
+### Quick Commands
 
 ```bash
-# Clone the repository
-git clone https://github.com/kubeopencode/kubeopencode.git
-cd kubeopencode
-
-# Build the controller
-make build
-
-# Run tests
-make test
-
-# Run linter
-make lint
+make build      # Build the controller
+make test       # Run tests
+make lint       # Run linter
+make run        # Run controller locally (requires kubeconfig)
 ```
 
-### Local Development
-
-```bash
-# Run controller locally (requires kubeconfig)
-make run
-
-# Format code
-make fmt
-
-# Update generated code
-make update
-```
-
-### E2E Testing
-
-```bash
-# Setup e2e environment
-make e2e-setup
-
-# Run e2e tests
-make e2e-test
-
-# Teardown e2e environment
-make e2e-teardown
-```
-
-### Docker Images
-
-```bash
-# Build docker image
-make docker-build
-
-# Build and push multi-arch images
-make docker-buildx
-```
-
-## Configuration
-
-### Helm Chart Values
-
-See [charts/kubeopencode/README.md](charts/kubeopencode/README.md) for complete configuration options.
-
-Key configurations:
-
-```yaml
-controller:
-  image:
-    repository: quay.io/kubeopencode/kubeopencode
-    tag: latest
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-```
+For E2E testing, agent images, and Docker builds, see the [Local Development Guide](docs/local-development.md).
 
 ## Documentation
 
 - [Architecture](docs/architecture.md) - Detailed architecture and design decisions
-- [Context System](docs/architecture.md#context-system) - How contexts are mounted
-- [Helm Chart](charts/kubeopencode/README.md) - Deployment and configuration guide
+- [Local Development](docs/local-development.md) - Development environment setup
+- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
+- [Helm Chart](charts/kubeopencode/README.md) - Deployment and configuration
+- [Agent Development](agents/README.md) - Building custom agent images
 - [ADRs](docs/adr/) - Architecture Decision Records
 
 ## Security
@@ -756,73 +699,66 @@ controller:
 
 KubeOpenCode follows the principle of least privilege:
 
-- **Controller**: Manages CRs and Jobs only
+- **Controller**: ClusterRole with minimal permissions for Tasks, Agents, Pods, ConfigMaps, Secrets, and Events
+- **Agent ServiceAccount**: Namespace-scoped Role with read/update access to Tasks and read-only access to related resources
+- **Cross-Namespace Isolation**: When Tasks reference Agents in different namespaces, Pods run in the Agent's namespace, keeping credentials isolated
 
-### Secrets Management
+### Credential Management
 
-Never commit secrets to Git. Use:
-- Kubernetes Secrets
-- External Secrets Operator
-- Sealed Secrets
-- HashiCorp Vault
+- Secrets mounted with restrictive file permissions (default `0600`)
+- Supports both environment variable and file-based credential mounting
+- Git authentication via SecretRef (HTTPS or SSH)
+- Cross-namespace Agent references keep credentials in the Agent's namespace
 
-### Pod Security
+### Controller Pod Security
 
-- Runs with non-root user
-- Dropped capabilities
-- Read-only root filesystem (where applicable)
+The controller runs with hardened security settings:
+
+- `runAsNonRoot: true`
+- `allowPrivilegeEscalation: false`
+- All Linux capabilities dropped
+
+### Agent Pod Security
+
+Agent Pods rely on cluster-level security policies. For production deployments, consider:
+
+- Configuring Pod Security Standards (PSS) at the namespace level
+- Using `spec.podSpec.runtimeClassName` for gVisor or Kata Containers isolation
+- Applying NetworkPolicies to restrict Agent Pod network access
+- Setting resource limits via LimitRange or ResourceQuota
+
+### Best Practices
+
+- **Never commit secrets to Git** - use Kubernetes Secrets, External Secrets Operator, or HashiCorp Vault
+- **Use AllowedNamespaces** on Agents to restrict which namespaces can create Tasks against them
+- **Apply NetworkPolicies** to limit Agent Pod egress to required endpoints only
+- **Enable Kubernetes audit logging** to track Task creation and execution
 
 ## Troubleshooting
 
-### Controller Issues
+See the [Troubleshooting Guide](docs/troubleshooting.md) for common issues and solutions.
+
+Quick debugging commands:
 
 ```bash
 # Check controller logs
 kubectl logs -n kubeopencode-system deployment/kubeopencode-controller
 
-# Verify RBAC
-kubectl auth can-i create tasks \
-  --as=system:serviceaccount:kubeopencode-system:kubeopencode-controller
-```
-
-### Pod Failures
-
-```bash
 # List task pods
-kubectl get pods -n kubeopencode-system -l kubeopencode.io/task
+kubectl get pods -l kubeopencode.io/task
 
-# Check pod logs
-kubectl logs <pod-name> -n kubeopencode-system
-
-# Describe pod for events
-kubectl describe pod/<pod-name> -n kubeopencode-system
+# Check task status
+kubectl describe task <task-name>
 ```
 
 ## Contributing
 
-We welcome contributions! Please follow these guidelines:
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
 
-1. **Commit Standards**: Use signed commits with `-s` flag
-   ```bash
-   git commit -s -m "feat: add new feature"
-   ```
-
-2. **Pull Requests**:
-   - Check for upstream repositories first
-   - Create PRs against upstream, not forks
-   - Use descriptive titles and comprehensive descriptions
-
-3. **Code Standards**:
-   - Write code comments in English
-   - Follow Go conventions
-   - Run `make lint` before submitting
-
-4. **Testing**:
-   - Write tests for new features
-   - Ensure `make test` passes
-   - Test e2e changes with `make e2e-test`
-
-See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
+- Commit standards (signed commits required)
+- Pull request process
+- Code standards and testing requirements
+- Development workflow
 
 ## Roadmap
 
@@ -834,10 +770,8 @@ See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 - [x] Agent concurrency control (maxConcurrentTasks)
 - [x] Pod configuration (labels, scheduling, runtimeClassName)
 - [x] Cross-namespace Task/Agent separation (credential isolation)
-- [ ] Support for additional context types (MCP)
-- [ ] Advanced retry and failure handling
 - [ ] Web UI for monitoring and management
-- [ ] GitOps integration examples (Flux, ArgoCD)
+- [ ] Metrics (Prometheus) for Task/Agent observability
 
 ## Community
 
