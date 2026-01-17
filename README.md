@@ -106,12 +106,6 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   workspaceDir: /workspace
-  # command is optional - uses default if not specified:
-  # ["sh", "-c", "/tools/opencode run \"$(cat ${WORKSPACE_DIR}/task.md)\""]
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
   credentials:
     - name: opencode-api-key
@@ -283,10 +277,6 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
 
   # Default contexts for all tasks (inline ContextItems)
@@ -351,10 +341,6 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
 ---
 # OpenCode agent with code-server (browser-based IDE)
@@ -366,10 +352,6 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-code-server:latest
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
 ---
 # Task using specific agent
@@ -396,10 +378,6 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
   # Define output parameters to capture
   outputs:
@@ -466,10 +444,6 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
   maxConcurrentTasks: 3  # Only 3 Tasks can run at once
 ```
@@ -551,10 +525,6 @@ spec:
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   serviceAccountName: kubeopencode-agent
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   credentials:
     - name: anthropic-key
       secretRef:
@@ -599,10 +569,6 @@ spec:
   agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
   executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
   workspaceDir: /workspace
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
   podSpec:
     # Labels for NetworkPolicy, monitoring, etc.
