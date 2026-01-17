@@ -122,11 +122,6 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
-// int32Ptr returns a pointer to the given int32 value
-func int32Ptr(i int32) *int32 {
-	return &i
-}
-
 const (
 	// DefaultKubeOpenCodeImage is the default kubeopencode container image.
 	// This unified image provides: controller, git-init (Git clone), etc.
