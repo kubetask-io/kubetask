@@ -112,15 +112,13 @@ Task (single task execution)
 ├── TaskSpec
 │   ├── description: *string         (syntactic sugar for /workspace/task.md)
 │   ├── contexts: []ContextItem      (inline context definitions)
-│   ├── agentRef: *AgentReference    (cross-namespace Agent reference)
-│   └── outputs: *OutputSpec         (Task-specific output parameters)
+│   └── agentRef: *AgentReference    (cross-namespace Agent reference)
 └── TaskExecutionStatus
     ├── phase: TaskPhase
     ├── podName: string
     ├── podNamespace: string         (where Pod runs - may differ from Task namespace)
     ├── startTime: Time
     ├── completionTime: Time
-    ├── outputs: *TaskOutputs        (captured output parameters)
     └── conditions: []Condition
 
 Agent (execution configuration)
@@ -162,7 +160,6 @@ type TaskSpec struct {
     Description *string          // Syntactic sugar for /workspace/task.md
     Contexts    []ContextItem    // Inline context definitions
     AgentRef    *AgentReference  // Cross-namespace Agent reference
-    Outputs     *OutputSpec      // Task-specific output parameters
 }
 
 // AgentReference supports cross-namespace Agent references
@@ -188,25 +185,7 @@ type TaskExecutionStatus struct {
     PodNamespace   string             // Where Pod runs (may differ from Task namespace)
     StartTime      *metav1.Time
     CompletionTime *metav1.Time
-    Outputs        *TaskOutputs       // Captured output parameters
     Conditions     []metav1.Condition
-}
-
-// TaskOutputs contains parameters captured from task execution
-type TaskOutputs struct {
-    Parameters map[string]string // Key-value map of captured parameters
-}
-
-// OutputSpec defines output parameters to capture from task execution
-type OutputSpec struct {
-    Parameters []OutputParameterSpec // Output parameters to capture from files
-}
-
-// OutputParameterSpec defines a single output parameter to capture
-type OutputParameterSpec struct {
-    Name    string  // Parameter name (key in status.outputs.parameters)
-    Path    string  // File path to read value from (relative to workspaceDir)
-    Default *string // Default value if file doesn't exist
 }
 
 type ContextType string
@@ -366,13 +345,6 @@ spec:
   # Optional: Reference to Agent (defaults to "default")
   agentRef: my-agent
 
-  # Optional: Task output parameters
-  outputs:
-    parameters:
-      - name: test-coverage
-        path: ".outputs/coverage"
-        default: "N/A"
-
 status:
   # Execution phase
   phase: Running  # Pending|Queued|Running|Completed|Failed
@@ -383,14 +355,6 @@ status:
   # Start and end times
   startTime: "2025-01-18T10:00:00Z"
   completionTime: "2025-01-18T10:05:00Z"
-
-  # Captured output parameters
-  outputs:
-    parameters:
-      pr-url: "https://github.com/org/repo/pull/42"
-      commit-sha: "abc123def456"
-      summary: "Updated 15 dependencies, all tests pass."
-      test-coverage: "85.5%"
 ```
 
 **Field Description:**
@@ -400,7 +364,6 @@ status:
 | `spec.description` | String | No | Task instruction (creates /workspace/task.md) |
 | `spec.contexts` | []ContextItem | No | Inline context definitions (see below) |
 | `spec.agentRef` | *AgentReference | No | Cross-namespace Agent reference (default: "default" in Task's namespace) |
-| `spec.outputs` | *OutputSpec | No | Task output parameters |
 
 **Status Field Description:**
 
@@ -411,7 +374,6 @@ status:
 | `status.podNamespace` | String | Pod namespace (may differ from Task namespace for cross-namespace Agent) |
 | `status.startTime` | Timestamp | Start time |
 | `status.completionTime` | Timestamp | End time |
-| `status.outputs` | *TaskOutputs | Captured output parameters (see Output System) |
 
 **ContextItem Types:**
 
@@ -833,101 +795,6 @@ status:
 
 Records are automatically pruned when they fall outside the sliding window.
 
-### Output System
-
-KubeOpenCode provides a file-based output capture system using a sidecar container pattern. Tasks can define output parameters that are automatically captured from files after task execution.
-
-**How It Works:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                           Pod                                    │
-│  ┌──────────────────┐    ┌──────────────────────────────────┐   │
-│  │  Agent Container │    │  Output Collector Sidecar        │   │
-│  │  (AI Agent)      │    │  (kubeopencode collect-outputs)  │   │
-│  │                  │    │                                   │   │
-│  │  Writes files:   │───▶│  1. Waits for agent to exit      │   │
-│  │  .outputs/pr-url │    │  2. Reads output parameter files │   │
-│  │  .outputs/...    │    │  3. Writes to termination-log    │   │
-│  └──────────────────┘    └──────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Controller reads termination-log and updates Task.status       │
-│  status.outputs.parameters:                                     │
-│    pr-url: "https://github.com/org/repo/pull/42"               │
-│    summary: "Updated 15 dependencies..."                        │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**OutputSpec Fields:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `parameters` | []OutputParameterSpec | No | List of output parameters to capture |
-
-**OutputParameterSpec Fields:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | String | Yes | Parameter name (key in status.outputs.parameters) |
-| `path` | String | Yes | File path to read value from (relative to workspaceDir) |
-| `default` | *String | No | Default value if file doesn't exist |
-
-**Example - Task with Outputs:**
-
-```yaml
-apiVersion: kubeopencode.io/v1alpha1
-kind: Task
-metadata:
-  name: update-deps
-spec:
-  agentRef:
-    name: pr-agent
-  description: |
-    Update dependencies and save results:
-    - PR URL to .outputs/pr-url
-    - Summary to .outputs/summary
-    - Coverage to .outputs/coverage
-  outputs:
-    parameters:
-      - name: pr-url
-        path: ".outputs/pr-url"
-      - name: summary
-        path: ".outputs/summary"
-        default: "No summary provided"
-      - name: coverage
-        path: ".outputs/coverage"
-        default: "N/A"
-```
-
-**Sidecar Behavior:**
-
-1. The controller creates an `output-collector` sidecar container when outputs are defined
-2. The sidecar uses shared PID namespace to detect when the agent container exits
-3. After agent exit, it reads each parameter file and writes JSON to `/dev/termination-log`
-4. The controller reads the termination message and updates `Task.status.outputs`
-5. Outputs are captured on both success and failure, useful for debugging
-
-**No Sidecar When No Outputs:**
-
-If the Task does not define outputs, no sidecar container is created, reducing resource overhead.
-
-**Implementation Details:**
-
-- **Process Detection**: Sidecar polls `/proc` to find processes other than PID 1 (init) and itself. When only init and sidecar remain, agent is considered exited.
-- **Size Limits**: Maximum 4KB total output (Kubernetes termination message limit). For larger outputs, use external storage solutions.
-- **Termination Log Format**:
-```json
-{
-  "parameters": {
-    "pr-url": "https://github.com/org/repo/pull/42",
-    "summary": "Updated 15 dependencies, all tests pass."
-  }
-}
-```
-
 ---
 
 ## System Configuration
@@ -1153,13 +1020,6 @@ kubectl get agent default -o yaml
 - No retry on failure (AI tasks are non-idempotent)
 - User-initiated stop via `kubeopencode.io/stop=true` annotation (graceful, Pod deleted)
 - OwnerReference cascade deletion (same-namespace) or finalizer cleanup (cross-namespace)
-
-**Output System**:
-- File-based output capture via sidecar container
-- Define outputs at Task level
-- Sidecar reads files after agent exits and writes to termination-log
-- Controller captures outputs to `Task.status.outputs.parameters`
-- No sidecar created when no outputs defined
 
 **Batch Operations**:
 - Use Helm, Kustomize, or other templating tools

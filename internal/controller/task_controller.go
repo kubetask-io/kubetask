@@ -387,10 +387,10 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 	// Use Agent's namespace for system config lookup
 	sysCfg := r.getSystemConfig(ctx, agentNamespace)
 
-	// Create Pod with agent configuration, context mounts, and output collector sidecar
+	// Create Pod with agent configuration and context mounts
 	// Pod is created in Agent's namespace
 	// Use workingTask which has merged spec from TaskTemplate (if any)
-	pod := buildPod(workingTask, podName, agentNamespace, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, workingTask.Spec.Outputs, sysCfg)
+	pod := buildPod(workingTask, podName, agentNamespace, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, sysCfg)
 
 	if err := r.Create(ctx, pod); err != nil {
 		log.Error(err, "unable to create Pod", "pod", podName, "namespace", agentNamespace)
@@ -460,18 +460,14 @@ func (r *TaskReconciler) updateTaskStatusFromPod(ctx context.Context, task *kube
 		task.Status.Phase = kubeopenv1alpha1.TaskPhaseCompleted
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
-		// Capture outputs from termination message
-		task.Status.Outputs = r.captureTaskOutputs(pod)
-		log.Info("task completed", "pod", task.Status.PodName, "hasOutputs", task.Status.Outputs != nil)
+		log.Info("task completed", "pod", task.Status.PodName)
 		return r.Status().Update(ctx, task)
 	case corev1.PodFailed:
 		task.Status.ObservedGeneration = task.Generation
 		task.Status.Phase = kubeopenv1alpha1.TaskPhaseFailed
 		now := metav1.Now()
 		task.Status.CompletionTime = &now
-		// Capture outputs from termination message (may contain error info)
-		task.Status.Outputs = r.captureTaskOutputs(pod)
-		log.Info("task failed", "pod", task.Status.PodName, "hasOutputs", task.Status.Outputs != nil)
+		log.Info("task failed", "pod", task.Status.PodName)
 		return r.Status().Update(ctx, task)
 	}
 
@@ -657,10 +653,7 @@ func (r *TaskReconciler) resolveTaskTemplate(ctx context.Context, task *kubeopen
 		merged.Contexts = append(merged.Contexts, *c.DeepCopy())
 	}
 
-	// 3. Outputs: Merge parameters, Task takes precedence for same-named params
-	merged.Outputs = mergeOutputSpecs(template.Spec.Outputs, task.Spec.Outputs)
-
-	// 4. Description: Task takes precedence
+	// 3. Description: Task takes precedence
 	if task.Spec.Description != nil {
 		merged.Description = task.Spec.Description
 	} else if template.Spec.Description != nil {
@@ -671,48 +664,6 @@ func (r *TaskReconciler) resolveTaskTemplate(ctx context.Context, task *kubeopen
 	merged.TaskTemplateRef = task.Spec.TaskTemplateRef
 
 	return merged, nil
-}
-
-// mergeOutputSpecs merges two OutputSpecs, with override taking precedence for same-named params.
-func mergeOutputSpecs(base, override *kubeopenv1alpha1.OutputSpec) *kubeopenv1alpha1.OutputSpec {
-	if base == nil && override == nil {
-		return nil
-	}
-	if base == nil {
-		return override.DeepCopy()
-	}
-	if override == nil {
-		return base.DeepCopy()
-	}
-
-	// Build parameter map: base first, then override
-	paramMap := make(map[string]kubeopenv1alpha1.OutputParameterSpec)
-	for _, p := range base.Parameters {
-		paramMap[p.Name] = p
-	}
-	for _, p := range override.Parameters {
-		paramMap[p.Name] = p
-	}
-
-	// Convert back to slice, maintaining stable order
-	result := &kubeopenv1alpha1.OutputSpec{
-		Parameters: make([]kubeopenv1alpha1.OutputParameterSpec, 0, len(paramMap)),
-	}
-
-	// First add base params in order (preserving order for those not overridden)
-	seen := make(map[string]bool)
-	for _, p := range base.Parameters {
-		result.Parameters = append(result.Parameters, paramMap[p.Name])
-		seen[p.Name] = true
-	}
-	// Then add any new params from override
-	for _, p := range override.Parameters {
-		if !seen[p.Name] {
-			result.Parameters = append(result.Parameters, p)
-		}
-	}
-
-	return result
 }
 
 // handleTaskDeletion handles Task deletion, cleaning up cross-namespace Pods.
@@ -1375,44 +1326,6 @@ func (r *TaskReconciler) getSystemConfig(ctx context.Context, namespace string) 
 	}
 
 	return cfg
-}
-
-// captureTaskOutputs extracts outputs from the output-collector sidecar's termination message.
-// The sidecar reads files specified in OutputSpec and writes JSON to /dev/termination-log.
-// Format: {"parameters": {"key": "value"}}
-func (r *TaskReconciler) captureTaskOutputs(pod *corev1.Pod) *kubeopenv1alpha1.TaskOutputs {
-	// Look for the output-collector sidecar container
-	for _, cs := range pod.Status.ContainerStatuses {
-		if cs.Name == "output-collector" && cs.State.Terminated != nil {
-			msg := cs.State.Terminated.Message
-			if msg != "" {
-				parsed := parseTerminationMessage(msg)
-				if parsed != nil && len(parsed.Parameters) > 0 {
-					return &kubeopenv1alpha1.TaskOutputs{
-						Parameters: parsed.Parameters,
-					}
-				}
-			}
-			break
-		}
-	}
-	return nil
-}
-
-// terminationMessageOutput represents the JSON structure written to /dev/termination-log
-// by the output-collector sidecar
-type terminationMessageOutput struct {
-	Parameters map[string]string `json:"parameters,omitempty"`
-}
-
-// parseTerminationMessage parses the JSON termination message from the output-collector.
-func parseTerminationMessage(msg string) *terminationMessageOutput {
-	var output terminationMessageOutput
-	if err := json.Unmarshal([]byte(msg), &output); err != nil {
-		// Not valid JSON, ignore
-		return nil
-	}
-	return &output
 }
 
 // handleTaskCleanup handles automatic cleanup of completed/failed Tasks based on KubeOpenCodeConfig.

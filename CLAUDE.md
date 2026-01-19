@@ -659,28 +659,6 @@ The controller generates Pods with:
 - ServiceAccount from Agent spec
 - Owner references for garbage collection
 
-### Task Outputs
-
-Task execution results are captured in `status.outputs`:
-
-- `exitCode`: Agent process exit code (0 = success)
-- `result`: Primary output summary from the agent
-- `parameters`: Dynamic key-value map for structured outputs (PR URLs, commit SHAs, etc.)
-
-**Retrieving Outputs:**
-```bash
-# Get exit code
-kubectl get task my-task -o jsonpath='{.status.outputs.exitCode}'
-
-# Get result summary
-kubectl get task my-task -o jsonpath='{.status.outputs.result}'
-
-# Get specific parameter (e.g., PR URL)
-kubectl get task my-task -o jsonpath='{.status.outputs.parameters.pr-url}'
-```
-
-**Note:** Due to Kubernetes termination message 4KB limit, total output must be under 4KB. For larger outputs, consider using external storage.
-
 ### Task Cleanup
 
 KubeOpenCode supports automatic cleanup of completed/failed Tasks via `KubeOpenCodeConfig`. When configured, Tasks are automatically deleted based on TTL (time-to-live) and/or retention count policies.
@@ -721,7 +699,6 @@ TaskTemplate defines a reusable template for Task creation. Similar to Argo Work
 - `description`: Default task instruction/prompt (Task can override)
 - `agentRef`: Default Agent reference (Task can override)
 - `contexts`: Default contexts (merged with Task contexts)
-- `outputs`: Default output parameters (merged with Task outputs)
 
 **Example TaskTemplate:**
 ```yaml
@@ -744,12 +721,6 @@ spec:
     - type: ConfigMap
       configMap:
         name: coding-standards
-  outputs:
-    parameters:
-      - name: pr-url
-        path: .outputs/pr-url
-      - name: commit-sha
-        path: .outputs/commit-sha
 ```
 
 **Task using TaskTemplate:**
@@ -774,7 +745,6 @@ spec:
 **Merge Strategy:**
 - `agentRef`: Task takes precedence
 - `contexts`: Template contexts first, then Task contexts (both included)
-- `outputs`: Merged by parameter name (Task takes precedence for same-named params)
 - `description`: Task takes precedence (if Task doesn't specify, uses Template's)
 
 ## Kubernetes Integration

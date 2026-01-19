@@ -101,7 +101,6 @@ type TaskSpec struct {
 	// When using a template:
 	//   - TaskTemplate.agentRef is used if Task.agentRef is not specified
 	//   - TaskTemplate.contexts are prepended to Task.contexts
-	//   - TaskTemplate.outputs are merged with Task.outputs (Task takes precedence)
 	//   - TaskTemplate.description is used if Task.description is not specified
 	//
 	// Example:
@@ -153,23 +152,6 @@ type TaskSpec struct {
 	// If neither is specified, uses the "default" Agent in the same namespace.
 	// +optional
 	AgentRef *AgentReference `json:"agentRef,omitempty"`
-
-	// Outputs defines output parameters to capture from this Task.
-	// The controller creates a sidecar to capture these outputs from files.
-	//
-	// If taskTemplateRef is specified, outputs are merged with the template's outputs.
-	// Task outputs take precedence for same-named parameters.
-	//
-	// Example:
-	//   outputs:
-	//     parameters:
-	//       - name: pr-url
-	//         path: ".outputs/pr-url"
-	//       - name: summary
-	//         path: ".outputs/summary"
-	//         default: "No summary provided"
-	// +optional
-	Outputs *OutputSpec `json:"outputs,omitempty"`
 }
 
 // TaskExecutionStatus defines the observed state of Task
@@ -201,61 +183,11 @@ type TaskExecutionStatus struct {
 	// +optional
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
 
-	// Outputs contains results captured from task execution.
-	// This is populated when the task completes (either success or failure).
-	// +optional
-	Outputs *TaskOutputs `json:"outputs,omitempty"`
-
 	// Kubernetes standard conditions
 	// +optional
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-// TaskOutputs contains parameters captured from task execution files.
-// The output-collector sidecar reads files specified in OutputSpec and
-// writes the captured values to the Pod's termination message.
-//
-// Size limits (due to Kubernetes termination message 4KB limit):
-//   - Total JSON output: max 4KB
-//   - For larger outputs, consider using external storage (future feature)
-type TaskOutputs struct {
-	// Parameters is a key-value map of outputs captured from files.
-	// Keys are defined in Task.spec.outputs.
-	// Values are read from the corresponding file paths by the sidecar.
-	//
-	// Example usage:
-	//   kubectl get task my-task -o jsonpath='{.status.outputs.parameters.pr-url}'
-	// +optional
-	Parameters map[string]string `json:"parameters,omitempty"`
-}
-
-// OutputSpec defines output parameters to capture from task execution.
-type OutputSpec struct {
-	// Parameters defines the output parameters to capture from files.
-	// Each parameter specifies a name and file path to read from.
-	// +optional
-	Parameters []OutputParameterSpec `json:"parameters,omitempty"`
-}
-
-// OutputParameterSpec defines a single output parameter to capture from a file.
-type OutputParameterSpec struct {
-	// Name is the parameter name, used as the key in status.outputs.parameters.
-	// Must be unique within the output parameters.
-	// +required
-	Name string `json:"name"`
-
-	// Path is the file path to read the parameter value from.
-	// Relative paths are prefixed with workspaceDir.
-	// Example: ".outputs/pr-url" -> ${WORKSPACE_DIR}/.outputs/pr-url
-	// +required
-	Path string `json:"path"`
-
-	// Default is the default value if the file doesn't exist.
-	// If not specified and file doesn't exist, parameter is omitted from output.
-	// +optional
-	Default *string `json:"default,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -287,7 +219,7 @@ type TaskTemplateReference struct {
 // +kubebuilder:printcolumn:JSONPath=`.metadata.creationTimestamp`,name="Age",type=date
 
 // TaskTemplate defines a reusable template for Task creation.
-// TaskTemplates allow users to define common Task configurations (contexts, outputs, agentRef)
+// TaskTemplates allow users to define common Task configurations (contexts, agentRef)
 // that can be shared across multiple Tasks. Similar to Argo WorkflowTemplate.
 type TaskTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -321,11 +253,6 @@ type TaskTemplateSpec struct {
 	//   4. Task.description (highest, becomes ${WORKSPACE_DIR}/task.md)
 	// +optional
 	Contexts []ContextItem `json:"contexts,omitempty"`
-
-	// Outputs defines default output parameters for tasks using this template.
-	// Parameters are merged with Task.spec.outputs (Task takes precedence for same-named params).
-	// +optional
-	Outputs *OutputSpec `json:"outputs,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

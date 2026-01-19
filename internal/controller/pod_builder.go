@@ -314,36 +314,10 @@ func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirM
 	}
 }
 
-// buildOutputCollectorSidecar creates a sidecar container that collects outputs from files.
-// The sidecar waits for the executor container to exit, reads files specified in the merged
-// OutputSpec, and writes the collected parameters to /dev/termination-log.
-// Returns nil if mergedOutputs is nil or has no parameters.
-func buildOutputCollectorSidecar(mergedOutputs *kubeopenv1alpha1.OutputSpec, workspaceDir string, sysCfg systemConfig) *corev1.Container {
-	if mergedOutputs == nil || len(mergedOutputs.Parameters) == 0 {
-		return nil // No outputs defined, skip sidecar
-	}
-
-	// Serialize merged output spec to JSON for sidecar to read
-	outputSpecJSON, _ := json.Marshal(mergedOutputs)
-
-	return &corev1.Container{
-		Name:            "output-collector",
-		Image:           sysCfg.systemImage,
-		ImagePullPolicy: sysCfg.systemImagePullPolicy,
-		Command:         []string{"/kubeopencode", "collect-outputs"},
-		Env: []corev1.EnvVar{
-			{Name: "WORKSPACE_DIR", Value: workspaceDir},
-			{Name: "OUTPUT_SPEC", Value: string(outputSpecJSON)},
-		},
-		// VolumeMounts will be added by the caller (workspace volume)
-	}
-}
-
-// buildPod creates a Pod object for the task with context mounts and optional output collector sidecar.
-// If mergedOutputs is non-nil, a sidecar container is added to collect outputs from files.
+// buildPod creates a Pod object for the task with context mounts.
 // The agentNamespace parameter specifies where the Pod will be created (may differ from Task namespace
 // when using cross-namespace Agent reference).
-func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, mergedOutputs *kubeopenv1alpha1.OutputSpec, sysCfg systemConfig) *corev1.Pod {
+func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, sysCfg systemConfig) *corev1.Pod {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var envVars []corev1.EnvVar
@@ -723,26 +697,13 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 	// Build containers list
 	containers := []corev1.Container{agentContainer}
 
-	// Add output-collector sidecar if outputs are defined
-	var shareProcessNamespace *bool
-	if sidecar := buildOutputCollectorSidecar(mergedOutputs, cfg.workspaceDir, sysCfg); sidecar != nil {
-		// Sidecar needs access to the workspace volume to read output files
-		sidecar.VolumeMounts = []corev1.VolumeMount{
-			{Name: "workspace", MountPath: cfg.workspaceDir},
-		}
-		containers = append(containers, *sidecar)
-		// Enable shared PID namespace so sidecar can detect when agent container exits
-		shareProcessNamespace = boolPtr(true)
-	}
-
 	// Build PodSpec with scheduling configuration
 	podSpec := corev1.PodSpec{
-		ServiceAccountName:    cfg.serviceAccountName,
-		ShareProcessNamespace: shareProcessNamespace,
-		InitContainers:        initContainers,
-		Containers:            containers,
-		Volumes:               volumes,
-		RestartPolicy:         corev1.RestartPolicyNever,
+		ServiceAccountName: cfg.serviceAccountName,
+		InitContainers:     initContainers,
+		Containers:         containers,
+		Volumes:            volumes,
+		RestartPolicy:      corev1.RestartPolicyNever,
 	}
 
 	// Apply PodSpec configuration if specified

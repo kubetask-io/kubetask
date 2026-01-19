@@ -154,10 +154,6 @@ spec:
     - type: ConfigMap
       configMap:
         name: coding-standards
-  outputs:
-    parameters:
-      - name: pr-url
-        path: .outputs/pr-url
 ---
 # Create Tasks that reference the template
 apiVersion: kubeopencode.io/v1alpha1
@@ -178,7 +174,6 @@ spec:
 | `agentRef` | Task takes precedence; if not specified, uses Template's |
 | `description` | Task takes precedence; if not specified, uses Template's |
 | `contexts` | Template contexts first, then Task contexts (both included) |
-| `outputs` | Merged by parameter name; Task takes precedence for same-named params |
 
 ### Batch Operations with Helm
 
@@ -348,57 +343,6 @@ spec:
   agentRef:
     name: opencode-devbox
   description: "Update dependencies and create a PR"
-```
-
-### Task Outputs
-
-Capture results from task execution using output parameters:
-
-```yaml
-apiVersion: kubeopencode.io/v1alpha1
-kind: Agent
-metadata:
-  name: pr-agent
-spec:
-  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
-  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
-  workspaceDir: /workspace
-  serviceAccountName: kubeopencode-agent
-  # Define output parameters to capture
-  outputs:
-    parameters:
-      - name: pr-url
-        path: ".outputs/pr-url"
-      - name: summary
-        path: ".outputs/summary"
-        default: "No summary provided"
-```
-
-**Retrieving outputs:**
-```bash
-# Get specific output parameter
-kubectl get task my-task -o jsonpath='{.status.outputs.parameters.pr-url}'
-
-# Get all output parameters
-kubectl get task my-task -o jsonpath='{.status.outputs.parameters}'
-```
-
-Tasks can define multiple output parameters:
-```yaml
-apiVersion: kubeopencode.io/v1alpha1
-kind: Task
-metadata:
-  name: my-task
-spec:
-  agentRef:
-    name: pr-agent
-  description: "Create a PR for the feature"
-  outputs:
-    parameters:
-      - name: pr-url
-        path: ".outputs/pr-url"
-      - name: custom-metric
-        path: ".outputs/custom-metric"
 ```
 
 ### Task Stop
