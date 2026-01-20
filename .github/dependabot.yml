@@ -6,6 +6,13 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Limit to 1 open PR at a time since we use AI to auto-review and merge these PRs sequentially
+    open-pull-requests-limit: 1
+    # Group all Go dependencies into a single PR for easier review and merging
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
