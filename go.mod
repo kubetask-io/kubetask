@@ -4,7 +4,7 @@ go 1.25
 
 require (
 	github.com/onsi/ginkgo/v2 v2.27.2
-	github.com/onsi/gomega v1.38.2
+	github.com/onsi/gomega v1.39.0
 	github.com/spf13/cobra v1.10.2
 	k8s.io/api v0.31.2
 	k8s.io/apimachinery v0.31.2
