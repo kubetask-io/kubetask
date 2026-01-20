@@ -11,15 +11,17 @@
 #
 # Size comparison:
 # - devbox: ~1GB (Go, Node, Python, cloud CLIs, dev tools)
-# - attach: ~25MB (OpenCode binary + shell + ca-certs)
+# - attach: ~150MB (Debian slim + OpenCode binary)
 #
-FROM alpine:3.21
+FROM debian:bookworm-slim
 
 # CA certificates for HTTPS connections to OpenCode server and AI APIs
-RUN apk add --no-cache ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy OpenCode binary from the opencode agent image
-# The binary is statically linked and works on Alpine
+# Both images use Debian, so glibc binary is compatible
 COPY --from=quay.io/kubeopencode/kubeopencode-agent-opencode:latest /opencode /usr/local/bin/opencode
 
 # Create workspace directory for task.md mount
