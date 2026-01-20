@@ -52,6 +52,10 @@ const (
 	ReasonNoLimits = "NoLimits"
 	// ReasonCapacityAvailable is the reason for capacity availability
 	ReasonCapacityAvailable = "CapacityAvailable"
+	// ReasonPodCreationError is the reason for Pod creation failures
+	ReasonPodCreationError = "PodCreationError"
+	// ReasonConfigMapCreationError is the reason for ConfigMap creation failures
+	ReasonConfigMapCreationError = "ConfigMapCreationError"
 )
 
 // +genclient
