@@ -323,17 +323,6 @@ spec:
   workspaceDir: /workspace
   serviceAccountName: kubeopencode-agent
 ---
-# OpenCode agent with code-server (browser-based IDE)
-apiVersion: kubeopencode.io/v1alpha1
-kind: Agent
-metadata:
-  name: opencode-code-server
-spec:
-  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
-  executorImage: quay.io/kubeopencode/kubeopencode-agent-code-server:latest
-  workspaceDir: /workspace
-  serviceAccountName: kubeopencode-agent
----
 # Task using specific agent
 apiVersion: kubeopencode.io/v1alpha1
 kind: Task
@@ -531,7 +520,6 @@ KubeOpenCode uses a **two-container pattern**:
 |-------|------|-------------|
 | `opencode` | Init Container | OpenCode CLI binary |
 | `devbox` | Worker (Executor) | Universal development environment with Go, Node, Python, kubectl, helm |
-| `code-server` | Worker (Executor) | Browser-based VSCode IDE |
 | `echo` | Testing | Minimal Alpine image for E2E testing |
 
 ### Image Resolution
@@ -556,7 +544,6 @@ make agent-build AGENT=opencode
 
 # Build executor containers
 make agent-build AGENT=devbox
-make agent-build AGENT=code-server
 
 # Customize registry and version
 make agent-build AGENT=devbox IMG_REGISTRY=docker.io IMG_ORG=myorg VERSION=v1.0.0

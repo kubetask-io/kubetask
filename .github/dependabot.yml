@@ -26,11 +26,6 @@ updates:
     schedule:
       interval: "weekly"
 
-  - package-ecosystem: "docker"
-    directory: "/agents/code-server"
-    schedule:
-      interval: "weekly"
-
   - package-ecosystem: "helm"
     directory: "/charts/kubeopencode"
     schedule:

@@ -37,7 +37,7 @@ Some SCC environments inject a passwd entry for the random UID with `/sbin/nolog
 1000730000:x:1000730000:0:1000730000 user:/tmp:/sbin/nologin
 ```
 
-This causes terminals in tools like code-server to fail with:
+This causes terminals in some tools to fail with:
 ```
 The terminal process "/sbin/nologin" terminated with exit code: 1.
 ```
@@ -70,7 +70,7 @@ envVars = append(envVars,
 
 ### Why `SHELL=/bin/bash`?
 
-1. **Overrides /sbin/nologin**: Ensures terminals work in tools like code-server
+1. **Overrides /sbin/nologin**: Ensures terminals work in interactive tools
 2. **Available in all images**: `/bin/bash` is present in our agent base images
 3. **Standard shell**: Compatible with most scripts and tools
 
@@ -92,7 +92,7 @@ We chose the controller approach because:
 
 - Agent containers work correctly on both vanilla Kubernetes and SCC-enabled clusters
 - AI CLI tools can create their config directories (e.g., `~/.opencode`, `~/.config`)
-- Terminals in code-server and similar tools work correctly
+- Terminals in interactive tools work correctly
 - No changes required to agent Dockerfiles
 - Third-party agent images work without modification
 

@@ -31,7 +31,7 @@ Key changes:
 Agent consolidation:
 
 - Removed: `base`, `claude`, `gemini`, `goose`, `echo` agents
-- Kept: `opencode` (init container), `devbox` (executor), `code-server` (IDE)
+- Kept: `opencode` (init container), `devbox` (executor)
 
 ## Consequences
 

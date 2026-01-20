@@ -30,7 +30,6 @@ This design separates the AI tool (OpenCode) from the execution environment, all
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │  Executor Images:                                     │  │
 │  │  ├── devbox        (full dev environment)             │  │
-│  │  ├── code-server   (browser-based IDE)                │  │
 │  │  └── user-custom   (your own toolset)                 │  │
 │  │                                                       │  │
 │  │  Runs: /tools/opencode run "$(cat task.md)"           │  │
@@ -53,7 +52,6 @@ This design separates the AI tool (OpenCode) from the execution environment, all
 |-------|---------|----------------|
 | `opencode` | OpenCode CLI (AI coding agent) | Init Container |
 | `devbox` | Universal development environment | Worker (Executor) |
-| `code-server` | Browser-based VSCode IDE | Worker (Executor) |
 
 ## Devbox Image Contents
 
@@ -109,9 +107,6 @@ make AGENT=opencode build
 
 # Build devbox image (executor)
 make AGENT=devbox build
-
-# Build code-server image (executor)
-make AGENT=code-server build
 
 # Multi-arch build and push
 make AGENT=opencode buildx
@@ -308,31 +303,5 @@ If a tool is missing:
 |-------|-----------------|-------------|
 | `opencode` | ~500 MB | OpenCode CLI only |
 | `devbox` | ~2-3 GB | Full development environment |
-| `code-server` | ~3-4 GB | Devbox + code-server |
 
 The larger size of `devbox` is a trade-off for having a comprehensive development environment similar to GitHub Actions runners.
-
-## Using code-server for Human-in-the-Loop
-
-The `code-server` image provides a browser-based VSCode experience for human-in-the-loop debugging.
-
-### Accessing code-server
-
-After the task starts:
-
-```bash
-# Get the pod name
-POD=$(kubectl get pods -l kubeopencode.io/task=my-task -o jsonpath='{.items[0].metadata.name}')
-
-# Port forward to code-server
-kubectl port-forward pod/$POD 8080:8080
-
-# Open browser at http://localhost:8080
-```
-
-### How It Works
-
-1. The init container injects OpenCode into /tools
-2. The code-server executor runs with OpenCode available
-3. Users can access VSCode in the browser to view/edit files
-4. OpenCode CLI is available in the VSCode terminal for interactive AI assistance

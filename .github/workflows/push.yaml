@@ -28,7 +28,6 @@ jobs:
       agent-opencode: ${{ steps.filter.outputs.agent-opencode }}
       agent-devbox: ${{ steps.filter.outputs.agent-devbox }}
       agent-attach: ${{ steps.filter.outputs.agent-attach }}
-      agent-code-server: ${{ steps.filter.outputs.agent-code-server }}
       helm: ${{ steps.filter.outputs.helm }}
     steps:
       - name: Checkout code
@@ -52,8 +51,6 @@ jobs:
               - 'agents/devbox/**'
             agent-attach:
               - 'agents/attach/**'
-            agent-code-server:
-              - 'agents/code-server/**'
             helm:
               - 'charts/kubeopencode/**'
 
@@ -244,39 +241,6 @@ jobs:
           tags: |
             ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubeopencode-agent-attach:latest
             ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubeopencode-agent-attach:${{ github.sha }}
-
-  # Build and push code-server agent (only when agents/code-server or devbox changes)
-  build-agent-code-server:
-    name: Build Agent Code-Server
-    runs-on: ubuntu-latest
-    needs: [changes, unit-test, integration-test, e2e-test]
-    if: needs.changes.outputs.agent-code-server == 'true' || needs.changes.outputs.agent-devbox == 'true'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Quay.io
-        uses: docker/login-action@v3
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_ROBOT_ACCOUNT }}
-          password: ${{ secrets.QUAY_TOKEN }}
-
-      - name: Build and push code-server agent
-        uses: docker/build-push-action@v6
-        with:
-          context: ./agents/code-server
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubeopencode-agent-code-server:latest
-            ${{ env.IMG_REGISTRY }}/${{ env.IMG_ORG }}/kubeopencode-agent-code-server:${{ github.sha }}
 
   # Push Helm chart (only when chart changes)
   push-helm-chart:

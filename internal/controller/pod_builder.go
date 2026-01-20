@@ -362,7 +362,7 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 	// In environments with SCC or similar security policies, containers run with
 	// random UIDs that have no /etc/passwd entry, causing:
 	// - HOME=/ (not writable) - tools like gemini-cli fail to create ~/.gemini
-	// - SHELL=/sbin/nologin - terminals in code-server fail to start
+	// - SHELL=/sbin/nologin - terminals in interactive tools fail to start
 	// Setting these explicitly ensures containers work regardless of UID.
 	envVars = append(envVars,
 		corev1.EnvVar{Name: "HOME", Value: "/tmp"},

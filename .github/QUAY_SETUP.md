@@ -9,7 +9,6 @@
    - `kubeopencode/kubeopencode` (unified binary: controller, git-init, context-init)
    - `kubeopencode/kubeopencode-agent-opencode` (OpenCode CLI init container)
    - `kubeopencode/kubeopencode-agent-devbox` (Universal development environment)
-   - `kubeopencode/kubeopencode-agent-code-server` (Browser-based VSCode IDE)
    - `kubeopencode/helm-charts/kubeopencode` (Helm chart OCI)
 
 ## 2. Add GitHub Secrets

@@ -245,7 +245,6 @@ Agent images are located in `agents/`:
 |-------|---------|----------------|
 | `opencode` | OpenCode CLI (AI coding agent) | Init Container |
 | `devbox` | Universal development environment | Worker (Executor) |
-| `code-server` | Browser-based VSCode IDE | Worker (Executor) |
 
 ```bash
 # Build OpenCode image (init container)
@@ -253,9 +252,6 @@ make agent-build AGENT=opencode
 
 # Build devbox image (executor)
 make agent-build AGENT=devbox
-
-# Build code-server image (executor)
-make agent-build AGENT=code-server
 
 # Push agent image to registry
 make agent-push AGENT=opencode
@@ -278,8 +274,7 @@ make agent-build AGENT=devbox IMG_REGISTRY=docker.io IMG_ORG=myorg VERSION=v1.0.
 kubeopencode/
 ├── agents/               # Agent images
 │   ├── opencode/        # OpenCode CLI (init container)
-│   ├── devbox/          # Universal development environment (executor)
-│   └── code-server/     # Browser-based VSCode IDE (executor)
+│   └── devbox/          # Universal development environment (executor)
 ├── api/v1alpha1/          # CRD type definitions
 │   ├── types.go           # Main API types (Task, Agent, KubeOpenCodeConfig)
 │   ├── register.go        # Scheme registration

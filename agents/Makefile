@@ -1,7 +1,7 @@
 # Copyright Contributors to the KubeOpenCode project
 SHELL := /bin/bash
 
-# Agent to build (opencode, devbox, code-server, etc.)
+# Agent to build (opencode, devbox, attach, etc.)
 AGENT ?= devbox
 
 # No-cache option for fresh builds (usage: make NO_CACHE=1 build)
@@ -54,7 +54,7 @@ base-buildx: ## Build and push base image for multiple architectures
 ##@ Agent Images
 
 .PHONY: build
-build: ## Build agent docker image (AGENT=opencode|devbox|code-server)
+build: ## Build agent docker image (AGENT=opencode|devbox|attach)
 	@if [ ! -d "$(AGENT)" ]; then \
 		echo "Error: Agent '$(AGENT)' not found. Available agents:"; \
 		ls -d */ 2>/dev/null | sed 's/\///g' | grep -v '^base$$'; \
