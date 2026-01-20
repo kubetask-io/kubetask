@@ -393,7 +393,22 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 		if err := r.Create(ctx, contextConfigMap); err != nil {
 			if !errors.IsAlreadyExists(err) {
 				log.Error(err, "unable to create context ConfigMap")
-				return ctrl.Result{}, err
+				// Update task status to Failed - ConfigMap creation error is a terminal failure
+				task.Status.ObservedGeneration = task.Generation
+				task.Status.Phase = kubeopenv1alpha1.TaskPhaseFailed
+				now := metav1.Now()
+				task.Status.CompletionTime = &now
+				meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
+					Type:    kubeopenv1alpha1.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  kubeopenv1alpha1.ReasonConfigMapCreationError,
+					Message: err.Error(),
+				})
+				if updateErr := r.Status().Update(ctx, task); updateErr != nil {
+					log.Error(updateErr, "unable to update Task status")
+					return ctrl.Result{}, updateErr
+				}
+				return ctrl.Result{}, nil // Don't requeue, ConfigMap creation failed
 			}
 		}
 	}
@@ -410,7 +425,22 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 
 	if err := r.Create(ctx, pod); err != nil {
 		log.Error(err, "unable to create Pod", "pod", podName, "namespace", agentNamespace)
-		return ctrl.Result{}, err
+		// Update task status to Failed - Pod creation error is a terminal failure
+		task.Status.ObservedGeneration = task.Generation
+		task.Status.Phase = kubeopenv1alpha1.TaskPhaseFailed
+		now := metav1.Now()
+		task.Status.CompletionTime = &now
+		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
+			Type:    kubeopenv1alpha1.ConditionTypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  kubeopenv1alpha1.ReasonPodCreationError,
+			Message: err.Error(),
+		})
+		if updateErr := r.Status().Update(ctx, task); updateErr != nil {
+			log.Error(updateErr, "unable to update Task status")
+			return ctrl.Result{}, updateErr
+		}
+		return ctrl.Result{}, nil // Don't requeue, Pod creation failed
 	}
 
 	// Record task start for quota tracking (if quota is configured)

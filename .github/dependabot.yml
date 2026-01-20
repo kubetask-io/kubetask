@@ -1,5 +1,7 @@
 version: 2
 updates:
+  # Dependabot automatically runs `go mod tidy` and `go mod vendor` when vendor directory exists
+  # See: https://github.blog/changelog/2020-10-19-dependabot-go-mod-tidy-and-vendor-support/
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
