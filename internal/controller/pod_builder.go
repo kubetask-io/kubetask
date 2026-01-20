@@ -18,6 +18,7 @@ import (
 type agentConfig struct {
 	agentImage         string   // OpenCode init container image (copies binary to /tools)
 	executorImage      string   // Worker container image for task execution
+	attachImage        string   // Lightweight image for Server-mode --attach Pods
 	command            []string // Command for agent container (optional, has default)
 	workspaceDir       string
 	contexts           []kubeopenv1alpha1.ContextItem
@@ -27,6 +28,7 @@ type agentConfig struct {
 	serviceAccountName string
 	maxConcurrentTasks *int32
 	quota              *kubeopenv1alpha1.QuotaConfig
+	serverConfig       *kubeopenv1alpha1.ServerConfig // Server mode configuration (nil = Pod mode)
 }
 
 // systemConfig holds resolved system-level configuration from KubeOpenCodeConfig.
@@ -317,7 +319,10 @@ func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirM
 // buildPod creates a Pod object for the task with context mounts.
 // The agentNamespace parameter specifies where the Pod will be created (may differ from Task namespace
 // when using cross-namespace Agent reference).
-func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, sysCfg systemConfig) *corev1.Pod {
+// The serverURL parameter is used for Server-mode Agents: when non-empty, the Pod will use
+// `opencode run --attach <serverURL>` to connect to an existing OpenCode server instead of
+// running a standalone instance.
+func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string, cfg agentConfig, contextConfigMap *corev1.ConfigMap, fileMounts []fileMount, dirMounts []dirMount, gitMounts []gitMount, sysCfg systemConfig, serverURL string) *corev1.Pod {
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var envVars []corev1.EnvVar
@@ -678,15 +683,33 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 	// Use custom command if provided, otherwise use default
 	agentCommand := cfg.command
 	if len(agentCommand) == 0 {
-		// Default command: /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
-		agentCommand = []string{
-			"sh", "-c",
-			fmt.Sprintf(`/tools/opencode run "$(cat %s/task.md)"`, cfg.workspaceDir),
+		if serverURL != "" {
+			// Server mode: use --attach flag to connect to existing OpenCode server
+			// This allows Tasks to reuse a persistent server for faster execution
+			agentCommand = []string{
+				"sh", "-c",
+				fmt.Sprintf(`/tools/opencode run --attach %s "$(cat %s/task.md)"`, serverURL, cfg.workspaceDir),
+			}
+		} else {
+			// Pod mode: run standalone OpenCode instance
+			agentCommand = []string{
+				"sh", "-c",
+				fmt.Sprintf(`/tools/opencode run "$(cat %s/task.md)"`, cfg.workspaceDir),
+			}
 		}
 	}
+	// Determine executor image: use lightweight attach image for Server mode
+	executorImage := cfg.executorImage
+	if serverURL != "" && cfg.attachImage != "" {
+		// Server mode: use lightweight attach image (~25MB) instead of devbox (~1GB)
+		// The attach image only needs the OpenCode binary since actual execution
+		// happens in the persistent server's environment
+		executorImage = cfg.attachImage
+	}
+
 	agentContainer := corev1.Container{
 		Name:            "agent",
-		Image:           cfg.executorImage,
+		Image:           executorImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         agentCommand,
 		Env:             envVars,
@@ -724,6 +747,11 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 		// Apply runtime class if specified (for gVisor, Kata, etc.)
 		if cfg.podSpec.RuntimeClassName != nil {
 			podSpec.RuntimeClassName = cfg.podSpec.RuntimeClassName
+		}
+
+		// Apply resource requirements if specified
+		if cfg.podSpec.Resources != nil {
+			podSpec.Containers[0].Resources = *cfg.podSpec.Resources
 		}
 	}
 

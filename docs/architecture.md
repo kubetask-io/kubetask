@@ -795,6 +795,101 @@ status:
 
 Records are automatically pruned when they fall outside the sliding window.
 
+### Server Mode (Persistent OpenCode Server)
+
+Agents support two execution modes:
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **Pod mode** (default) | Creates a new Pod for each Task | Standard task execution |
+| **Server mode** | Runs a persistent OpenCode server (Deployment + Service) | Long-running agents, shared context |
+
+Server mode is enabled by adding `serverConfig` to the Agent spec:
+
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: slack-agent
+  namespace: platform-agents
+spec:
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  workspaceDir: /workspace
+  serviceAccountName: kubeopencode-agent
+
+  # Presence of serverConfig enables Server mode
+  serverConfig:
+    port: 4096                    # OpenCode server port (default: 4096)
+
+  # Resource requirements (applies to both Pod and Server modes)
+  podSpec:
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "500m"
+
+  # Concurrency and quota limits apply equally to Server mode
+  maxConcurrentTasks: 10
+```
+
+**How Server Mode Works:**
+
+```
+Agent Created (with serverConfig)
+    │
+    ▼
+Agent Controller
+    ├── Creates Deployment (opencode serve)
+    └── Creates Service (ClusterIP)
+
+Task Created (referencing Server-mode Agent)
+    │
+    ▼
+Task Controller
+    ├── Creates Pod with command: opencode run --attach <server-url> "task"
+    ├── Standard Pod status tracking (same as Pod mode)
+    └── Logs available via kubectl logs
+```
+
+**ServerConfig Fields:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `port` | int32 | 4096 | Port for OpenCode server |
+
+**Server Mode Status:**
+
+When an Agent is in Server mode, its status includes:
+
+```yaml
+status:
+  serverStatus:
+    deploymentName: slack-agent-server
+    serviceName: slack-agent
+    url: http://slack-agent.platform-agents.svc.cluster.local:4096
+    readyReplicas: 1
+  conditions:
+    - type: ServerReady
+      status: "True"
+      reason: DeploymentReady
+    - type: ServerHealthy
+      status: "True"
+      reason: DeploymentHealthy
+```
+
+**Key Differences:**
+
+| Aspect | Pod Mode | Server Mode |
+|--------|----------|-------------|
+| Lifecycle | Ephemeral Pod per Task | Persistent Deployment + Pod per Task |
+| Command | `opencode run "task"` | `opencode run --attach <url> "task"` |
+| Cold start | Yes | No (server already running) |
+| Context sharing | None | Shared across Tasks via server |
+| Logs | `kubectl logs <pod>` | `kubectl logs <pod>` (same) |
+| Task API | Same | Same |
+
+**Task API Unchanged**: Tasks referencing Server-mode Agents use the same API as Pod-mode. The execution mode is an Agent-level configuration, transparent to Task authors.
+
 ---
 
 ## System Configuration

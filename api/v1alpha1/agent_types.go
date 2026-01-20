@@ -60,6 +60,51 @@ type TaskStartRecord struct {
 	StartTime metav1.Time `json:"startTime"`
 }
 
+// ServerConfig enables Server mode for an Agent.
+// When ServerConfig is present, the Agent runs as a persistent OpenCode server
+// (Deployment + Service) instead of creating ephemeral Pods per Task.
+// Tasks using a Server-mode Agent create lightweight Pods that connect to the
+// server using `opencode run --attach`.
+//
+// Use Server mode for:
+//   - Long-running agents (e.g., Slack bots, interactive assistants)
+//   - Shared context across multiple Tasks (pre-loaded repositories)
+//   - Avoiding cold start latency for each Task
+type ServerConfig struct {
+	// Port is the port OpenCode server listens on.
+	// Defaults to 4096 if not specified.
+	// +optional
+	// +kubebuilder:default=4096
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port,omitempty"`
+}
+
+// ServerStatus represents the observed state of a Server-mode Agent.
+// This is only populated when ServerConfig is present in the Agent spec.
+type ServerStatus struct {
+	// DeploymentName is the name of the Kubernetes Deployment running the server.
+	// Format: "{agent-name}-server"
+	// +optional
+	DeploymentName string `json:"deploymentName,omitempty"`
+
+	// ServiceName is the name of the Kubernetes Service exposing the server.
+	// Format: "{agent-name}"
+	// +optional
+	ServiceName string `json:"serviceName,omitempty"`
+
+	// URL is the in-cluster URL to reach the OpenCode server.
+	// Format: "http://{service-name}.{namespace}.svc.cluster.local:{port}"
+	// Tasks use this URL with `opencode run --attach` to connect to the server.
+	// +optional
+	URL string `json:"url,omitempty"`
+
+	// ReadyReplicas is the number of ready server pods from the Deployment.
+	// For Server-mode, this is typically 0 or 1 (single replica only).
+	// +optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+}
+
 // AgentSpec defines agent configuration
 type AgentSpec struct {
 	// AgentImage specifies the OpenCode init container image.
@@ -75,6 +120,17 @@ type AgentSpec struct {
 	// If not specified, defaults to "quay.io/kubeopencode/kubeopencode-agent-devbox:latest".
 	// +optional
 	ExecutorImage string `json:"executorImage,omitempty"`
+
+	// AttachImage specifies the lightweight image used for Server-mode --attach Pods.
+	// When ServerConfig is set, Tasks create Pods that run `opencode run --attach <server-url>`.
+	// These Pods only need the OpenCode binary and network access, not the full development
+	// environment. Using a minimal image (~25MB) instead of devbox (~1GB) significantly
+	// reduces image pull time and resource usage.
+	//
+	// If not specified, defaults to "quay.io/kubeopencode/kubeopencode-agent-attach:latest".
+	// This field is ignored when ServerConfig is nil (Pod mode).
+	// +optional
+	AttachImage string `json:"attachImage,omitempty"`
 
 	// WorkspaceDir specifies the working directory inside the agent container.
 	// This is where task.md and context files are mounted.
@@ -202,6 +258,27 @@ type AgentSpec struct {
 	//     windowSeconds: 3600  # 10 tasks per hour
 	// +optional
 	Quota *QuotaConfig `json:"quota,omitempty"`
+
+	// ServerConfig enables Server mode for this Agent.
+	// When set, the Agent runs as a persistent OpenCode server (Deployment + Service)
+	// instead of creating ephemeral Pods per Task.
+	//
+	// Server mode is useful for:
+	//   - Long-running agents (e.g., Slack bots, interactive assistants)
+	//   - Shared context across Tasks (pre-loaded repositories, faster startup)
+	//   - Avoiding cold start latency for each Task
+	//
+	// When ServerConfig is nil (default), the Agent operates in Pod mode:
+	// each Task creates a new Pod that runs to completion.
+	//
+	// In Server mode, Tasks create lightweight Pods that use `opencode run --attach`
+	// to connect to the persistent server.
+	//
+	// Example:
+	//   serverConfig:
+	//     port: 4096
+	// +optional
+	ServerConfig *ServerConfig `json:"serverConfig,omitempty"`
 }
 
 // AgentStatus defines the observed state of Agent
@@ -222,10 +299,16 @@ type AgentStatus struct {
 	// +optional
 	// +listType=atomic
 	TaskStartHistory []TaskStartRecord `json:"taskStartHistory,omitempty"`
+
+	// ServerStatus contains the status of the OpenCode server when running in Server mode.
+	// This is only populated when spec.serverConfig is set.
+	// +optional
+	ServerStatus *ServerStatus `json:"serverStatus,omitempty"`
 }
 
 // AgentPodSpec defines advanced Pod configuration for agent pods.
 // This groups all Pod-level settings that control how the agent container runs.
+// These settings apply to both Pod mode and Server mode.
 type AgentPodSpec struct {
 	// Labels defines additional labels to add to the agent pod.
 	// These labels are applied to the Job's pod template and enable integration with:
@@ -262,6 +345,21 @@ type AgentPodSpec struct {
 	// See: https://kubernetes.io/docs/concepts/containers/runtime-class/
 	// +optional
 	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
+
+	// Resources specifies the compute resources (CPU, memory) for the agent container.
+	// This applies to both Pod mode (per-Task Pods) and Server mode (Deployment).
+	// If not specified, uses the cluster's default resource limits.
+	//
+	// Example:
+	//   resources:
+	//     requests:
+	//       memory: "512Mi"
+	//       cpu: "500m"
+	//     limits:
+	//       memory: "2Gi"
+	//       cpu: "2"
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // PodScheduling defines scheduling configuration for agent pods.

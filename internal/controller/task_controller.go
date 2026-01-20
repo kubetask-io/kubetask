@@ -35,6 +35,11 @@ const (
 	// This is the development environment where tasks actually run.
 	DefaultExecutorImage = "quay.io/kubeopencode/kubeopencode-agent-devbox:latest"
 
+	// DefaultAttachImage is the lightweight image for Server-mode --attach Pods.
+	// This minimal image (~25MB) contains only the OpenCode binary + shell + CA certs.
+	// Used when Tasks connect to a persistent OpenCode server via --attach flag.
+	DefaultAttachImage = "quay.io/kubeopencode/kubeopencode-agent-attach:latest"
+
 	// ContextConfigMapSuffix is the suffix for ConfigMap names created for context
 	ContextConfigMapSuffix = "-context"
 
@@ -147,7 +152,7 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
-	// Update task status from Pod status
+	// Update task status from Pod status (both Pod mode and Server mode use Pods now)
 	if err := r.updateTaskStatusFromPod(ctx, task); err != nil {
 		log.Error(err, "unable to update task status")
 		return ctrl.Result{}, err
@@ -319,6 +324,16 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 		}
 	}
 
+	// Determine server URL for Server-mode Agents (empty for Pod mode)
+	// In Server mode, Tasks create Pods that use `opencode run --attach` to connect
+	// to the persistent OpenCode server instead of running a standalone instance.
+	serverURL := ""
+	if agentConfig.serverConfig != nil {
+		port := GetServerPort(&kubeopenv1alpha1.Agent{Spec: kubeopenv1alpha1.AgentSpec{ServerConfig: agentConfig.serverConfig}})
+		serverURL = ServerURL(agentName, agentNamespace, port)
+		log.Info("Creating Pod for Server-mode Task", "serverURL", serverURL)
+	}
+
 	// Generate Pod name
 	// For cross-namespace, include Task namespace to avoid name conflicts
 	var podName string
@@ -390,7 +405,8 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 	// Create Pod with agent configuration and context mounts
 	// Pod is created in Agent's namespace
 	// Use workingTask which has merged spec from TaskTemplate (if any)
-	pod := buildPod(workingTask, podName, agentNamespace, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, sysCfg)
+	// For Server-mode, serverURL is passed to generate --attach command
+	pod := buildPod(workingTask, podName, agentNamespace, agentConfig, contextConfigMap, fileMounts, dirMounts, gitMounts, sysCfg, serverURL)
 
 	if err := r.Create(ctx, pod); err != nil {
 		log.Error(err, "unable to create Pod", "pod", podName, "namespace", agentNamespace)
@@ -542,9 +558,16 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubeo
 		return agentConfig{}, "", "", fmt.Errorf("agent %q is missing required field serviceAccountName", agentName)
 	}
 
+	// Resolve attach image (only used for Server mode)
+	attachImage := agent.Spec.AttachImage
+	if attachImage == "" {
+		attachImage = DefaultAttachImage
+	}
+
 	return agentConfig{
 		agentImage:         agentImage,
 		executorImage:      executorImage,
+		attachImage:        attachImage,
 		command:            agent.Spec.Command,
 		workspaceDir:       workspaceDir,
 		contexts:           agent.Spec.Contexts,
@@ -554,6 +577,7 @@ func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubeo
 		serviceAccountName: agent.Spec.ServiceAccountName,
 		maxConcurrentTasks: agent.Spec.MaxConcurrentTasks,
 		quota:              agent.Spec.Quota,
+		serverConfig:       agent.Spec.ServerConfig,
 	}, agentName, agentNamespace, nil
 }
 
@@ -666,20 +690,20 @@ func (r *TaskReconciler) resolveTaskTemplate(ctx context.Context, task *kubeopen
 	return merged, nil
 }
 
-// handleTaskDeletion handles Task deletion, cleaning up cross-namespace Pods.
+// handleTaskDeletion handles Task deletion, cleaning up cross-namespace Pods or Server-mode sessions.
 // When Pod runs in a different namespace (cross-namespace Agent), we can't use
 // OwnerReference for automatic cleanup, so we use a finalizer instead.
+// For Server-mode tasks, we also need to delete the OpenCode session.
 func (r *TaskReconciler) handleTaskDeletion(ctx context.Context, task *kubeopenv1alpha1.Task) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	if !controllerutil.ContainsFinalizer(task, TaskFinalizer) {
-		// No finalizer, nothing to clean up
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("cleaning up cross-namespace Pod for deleted Task", "task", task.Name)
+	log.Info("cleaning up resources for deleted Task", "task", task.Name)
 
-	// Delete Pod in the execution namespace
+	// Delete Pod in the execution namespace (both Pod mode and Server mode use Pods)
 	if task.Status.PodName != "" && task.Status.PodNamespace != "" {
 		pod := &corev1.Pod{}
 		podKey := types.NamespacedName{Name: task.Status.PodName, Namespace: task.Status.PodNamespace}

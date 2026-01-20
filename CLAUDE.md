@@ -436,6 +436,7 @@ Key Agent spec fields:
 - `serviceAccountName`: Kubernetes ServiceAccount for RBAC
 - `allowedNamespaces`: Restrict which namespaces can reference this Agent (supports glob patterns)
 - `maxConcurrentTasks`: Limit concurrent Tasks using this Agent (nil/0 = unlimited)
+- `serverConfig`: Enable Server mode (persistent OpenCode server instead of per-Task Pods)
 
 **Two-Container Pattern:**
 
@@ -554,6 +555,89 @@ Both can be used together for comprehensive control. When quota is exceeded:
 - New Tasks enter `Queued` phase with reason `QuotaExceeded`
 - Task start history is tracked in `Agent.status.taskStartHistory`
 - Tasks automatically transition to `Running` when the sliding window allows
+
+**Server Mode (Persistent OpenCode Server):**
+
+Agents can run in two modes:
+- **Pod mode** (default): Creates a new Pod for each Task (ephemeral)
+- **Server mode**: Runs a persistent OpenCode server (Deployment + Service)
+
+Server mode is enabled by adding `serverConfig` to the Agent spec. This is useful for:
+- Avoiding cold start latency (container already running)
+- Sharing pre-loaded contexts/repos across Tasks
+- Long-running use cases (Slack bots, interactive sessions)
+
+```yaml
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: slack-agent
+  namespace: platform-agents
+spec:
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  workspaceDir: /workspace
+  serviceAccountName: kubeopencode-agent
+
+  # Presence of serverConfig enables Server mode
+  serverConfig:
+    port: 4096                    # OpenCode server port (default: 4096)
+
+  # Resource requirements (applies to both Pod and Server modes)
+  podSpec:
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "500m"
+
+  # Concurrency limits apply to Server mode too
+  maxConcurrentTasks: 10
+
+  # Pre-loaded contexts available to all Tasks
+  contexts:
+    - name: codebase
+      type: Git
+      git:
+        repository: https://github.com/company/monorepo.git
+        ref: main
+      mountPath: code
+```
+
+**How Server Mode Works:**
+1. Agent controller creates a Deployment running `opencode serve`
+2. Agent controller creates a Service for internal access
+3. When a Task is created, the Task controller:
+   - Creates a Pod with command: `opencode run --attach <server-url> "$(cat task.md)"`
+   - Standard Pod status tracking (same as Pod mode)
+   - Logs available via `kubectl logs` (same as Pod mode)
+4. Pod is deleted via OwnerReference when Task is deleted
+
+**Server Mode Status:**
+The Agent status includes server information when in Server mode:
+```yaml
+status:
+  serverStatus:
+    deploymentName: slack-agent-server
+    serviceName: slack-agent
+    url: http://slack-agent.platform-agents.svc.cluster.local:4096
+    readyReplicas: 1
+  conditions:
+    - type: ServerReady
+      status: "True"
+    - type: ServerHealthy
+      status: "True"
+```
+
+**Key Differences from Pod Mode:**
+| Aspect | Pod Mode | Server Mode |
+|--------|----------|-------------|
+| Resource lifecycle | New Pod per Task | Persistent Deployment + Pod per Task |
+| Command | `opencode run "task"` | `opencode run --attach <url> "task"` |
+| Cold start | Yes (container startup) | No (server already running) |
+| Context sharing | None (isolated Pods) | Shared across Tasks via server |
+| Scaling | Automatic (more Tasks = more Pods) | Single replica (initial) |
+| Logs | `kubectl logs <pod>` | `kubectl logs <pod>` (same) |
+
+**Note:** Task API is identical for both modes. Both create Pods; Server mode uses `--attach` flag.
 
 **Task Stop:**
 

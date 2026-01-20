@@ -81,6 +81,17 @@ spec:
                 items:
                   type: string
                 type: array
+              attachImage:
+                description: |-
+                  AttachImage specifies the lightweight image used for Server-mode --attach Pods.
+                  When ServerConfig is set, Tasks create Pods that run `opencode run --attach <server-url>`.
+                  These Pods only need the OpenCode binary and network access, not the full development
+                  environment. Using a minimal image (~25MB) instead of devbox (~1GB) significantly
+                  reduces image pull time and resource usage.
+
+                  If not specified, defaults to "quay.io/kubeopencode/kubeopencode-agent-attach:latest".
+                  This field is ignored when ServerConfig is nil (Pod mode).
+                type: string
               command:
                 description: |-
                   Command specifies the entrypoint command for the agent container.
@@ -436,6 +447,77 @@ spec:
                       Example: To make pods match a NetworkPolicy with podSelector:
                         labels:
                           network-policy: agent-restricted
+                    type: object
+                  resources:
+                    description: |-
+                      Resources specifies the compute resources (CPU, memory) for the agent container.
+                      This applies to both Pod mode (per-Task Pods) and Server mode (Deployment).
+                      If not specified, uses the cluster's default resource limits.
+
+                      Example:
+                        resources:
+                          requests:
+                            memory: "512Mi"
+                            cpu: "500m"
+                          limits:
+                            memory: "2Gi"
+                            cpu: "2"
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This is an alpha field and requires enabling the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
                     type: object
                   runtimeClassName:
                     description: |-
@@ -1497,6 +1579,37 @@ spec:
                 - maxTaskStarts
                 - windowSeconds
                 type: object
+              serverConfig:
+                description: |-
+                  ServerConfig enables Server mode for this Agent.
+                  When set, the Agent runs as a persistent OpenCode server (Deployment + Service)
+                  instead of creating ephemeral Pods per Task.
+
+                  Server mode is useful for:
+                    - Long-running agents (e.g., Slack bots, interactive assistants)
+                    - Shared context across Tasks (pre-loaded repositories, faster startup)
+                    - Avoiding cold start latency for each Task
+
+                  When ServerConfig is nil (default), the Agent operates in Pod mode:
+                  each Task creates a new Pod that runs to completion.
+
+                  In Server mode, Tasks create lightweight Pods that use `opencode run --attach`
+                  to connect to the persistent server.
+
+                  Example:
+                    serverConfig:
+                      port: 4096
+                properties:
+                  port:
+                    default: 4096
+                    description: |-
+                      Port is the port OpenCode server listens on.
+                      Defaults to 4096 if not specified.
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                type: object
               serviceAccountName:
                 description: |-
                   ServiceAccountName specifies the Kubernetes ServiceAccount to use for agent pods.
@@ -1587,6 +1700,34 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              serverStatus:
+                description: |-
+                  ServerStatus contains the status of the OpenCode server when running in Server mode.
+                  This is only populated when spec.serverConfig is set.
+                properties:
+                  deploymentName:
+                    description: |-
+                      DeploymentName is the name of the Kubernetes Deployment running the server.
+                      Format: "{agent-name}-server"
+                    type: string
+                  readyReplicas:
+                    description: |-
+                      ReadyReplicas is the number of ready server pods from the Deployment.
+                      For Server-mode, this is typically 0 or 1 (single replica only).
+                    format: int32
+                    type: integer
+                  serviceName:
+                    description: |-
+                      ServiceName is the name of the Kubernetes Service exposing the server.
+                      Format: "{agent-name}"
+                    type: string
+                  url:
+                    description: |-
+                      URL is the in-cluster URL to reach the OpenCode server.
+                      Format: "http://{service-name}.{namespace}.svc.cluster.local:{port}"
+                      Tasks use this URL with `opencode run --attach` to connect to the server.
+                    type: string
+                type: object
               taskStartHistory:
                 description: |-
                   TaskStartHistory tracks recent Task starts for quota enforcement.
