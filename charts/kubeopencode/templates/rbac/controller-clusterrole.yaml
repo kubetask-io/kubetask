@@ -78,6 +78,32 @@ rules:
   - update
   - patch
   - delete
+# Services (for Server-mode Agents)
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+# Deployments (for Server-mode Agents)
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 # Leader election
 - apiGroups:
   - coordination.k8s.io
