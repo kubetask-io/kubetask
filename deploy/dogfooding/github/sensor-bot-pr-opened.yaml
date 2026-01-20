@@ -35,6 +35,12 @@ spec:
             type: string
             value:
               - opened
+          # Exclude Dependabot PRs
+          - path: body.sender.login
+            type: string
+            comparator: "!="
+            value:
+              - dependabot[bot]
   triggers:
     - template:
         name: pr-opened

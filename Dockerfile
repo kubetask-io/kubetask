@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
     ./cmd/kubeopencode/
 
 # Runtime stage - use alpine for git and ssh (required for git-init)
-FROM alpine:3.21
+FROM alpine:3.23
 
 # Re-declare ARGs for this stage (ARGs don't persist across stages)
 ARG GIT_COMMIT=unknown

@@ -34,7 +34,7 @@ jobs:
     if: ${{ inputs.build_kubeopencode }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -65,7 +65,7 @@ jobs:
     if: ${{ inputs.build_helm }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Helm
         run: |
@@ -87,7 +87,7 @@ jobs:
     if: ${{ inputs.build_agent_opencode }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -118,7 +118,7 @@ jobs:
     if: ${{ inputs.build_agent_devbox }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
