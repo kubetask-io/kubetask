@@ -24,6 +24,7 @@ dist/
 .env.*
 *credentials*
 *secret*
+!*.example
 *_id*
 *_secret*
 *_key*

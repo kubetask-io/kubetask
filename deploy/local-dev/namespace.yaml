@@ -1,0 +1,9 @@
+# Copyright Contributors to the KubeOpenCode project
+# Namespace for local testing
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test
+  labels:
+    app.kubernetes.io/name: kubeopencode
+    app.kubernetes.io/component: local-test

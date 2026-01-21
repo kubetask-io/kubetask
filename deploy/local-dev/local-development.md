@@ -1,4 +1,4 @@
-# Local Development Environment Setup
+# Local Development Guide
 
 This guide describes how to set up a local development environment for KubeOpenCode using Kind (Kubernetes in Docker).
 
@@ -133,73 +133,143 @@ Or use the convenience target:
 make e2e-reload
 ```
 
-## Testing a Task
+## Local Test Environment
 
-Create a test namespace and service account:
+For quick testing, use the pre-configured resources in `deploy/local-dev/`:
+
+### Deploy Test Resources
 
 ```bash
-kubectl create namespace test
-kubectl create serviceaccount task-runner -n test
+# First, create secrets.yaml from template
+cp deploy/local-dev/secrets.yaml.example deploy/local-dev/secrets.yaml
+# Edit secrets.yaml with your real API keys
+vim deploy/local-dev/secrets.yaml
+
+# Deploy all resources (namespace, secrets, RBAC, agents)
+kubectl apply -k deploy/local-dev/
+
+# Verify the Agent is ready (for Server mode)
+kubectl get agent -n test
+kubectl get deployment -n test
 ```
 
-Create an Agent:
+### Resources Created
+
+| Resource | Name | Description |
+|----------|------|-------------|
+| Namespace | `test` | Isolated namespace for testing |
+| Secret | `opencode-credentials` | OpenCode API key |
+| Secret | `git-settings` | Git author/committer settings |
+| ServiceAccount | `kubeopencode-agent` | Agent service account |
+| Role/RoleBinding | `kubeopencode-agent` | RBAC permissions |
+| Agent | `server-agent` | Server-mode agent (persistent) |
+| Agent | `pod-agent` | Pod-mode agent (per-task) |
+
+### Test Tasks
+
+#### Server Mode Test
 
 ```bash
-cat <<EOF | kubectl apply -f -
-apiVersion: kubeopencode.io/v1alpha1
-kind: Agent
-metadata:
-  name: opencode-agent
-  namespace: test
-spec:
-  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
-  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
-  command:
-    - sh
-    - -c
-    - /tools/opencode run "\$(cat \${WORKSPACE_DIR}/task.md)"
-  workspaceDir: /workspace
-  serviceAccountName: task-runner
-EOF
-```
-
-Create a Task:
-
-```bash
-cat <<EOF | kubectl apply -f -
+kubectl apply -n test -f - <<EOF
 apiVersion: kubeopencode.io/v1alpha1
 kind: Task
 metadata:
-  name: hello-world
-  namespace: test
+  name: server-test
 spec:
-  agentRef: opencode-agent
-  description: "Hello, KubeOpenCode!"
+  agentRef:
+    name: server-agent
+  description: "Say hello world"
 EOF
+
+# Check status
+kubectl get task -n test
+kubectl logs -n test server-test-pod -c agent
 ```
 
-Check Task status:
+#### Pod Mode Test
 
 ```bash
-kubectl get task -n test hello-world -o yaml
+kubectl apply -n test -f - <<EOF
+apiVersion: kubeopencode.io/v1alpha1
+kind: Task
+metadata:
+  name: pod-test
+spec:
+  agentRef:
+    name: pod-agent
+  description: "What is 2+2?"
+EOF
+
+# Check status
+kubectl get task -n test
+kubectl logs -n test pod-test-pod -c agent
 ```
 
-Check Pod logs:
+#### Concurrent Tasks Test
 
 ```bash
-kubectl logs -n test -l kubeopencode.io/task=hello-world
+for i in 1 2 3; do
+  kubectl apply -n test -f - <<EOF
+apiVersion: kubeopencode.io/v1alpha1
+kind: Task
+metadata:
+  name: concurrent-$i
+spec:
+  agentRef:
+    name: server-agent
+  description: "Count to $i"
+EOF
+done
+
+# Watch progress
+kubectl get task -n test -w
+```
+
+### Customization
+
+#### Using Real Secrets
+
+Create a local secrets file (gitignored):
+
+```bash
+cp deploy/local-dev/secrets.yaml deploy/local-dev/secrets.local.yaml
+# Edit secrets.local.yaml with real values
+kubectl apply -f deploy/local-dev/secrets.local.yaml -n test
+```
+
+#### Different AI Model
+
+Edit `agent-server.yaml` or `agent-pod.yaml` to change the model:
+
+```yaml
+config: |
+  {
+    "$schema": "https://opencode.ai/config.json",
+    "model": "anthropic/claude-sonnet-4-20250514",
+    "small_model": "anthropic/claude-haiku-4-20250514"
+  }
 ```
 
 ## Cleanup
 
-Uninstall KubeOpenCode:
+### Delete Test Resources
+
+```bash
+# Delete all tasks
+kubectl delete task --all -n test
+
+# Delete all test resources
+kubectl delete -k deploy/local-dev/
+```
+
+### Uninstall KubeOpenCode
 
 ```bash
 helm uninstall kubeopencode -n kubeopencode-system
 kubectl delete namespace kubeopencode-system
 ```
 
-Delete the Kind cluster:
+### Delete Kind Cluster
 
 ```bash
 kind delete cluster --name kubeopencode

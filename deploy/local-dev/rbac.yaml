@@ -1,0 +1,62 @@
+# Copyright Contributors to the KubeOpenCode project
+# RBAC resources for local test environment
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeopencode-agent
+  labels:
+    app.kubernetes.io/name: kubeopencode
+    app.kubernetes.io/component: agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubeopencode-agent
+  labels:
+    app.kubernetes.io/name: kubeopencode
+    app.kubernetes.io/component: agent
+rules:
+  # Allow agent to read and update Task resources
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasks"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  # Allow agent to update Task status
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasks/status"]
+    verbs: ["get", "patch", "update"]
+  # Allow agent to read Agent configuration
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["agents"]
+    verbs: ["get", "list", "watch"]
+  # Allow agent to read KubeOpenCodeConfig
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["kubeopencodeconfigs"]
+    verbs: ["get", "list", "watch"]
+  # Allow agent to read TaskTemplate resources
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasktemplates"]
+    verbs: ["get", "list", "watch"]
+  # Allow agent to read Pods and Pod logs
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # Allow agent to read ConfigMaps
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeopencode-agent
+  labels:
+    app.kubernetes.io/name: kubeopencode
+    app.kubernetes.io/component: agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeopencode-agent
+subjects:
+  - kind: ServiceAccount
+    name: kubeopencode-agent

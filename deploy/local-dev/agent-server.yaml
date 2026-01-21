@@ -1,0 +1,36 @@
+# Copyright Contributors to the KubeOpenCode project
+# Server-mode Agent for local testing
+#
+# This Agent runs a persistent OpenCode server (Deployment + Service).
+# Tasks connect to the server via --attach flag for faster execution.
+#
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: server-agent
+spec:
+  # OpenCode init container image
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  # Executor container image (used by the server)
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  # Working directory
+  workspaceDir: /workspace
+  # ServiceAccount for RBAC
+  serviceAccountName: kubeopencode-agent
+  # Enable Server mode
+  serverConfig:
+    port: 4096
+  # OpenCode configuration
+  config: |
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "model": "opencode/minimax-m2.1-free",
+      "small_model": "opencode/minimax-m2.1-free",
+      "share": "disabled",
+      "autoupdate": false
+    }
+  # Mount OpenCode API credentials
+  credentials:
+    - name: opencode
+      secretRef:
+        name: opencode-credentials

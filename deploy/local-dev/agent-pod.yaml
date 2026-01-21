@@ -1,0 +1,33 @@
+# Copyright Contributors to the KubeOpenCode project
+# Pod-mode Agent for local testing
+#
+# This Agent creates a new Pod for each Task (traditional mode).
+# Each Task runs in isolation with its own container.
+#
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: pod-agent
+spec:
+  # OpenCode init container image
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  # Executor container image
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  # Working directory
+  workspaceDir: /workspace
+  # ServiceAccount for RBAC
+  serviceAccountName: kubeopencode-agent
+  # OpenCode configuration
+  config: |
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "model": "opencode/minimax-m2.1-free",
+      "small_model": "opencode/minimax-m2.1-free",
+      "share": "disabled",
+      "autoupdate": false
+    }
+  # Mount OpenCode API credentials
+  credentials:
+    - name: opencode
+      secretRef:
+        name: opencode-credentials
