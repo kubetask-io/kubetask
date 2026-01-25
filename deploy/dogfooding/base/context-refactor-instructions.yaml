@@ -23,50 +23,88 @@ data:
     2. **Behavior Preservation**: Code must work exactly the same before and after
     3. **One Change Per Run**: Focus on a single refactoring operation
     4. **Test Verification**: Always run tests to confirm no behavior change
+    5. **Tool-Assisted Discovery**: Use static analysis tools to find issues
+
+    ## Step 0: Use Static Analysis First
+
+    Before manual scanning, run these tools to find obvious issues:
+
+    ```bash
+    cd kubeopencode
+
+    # Find unused code, shadowed variables, etc.
+    go vet ./...
+
+    # Find dead code, unused parameters (if available)
+    staticcheck ./... 2>/dev/null || true
+
+    # Check for inefficient code patterns
+    golangci-lint run --no-config --disable-all \
+      --enable=unused,deadcode,ineffassign,unconvert \
+      ./... 2>/dev/null || true
+    ```
+
+    If tools report issues, prioritize fixing those first (they are verified safe).
 
     ## Refactoring Priority Order
 
-    Scan the codebase and choose the FIRST applicable refactoring type:
+    After running static analysis, choose the FIRST applicable refactoring type:
 
     ### Priority 1: Dead Code Removal (Safest)
-    - Unused imports
-    - Unused variables
-    - Unused private functions
-    - Commented-out code blocks (>5 lines)
+    - Unused imports (often caught by `go vet`)
+    - Unused variables (often caught by compiler)
+    - Unused private functions (unexported functions with no callers)
+    - Commented-out code blocks (>5 lines, not TODOs)
 
     ### Priority 2: Naming Improvements
-    - Single-letter variable names in non-trivial contexts
-    - Misleading or outdated names
-    - Inconsistent naming patterns
+    - Single-letter variable names in functions >10 lines (except `i`, `j`, `k` for loops, `t` for testing.T, `r` for http.Request, `w` for http.ResponseWriter)
+    - Misleading names (e.g., `list` that is actually a map)
+    - Inconsistent patterns (e.g., mixing `Get`/`Fetch` for same concept)
 
     ### Priority 3: Magic Values
-    - Magic numbers (hardcoded values without explanation)
-    - Magic strings (repeated string literals)
-    - Extract to named constants
+    Extract to named constants when:
+    - Numbers appear 2+ times with same meaning
+    - Numbers have non-obvious meaning (NOT: 0, 1, -1, 100 for percentages)
+    - Strings are repeated 3+ times
+    - Timeout/duration values without context
+
+    **Exceptions (do NOT extract):**
+    - `0`, `1`, `-1` (universal meanings)
+    - Array/slice indices
+    - Percentage values (0-100)
+    - HTTP status codes in tests
+    - Struct field defaults
 
     ### Priority 4: Code Simplification
-    - Overly complex boolean expressions
-    - Nested conditionals that can be flattened
-    - Early returns to reduce nesting
+    - Boolean expressions with >2 operators: simplify or extract to named function
+    - Nesting depth >3 levels: use early returns
+    - `if err != nil { return err }` chains: consider helper if >5 consecutive
 
     ### Priority 5: Small Extractions
-    - Long functions (>30 lines) with extractable blocks
-    - Duplicate code fragments (>5 lines appearing 2+ times)
+    - Functions >50 lines with logically separable blocks
+    - Duplicate code fragments (>8 lines appearing 2+ times)
+    - Complex inline expressions that deserve a name
 
     ## What NOT to Refactor
 
-    - **Public APIs**: Do not change function signatures in api/ directory
-    - **Generated Code**: Skip files with `zz_generated` prefix
-    - **Vendor Code**: Skip any vendored dependencies
-    - **Test Data**: Skip test fixtures and golden files
-    - **Configuration**: Skip YAML/JSON configuration files
+    - **Public APIs**: Do not change exported types/functions in `api/` directory
+    - **Generated Code**: Skip `zz_generated*`, `*_generated.go`
+    - **Vendor Code**: Skip `vendor/` directory
+    - **Test Data**: Skip `testdata/`, golden files, fixtures
+    - **Configuration**: Skip YAML/JSON/TOML files
+    - **Documentation**: Skip markdown files, comments explaining "why"
+    - **Recently Changed**: Skip files modified in last 5 commits (avoid conflicts)
 
     ## File Focus
 
     Prefer refactoring in these directories (in order):
-    1. `internal/controller/` - Controller logic
+    1. `internal/controller/` - Controller logic (highest impact)
     2. `cmd/kubeopencode/` - CLI commands
     3. `pkg/` - Shared packages (if any)
+
+    Skip these even if issues found:
+    - `e2e/` - E2E test scaffolding
+    - `hack/` - Build scripts
 
   # =============================================================================
   # WORKFLOW: Step-by-step process for refactoring
@@ -74,88 +112,105 @@ data:
   workflow.md: |
     # Refactoring Workflow
 
-    ## Step 1: Identify Refactoring Opportunity
+    ## Step 1: Discover and Choose
 
-    1. Navigate to the cloned repository:
+    ```bash
+    cd kubeopencode
+    ```
+
+    1. Run static analysis tools (see Step 0 in guidelines)
+    2. If tools find issues, pick the first one
+    3. If no tool findings, manually scan following priority order
+    4. Choose exactly ONE refactoring to implement
+
+    Before proceeding, verify:
+    - [ ] The change is in an allowed directory
+    - [ ] The file was not modified in recent commits: `git log -5 --oneline -- <file>`
+    - [ ] You understand the code's purpose
+
+    ## Step 2: Implement
+
+    1. Create branch:
        ```bash
-       cd kubeopencode
+       git checkout -b refactor/$(date +%Y%m%d)-<short-description>
        ```
 
-    2. Scan for refactoring opportunities following the priority order
-       in `refactoring-guidelines.md`
+    2. Make the minimal change required
 
-    3. Choose exactly ONE small refactoring to implement
+    3. Self-check before committing:
+       - Does this change behavior? If unsure, STOP
+       - Is this the smallest possible change?
+       - Would a reviewer understand this immediately?
 
-    4. Document your choice:
-       - What type of refactoring (from priority list)
-       - Which file(s) affected
-       - Why this improves the code
+    ## Step 3: Verify
 
-    ## Step 2: Implement the Change
+    Run verification in order (stop on first failure):
 
-    1. Create a new branch:
-       ```bash
-       git checkout -b refactor/tiny-$(date +%Y%m%d)-<short-description>
-       ```
+    ```bash
+    # 1. Code compiles
+    go build ./...
 
-    2. Make the refactoring change
+    # 2. Linter passes
+    make lint
 
-    3. Ensure the change is minimal and focused
+    # 3. Tests pass
+    make test
+    ```
 
-    ## Step 3: Verify No Behavior Change
+    ### On Failure: Rollback Procedure
 
-    1. Run linter:
-       ```bash
-       make lint
-       ```
+    If ANY verification step fails:
 
-    2. Run tests:
-       ```bash
-       make test
-       ```
+    ```bash
+    # Discard all uncommitted changes
+    git checkout -- .
 
-    3. If any test fails, ABORT and do not create PR
-       - Revert your changes
-       - Choose a different, safer refactoring
-       - Or report that no safe refactoring was found
+    # Remove any new untracked files
+    git clean -fd
 
-    ## Step 4: Create Pull Request
+    # Return to main branch
+    git checkout main
 
-    1. Commit with signoff:
-       ```bash
-       git add .
-       git commit -s -m "refactor: <description>
+    # Delete the failed branch
+    git branch -D refactor/$(date +%Y%m%d)-<short-description>
+    ```
 
-       <brief explanation of what was changed and why>
+    Then either:
+    - Try a different, safer refactoring
+    - Exit with "no safe refactoring found" (see no-refactoring.md)
 
-       This is an automated tiny refactoring to improve code quality.
-       Type: <refactoring type from priority list>"
-       ```
+    **Do NOT attempt to fix failing tests** - that changes behavior.
 
-    2. Push and create PR:
-       ```bash
-       git push -u origin HEAD
-       gh pr create \
-         --title "refactor: <short description>" \
-         --body "## Summary
-       <1-2 sentences explaining the refactoring>
+    ## Step 4: Commit and PR
 
-       ## Type
-       <refactoring type from priority list>
+    ```bash
+    # Commit with signoff
+    git add -A
+    git commit -s -m "refactor(<scope>): <what changed>
 
-       ## Changes
-       - <bullet points of specific changes>
+    <why this improves the code - one line>
 
-       ## Verification
-       - [x] make lint passes
-       - [x] make test passes
-       - [x] No behavior change
+    Type: <Priority N: Category Name>"
 
-       ---
-       *Automated refactoring by @kubeopencode-refactor*" \
-         --label "refactor" \
-         --label "automated"
-       ```
+    # Push and create PR
+    git push -u origin HEAD
+    gh pr create \
+      --title "refactor(<scope>): <what changed>" \
+      --body "**Type:** <Priority N: Category Name>
+
+    **Change:** <one sentence>
+
+    **Why:** <one sentence>
+
+    **Verified:** go build, make lint, make test all pass
+
+    ---
+    _Automated by kubeopencode-refactor_" \
+      --label "refactor" \
+      --label "automated"
+    ```
+
+    **Scope examples:** `controller`, `cli`, `api`, `pkg`
 
   # =============================================================================
   # NO-OP: What to do when no refactoring is found
@@ -163,24 +218,58 @@ data:
   no-refactoring.md: |
     # No Refactoring Found
 
-    If you scan the codebase and cannot find any safe refactoring to perform:
+    If you cannot find any safe refactoring:
 
-    1. **Do not force a change** - It's okay to skip a day
+    1. **Do not force a change** - quality over quantity
+    2. **Do not create an issue** - no-op is normal and expected
+    3. **Exit cleanly** with a brief summary:
 
-    2. **Create an issue instead** (optional):
-       ```bash
-       gh issue create \
-         --title "Refactoring scan: no opportunities found ($(date +%Y-%m-%d))" \
-         --body "The automated refactoring scan did not find any safe refactoring opportunities today.
+    ```
+    Refactoring scan complete. No safe refactoring opportunities found.
 
-       This could mean:
-       - The codebase is well-maintained
-       - Remaining refactorings are too risky for automation
-       - More complex refactorings require human judgment
+    Checked:
+    - Static analysis: no actionable issues
+    - Priority 1-5 categories: no applicable changes
 
-       ---
-       *Automated scan by @kubeopencode-refactor*" \
-         --label "automated"
-       ```
+    This is normal for a well-maintained codebase.
+    ```
 
-    3. **Exit cleanly**: The task should complete successfully even if no PR is created
+    The task succeeds even without a PR.
+
+  # =============================================================================
+  # SAFETY: Hard rules that cannot be overridden
+  # =============================================================================
+  safety-rules.md: |
+    # Safety Rules (Non-Negotiable)
+
+    These rules MUST be followed. No exceptions.
+
+    ## Absolute Prohibitions
+
+    1. **Never change function signatures** of exported functions
+    2. **Never modify struct field names** or types
+    3. **Never change error messages** that might be parsed by callers
+    4. **Never reorder struct fields** (can break serialization)
+    5. **Never rename packages**
+    6. **Never modify constants** that might be referenced externally
+
+    ## Size Limits
+
+    - Maximum files changed: 3
+    - Maximum lines changed: 50
+    - Maximum functions modified: 5
+
+    If your refactoring exceeds these limits, it's too big. Split it up.
+
+    ## Uncertainty = Stop
+
+    If you're unsure whether a change is safe:
+    - STOP immediately
+    - Do NOT proceed "to see what happens"
+    - Choose a different, obviously safe refactoring
+    - Or exit with no changes
+
+    ## Verification is Mandatory
+
+    Never skip `go build`, `make lint`, or `make test`.
+    If any command fails, the refactoring is rejected.
