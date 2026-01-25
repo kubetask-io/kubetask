@@ -164,6 +164,10 @@ const (
 	// This path is chosen to avoid conflicts with repository's AGENTS.md or CLAUDE.md files.
 	// OpenCode loads this file via the instructions config injected through OPENCODE_CONFIG_CONTENT.
 	ContextFileRelPath = ".kubeopencode/context.md"
+
+	// DefaultSecretFileMode is the default permission mode for mounted secrets.
+	// 0600 gives read/write access to the owner only.
+	DefaultSecretFileMode int32 = 0600
 )
 
 // buildOpenCodeInitContainer creates an init container that copies OpenCode binary to /tools.
@@ -420,7 +424,7 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 				volumeName := fmt.Sprintf("credential-%d", i)
 
 				// Default file mode is 0600 (read/write for owner only)
-				var fileMode int32 = 0600
+				var fileMode = DefaultSecretFileMode
 				if cred.FileMode != nil {
 					fileMode = *cred.FileMode
 				}
@@ -472,7 +476,7 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 			volumeName := fmt.Sprintf("credential-%d", i)
 
 			// Default file mode is 0600 (read/write for owner only)
-			var fileMode int32 = 0600
+			var fileMode = DefaultSecretFileMode
 			if cred.FileMode != nil {
 				fileMode = *cred.FileMode
 			}
