@@ -21,7 +21,7 @@ spec:
   config: |
     {
       "$schema": "https://opencode.ai/config.json",
-      "model": "opencode/gemini-3-flash",
+      "model": "opencode/gemini-3-pro",
       "small_model": "opencode/gemini-3-flash",
       "share": "disabled",
       "autoupdate": false
