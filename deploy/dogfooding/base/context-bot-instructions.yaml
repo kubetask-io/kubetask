@@ -106,6 +106,30 @@ data:
     **IMPORTANT**: Always post your response using the appropriate `gh` command.
     Do not just print to stdout.
 
+    ### Execution Principles
+
+    **CRITICAL**: These rules help prevent getting stuck in thinking loops.
+
+    1. **Act, Don't Overthink**: If you find yourself repeatedly revising a command
+       without executing it, STOP and execute a simpler version first. Two simple
+       commands are better than one perfect command that never runs.
+
+    2. **Simple Commands First**: Use multiple simple commands instead of one complex
+       command. Avoid complex `--jq` queries with nested escaping.
+       - Bad: `gh api ... --jq '.[] | "complex \(.nested) formatting"'`
+       - Good: `gh api ...` (then analyze the raw JSON output directly)
+
+    3. **Avoid Complex Escaping**: If a command requires nested quotes (quotes inside
+       quotes inside quotes), break it into steps or just run without formatting.
+       The LLM can parse raw JSON output easily - no need for complex jq formatting.
+
+    4. **Execute Immediately**: Once you decide on a command, execute it. Do not
+       spend multiple iterations refining the escaping or formatting. If it fails,
+       try a simpler approach.
+
+    5. **Repository Already Cloned**: The workspace already contains the cloned
+       repository. Do NOT clone it again. Just read files and use `gh` commands.
+
   # =============================================================================
   # OUTPUT: How to post responses to different GitHub contexts
   # =============================================================================
@@ -279,8 +303,13 @@ data:
 
     Triggered when @kubeopencode-bot is mentioned in a GitHub Discussion comment.
 
-    ## Context Gathering
+    ## Workflow
 
+    Follow these steps IN ORDER. Execute each command immediately - do not overthink.
+
+    ### Step 1: Get Discussion Context
+
+    Run this command to get the discussion details (just run it, don't modify):
     ```bash
     gh api graphql -f query='
       query {
@@ -288,13 +317,10 @@ data:
           discussion(number: ${NUMBER}) {
             title
             body
-            comments(first: 100) {
+            comments(first: 50) {
               nodes {
                 author { login }
                 body
-                replies(first: 50) {
-                  nodes { author { login } body }
-                }
               }
             }
           }
@@ -303,9 +329,45 @@ data:
     '
     ```
 
-    ## Response Method
+    **Note**: The output will be raw JSON. That's fine - just read and understand it directly.
+    Do NOT try to format it with jq.
 
-    Use Discussion Comment method from `output-methods.md`:
+    ### Step 2: Analyze the User's Question
+
+    Read the discussion context and identify:
+    - What is the user asking?
+    - What information do they need?
+    - Do you need to read any code files to answer?
+
+    If you need to read code, use simple commands like:
     ```bash
-    gh api repos/${REPO}/discussions/${NUMBER}/comments -f body="<response>"
+    cat path/to/file.go
+    ```
+
+    If you need to check commits:
+    ```bash
+    git log -10 --oneline
+    ```
+
+    **IMPORTANT**: Keep commands simple. No complex jq queries or formatting.
+
+    ### Step 3: Post Your Response
+
+    Use the Discussion Comment API to post your response:
+    ```bash
+    gh api repos/${REPO}/discussions/${NUMBER}/comments -f body="Your response here"
+    ```
+
+    For multi-line responses, use a heredoc:
+    ```bash
+    gh api repos/${REPO}/discussions/${NUMBER}/comments -f body="$(cat <<'EOF'
+    > @${COMMENTER} Your question about...
+
+    Here is my answer:
+    - Point 1
+    - Point 2
+
+    Let me know if you have more questions!
+    EOF
+    )"
     ```
