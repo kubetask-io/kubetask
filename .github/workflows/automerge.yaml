@@ -3,14 +3,18 @@
 name: Auto-merge Bot PRs
 
 on:
-  # Run every Sunday at 00:00 UTC (same as weekly-agent-build)
+  # User approve triggers immediate merge attempt
+  pull_request_review:
+    types: [submitted]
+  # CI completion triggers merge check (handles branch update case)
+  workflow_run:
+    workflows: ["PR"]
+    types: [completed]
+  # Fallback: weekly batch processing
   schedule:
     - cron: '0 0 * * 0'
-  # Support manual trigger
+  # Manual trigger for batch processing
   workflow_dispatch:
-  # Trigger when bot opens/updates a PR
-  pull_request_target:
-    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
@@ -19,33 +23,139 @@ permissions:
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
-    # Only process bot PRs, or schedule/manual triggers
-    if: github.actor == 'dependabot[bot]' || github.actor == 'kubeopencode-dev[bot]' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Enable auto-merge for bot PRs
-        if: github.event_name == 'pull_request_target'
-        run: gh pr merge --auto --squash "$PR_URL"
+      - name: Get PR info
+        id: pr-info
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Auto-merge all pending bot PRs
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
-          # Get all open bot PRs with passing checks
-          prs=$(gh pr list --author "app/dependabot" --author "app/kubeopencode-dev" --state open --json number,statusCheckRollup --jq '.[] | select(.statusCheckRollup != null and (.statusCheckRollup | length > 0) and (.statusCheckRollup | all(.conclusion == "SUCCESS" or .conclusion == "NEUTRAL" or .conclusion == "SKIPPED"))) | .number')
-
-          if [ -z "$prs" ]; then
-            echo "No bot PRs with passing checks found"
+          # Get PR number based on event type
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Get PR from workflow_run's head branch
+            HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
+            PR_NUMBER=$(gh pr list --head "$HEAD_BRANCH" --state open --json number --jq '.[0].number // empty')
+            if [ -z "$PR_NUMBER" ]; then
+              echo "No open PR found for branch: $HEAD_BRANCH"
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          elif [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            # Only process approved reviews
+            if [ "${{ github.event.review.state }}" != "approved" ]; then
+              echo "Review is not an approval, skipping"
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            PR_NUMBER=${{ github.event.pull_request.number }}
+          else
+            # schedule/workflow_dispatch use batch processing
+            echo "batch_mode=true" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          for pr in $prs; do
-            echo "Enabling auto-merge for PR #$pr"
-            gh pr merge --auto --squash "$pr" || echo "Failed to enable auto-merge for PR #$pr"
-          done
+          echo "Processing PR #$PR_NUMBER"
+
+          # Get PR details
+          pr_info=$(gh pr view "$PR_NUMBER" --json author,state,mergeStateStatus,statusCheckRollup,reviews)
+
+          AUTHOR=$(echo "$pr_info" | jq -r '.author.login')
+          STATE=$(echo "$pr_info" | jq -r '.state')
+          MERGE_STATUS=$(echo "$pr_info" | jq -r '.mergeStateStatus')
+          APPROVED=$(echo "$pr_info" | jq '[.reviews[] | select(.state == "APPROVED")] | length > 0')
+          CHECKS_PASSED=$(echo "$pr_info" | jq '[.statusCheckRollup[] | select(.conclusion != "SUCCESS" and .conclusion != "NEUTRAL" and .conclusion != "SKIPPED" and .conclusion != null)] | length == 0')
+
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "state=$STATE" >> $GITHUB_OUTPUT
+          echo "merge_status=$MERGE_STATUS" >> $GITHUB_OUTPUT
+          echo "approved=$APPROVED" >> $GITHUB_OUTPUT
+          echo "checks_passed=$CHECKS_PASSED" >> $GITHUB_OUTPUT
+
+          echo "PR #$PR_NUMBER - Author: $AUTHOR, State: $STATE, Merge Status: $MERGE_STATUS, Approved: $APPROVED, Checks Passed: $CHECKS_PASSED"
+
+      - name: Check if bot PR
+        id: is-bot
+        if: steps.pr-info.outputs.skip != 'true' && steps.pr-info.outputs.batch_mode != 'true'
+        run: |
+          AUTHOR="${{ steps.pr-info.outputs.author }}"
+          if [[ "$AUTHOR" == "dependabot[bot]" ]] || [[ "$AUTHOR" == "app/dependabot" ]] || [[ "$AUTHOR" == "kubeopencode-dev[bot]" ]] || [[ "$AUTHOR" == "app/kubeopencode-dev" ]]; then
+            echo "is_bot=true" >> $GITHUB_OUTPUT
+          else
+            echo "Not a bot PR (author: $AUTHOR), skipping"
+            echo "is_bot=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update branch if behind
+        if: |
+          steps.pr-info.outputs.skip != 'true' &&
+          steps.pr-info.outputs.batch_mode != 'true' &&
+          steps.is-bot.outputs.is_bot == 'true' &&
+          steps.pr-info.outputs.state == 'OPEN' &&
+          steps.pr-info.outputs.approved == 'true' &&
+          steps.pr-info.outputs.checks_passed == 'true' &&
+          steps.pr-info.outputs.merge_status == 'BEHIND'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Branch is behind main, updating..."
+          gh pr update-branch ${{ steps.pr-info.outputs.pr_number }} || echo "Failed to update branch"
+          echo "Branch updated. New CI will run and trigger this workflow again."
+
+      - name: Merge PR
+        if: |
+          steps.pr-info.outputs.skip != 'true' &&
+          steps.pr-info.outputs.batch_mode != 'true' &&
+          steps.is-bot.outputs.is_bot == 'true' &&
+          steps.pr-info.outputs.state == 'OPEN' &&
+          steps.pr-info.outputs.approved == 'true' &&
+          steps.pr-info.outputs.checks_passed == 'true' &&
+          steps.pr-info.outputs.merge_status != 'BEHIND'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "All conditions met, merging PR #${{ steps.pr-info.outputs.pr_number }}..."
+          gh pr merge ${{ steps.pr-info.outputs.pr_number }} --squash --delete-branch
+
+      - name: Batch process (schedule/manual)
+        if: steps.pr-info.outputs.batch_mode == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Running batch processing for bot PRs..."
+
+          # Get all open bot PRs
+          for author in "app/dependabot" "app/kubeopencode-dev"; do
+            echo "Checking PRs from $author..."
+
+            gh pr list --author "$author" --state open --json number,reviews,statusCheckRollup,mergeStateStatus | jq -c '.[]' | while read -r pr; do
+              number=$(echo "$pr" | jq -r '.number')
+              merge_status=$(echo "$pr" | jq -r '.mergeStateStatus')
+              approved=$(echo "$pr" | jq '[.reviews[] | select(.state == "APPROVED")] | length > 0')
+              checks_passed=$(echo "$pr" | jq '[.statusCheckRollup[] | select(.conclusion != "SUCCESS" and .conclusion != "NEUTRAL" and .conclusion != "SKIPPED" and .conclusion != null)] | length == 0')
+
+              echo "PR #$number - Merge Status: $merge_status, Approved: $approved, Checks Passed: $checks_passed"
+
+              if [ "$approved" != "true" ]; then
+                echo "PR #$number not approved, skipping"
+                continue
+              fi
+
+              if [ "$checks_passed" != "true" ]; then
+                echo "PR #$number has failing checks, skipping"
+                continue
+              fi
+
+              if [ "$merge_status" = "BEHIND" ]; then
+                echo "Updating branch for PR #$number"
+                gh pr update-branch "$number" || echo "Failed to update PR #$number"
+              else
+                echo "Merging PR #$number"
+                gh pr merge "$number" --squash --delete-branch || echo "Failed to merge PR #$number"
+              fi
+            done
+          done
+
+          echo "Batch processing complete"

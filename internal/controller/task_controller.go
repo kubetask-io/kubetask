@@ -21,6 +21,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kubeopenv1alpha1 "github.com/kubeopencode/kubeopencode/api/v1alpha1"
@@ -235,11 +236,9 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Determine if this is a cross-namespace setup
-	isCrossNamespace := agentNamespace != task.Namespace
-
-	// Add finalizer for cross-namespace Pod cleanup
-	if isCrossNamespace && !controllerutil.ContainsFinalizer(task, TaskFinalizer) {
+	// Add finalizer for Pod cleanup (handles both same-namespace and cross-namespace)
+	// We use finalizer uniformly instead of OwnerReference for consistent cleanup behavior
+	if !controllerutil.ContainsFinalizer(task, TaskFinalizer) {
 		controllerutil.AddFinalizer(task, TaskFinalizer)
 		if err := r.Update(ctx, task); err != nil {
 			log.Error(err, "unable to add finalizer")
@@ -336,6 +335,7 @@ func (r *TaskReconciler) initializeTask(ctx context.Context, task *kubeopenv1alp
 
 	// Generate Pod name
 	// For cross-namespace, include Task namespace to avoid name conflicts
+	isCrossNamespace := agentNamespace != task.Namespace
 	var podName string
 	if isCrossNamespace {
 		podName = fmt.Sprintf("%s-%s-pod", task.Namespace, task.Name)
@@ -520,11 +520,17 @@ func (r *TaskReconciler) updateTaskStatusFromPod(ctx context.Context, task *kube
 	return nil
 }
 
-// SetupWithManager sets up the controller with the Manager
+// SetupWithManager sets up the controller with the Manager.
+// We use Watches instead of Owns for Pods because Pods don't have owner references
+// to Tasks (to support cross-namespace Agent scenarios). The custom handler maps
+// Pod events to Task reconciliation requests using labels.
 func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kubeopenv1alpha1.Task{}).
-		Owns(&corev1.Pod{}).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(podToTaskMapper),
+		).
 		Complete(r)
 }
 
@@ -757,11 +763,29 @@ func (r *TaskReconciler) handleTaskDeletion(ctx context.Context, task *kubeopenv
 		}
 	}
 
-	// Remove finalizer
-	controllerutil.RemoveFinalizer(task, TaskFinalizer)
-	if err := r.Update(ctx, task); err != nil {
-		log.Error(err, "failed to remove finalizer")
+	// Re-fetch the task to get the latest version before updating
+	// This is necessary because the task may have been modified during cleanup
+	latestTask := &kubeopenv1alpha1.Task{}
+	taskKey := types.NamespacedName{Name: task.Name, Namespace: task.Namespace}
+	if err := r.Get(ctx, taskKey, latestTask); err != nil {
+		if errors.IsNotFound(err) {
+			// Task already deleted, nothing to do
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, err
+	}
+
+	// Remove finalizer from the latest version
+	if controllerutil.ContainsFinalizer(latestTask, TaskFinalizer) {
+		controllerutil.RemoveFinalizer(latestTask, TaskFinalizer)
+		if err := r.Update(ctx, latestTask); err != nil {
+			if errors.IsNotFound(err) {
+				// Task deleted while we were updating, that's fine
+				return ctrl.Result{}, nil
+			}
+			log.Error(err, "failed to remove finalizer")
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -904,18 +928,8 @@ func (r *TaskReconciler) processAllContexts(ctx context.Context, task *kubeopenv
 			},
 			Data: configMapData,
 		}
-		// Only set OwnerReference if same namespace (cross-namespace owner refs not allowed)
-		if agentNamespace == task.Namespace {
-			configMap.OwnerReferences = []metav1.OwnerReference{
-				{
-					APIVersion: task.APIVersion,
-					Kind:       task.Kind,
-					Name:       task.Name,
-					UID:        task.UID,
-					Controller: boolPtr(true),
-				},
-			}
-		}
+		// ConfigMap cleanup is handled via finalizer on the Task (same as Pod cleanup).
+		// We don't use OwnerReference to keep cleanup behavior consistent.
 	}
 
 	// Validate mount path conflicts
@@ -1681,4 +1695,36 @@ func (r *TaskReconciler) recordTaskStart(ctx context.Context, agent *kubeopenv1a
 	}
 
 	return fmt.Errorf("failed to record task start after %d retries", maxRetries)
+}
+
+// podToTaskMapper maps Pod events to Task reconciliation requests.
+// Since Pods don't have owner references to Tasks (to support cross-namespace scenarios),
+// we use labels to find the owning Task.
+// It uses the kubeopencode.io/task label to find the Task name and
+// kubeopencode.io/task-namespace label for cross-namespace scenarios.
+func podToTaskMapper(_ context.Context, obj client.Object) []ctrl.Request {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil
+	}
+
+	// Check if this is a KubeOpenCode Pod
+	taskName, hasLabel := pod.Labels["kubeopencode.io/task"]
+	if !hasLabel {
+		return nil
+	}
+
+	// Determine Task namespace: use task-namespace label for cross-namespace,
+	// otherwise use Pod's namespace
+	taskNamespace := pod.Namespace
+	if ns, ok := pod.Labels[TaskNamespaceLabelKey]; ok && ns != "" {
+		taskNamespace = ns
+	}
+
+	return []ctrl.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      taskName,
+			Namespace: taskNamespace,
+		},
+	}}
 }

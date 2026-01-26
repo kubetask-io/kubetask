@@ -36,6 +36,12 @@ spec:
             value:
               # Regex pattern to match @kubeopencode-bot anywhere in text
               - ".*@kubeopencode-bot.*"
+          # Exclude bot's own comments to prevent recursive triggers
+          - path: body.comment.user.login
+            type: string
+            comparator: "!="
+            value:
+              - kubeopencode-bot[bot]
   triggers:
     - template:
         name: bot-mention

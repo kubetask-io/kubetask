@@ -182,6 +182,8 @@ make fmt
 
 ### E2E Testing
 
+> **Note**: E2E commands (`e2e-*`) are for **local Kind clusters only**. For remote clusters (OpenShift, EKS, GKE, etc.), use `docker-buildx` to build and push images, then `kubectl rollout restart` to update deployments.
+
 > **CRITICAL FOR AI ASSISTANTS**: When the user asks to run "e2e tests", "e2e testing", "test e2e", or any variation, you MUST execute all three commands in sequence. NEVER run `make e2e-test` alone - this will cause failures due to stale cluster state.
 
 **Required E2E test flow** (always execute all three steps):
@@ -204,15 +206,22 @@ make e2e-reload  # Rebuild and reload controller image, then run e2e-test
 
 ### Docker and Registry
 
+Use these commands for **remote/production clusters** (OpenShift, EKS, GKE, etc.):
+
 ```bash
-# Build docker image
+# Build docker image (local only)
 make docker-build
 
 # Push docker image
 make docker-push
 
-# Multi-arch build and push
+# Multi-arch build and push (recommended for remote clusters)
 make docker-buildx
+```
+
+After pushing, update the deployment:
+```bash
+kubectl rollout restart deployment kubeopencode-controller -n kubeopencode-system
 ```
 
 ### Cluster Deployment
@@ -246,18 +255,18 @@ Agent images are located in `agents/`:
 | `opencode` | OpenCode CLI (AI coding agent) | Init Container |
 | `devbox` | Universal development environment | Worker (Executor) |
 
+For **local development** (Kind clusters):
 ```bash
 # Build OpenCode image (init container)
 make agent-build AGENT=opencode
 
 # Build devbox image (executor)
 make agent-build AGENT=devbox
+```
 
-# Push agent image to registry
-make agent-push AGENT=opencode
-make agent-push AGENT=devbox
-
-# Multi-arch build and push
+For **remote/production clusters** (recommended):
+```bash
+# Multi-arch build and push (OpenShift, EKS, GKE, etc.)
 make agent-buildx AGENT=opencode
 make agent-buildx AGENT=devbox
 ```
@@ -604,7 +613,7 @@ spec:
    - Creates a Pod with command: `opencode run --attach <server-url> "$(cat task.md)"`
    - Standard Pod status tracking (same as Pod mode)
    - Logs available via `kubectl logs` (same as Pod mode)
-4. Pod is deleted via OwnerReference when Task is deleted
+4. Pod is deleted via finalizer when Task is deleted
 
 **Server Mode Status:**
 The Agent status includes server information when in Server mode:
@@ -768,7 +777,7 @@ spec:
 - Cleanup is namespace-scoped (each namespace can have different policies)
 - No cleanup is performed if `KubeOpenCodeConfig` is not present (default behavior)
 
-**Note:** Deleting a Task cascades to its Pod and ConfigMap via OwnerReference or Finalizer.
+**Note:** Deleting a Task cascades to its Pod and ConfigMap via Finalizer.
 
 ### TaskTemplate
 

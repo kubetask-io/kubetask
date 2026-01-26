@@ -245,16 +245,9 @@ func TestBuildPod_BasicTask(t *testing.T) {
 		t.Errorf("Pod.Labels[kubeopencode.io/task] = %q, want %q", pod.Labels["kubeopencode.io/task"], "test-task")
 	}
 
-	// Verify owner reference
-	if len(pod.OwnerReferences) != 1 {
-		t.Fatalf("len(Pod.OwnerReferences) = %d, want 1", len(pod.OwnerReferences))
-	}
-	ownerRef := pod.OwnerReferences[0]
-	if ownerRef.Name != "test-task" {
-		t.Errorf("OwnerReference.Name = %q, want %q", ownerRef.Name, "test-task")
-	}
-	if ownerRef.Controller == nil || *ownerRef.Controller != true {
-		t.Errorf("OwnerReference.Controller = %v, want true", ownerRef.Controller)
+	// Verify no owner reference (cleanup is handled via finalizer)
+	if len(pod.OwnerReferences) != 0 {
+		t.Fatalf("len(Pod.OwnerReferences) = %d, want 0 (cleanup via finalizer)", len(pod.OwnerReferences))
 	}
 
 	// Verify init containers (OpenCode init should be first)

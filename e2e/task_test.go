@@ -372,7 +372,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 	})
 
 	Context("Task garbage collection", func() {
-		It("should clean up Pod when Task is deleted (owner reference)", func() {
+		It("should clean up Pod when Task is deleted (via finalizer)", func() {
 			taskName := uniqueName("task-gc")
 			taskContent := "# GC Test"
 
@@ -399,12 +399,17 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 				return k8sClient.Get(ctx, jobKey, job) == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying Pod has owner reference to Task")
+			By("Verifying Pod cleanup is handled via finalizer (no OwnerReference)")
 			job := &corev1.Pod{}
 			Expect(k8sClient.Get(ctx, jobKey, job)).Should(Succeed())
-			Expect(job.OwnerReferences).Should(HaveLen(1))
-			Expect(job.OwnerReferences[0].Name).Should(Equal(taskName))
-			Expect(job.OwnerReferences[0].Kind).Should(Equal("Task"))
+			// Pod should NOT have OwnerReferences because we use finalizer for cleanup
+			// This allows consistent behavior for both same-namespace and cross-namespace Pods
+			Expect(job.OwnerReferences).Should(BeEmpty())
+
+			By("Verifying Task has finalizer")
+			createdTask := &kubeopenv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskKey, createdTask)).Should(Succeed())
+			Expect(createdTask.Finalizers).Should(ContainElement("kubeopencode.io/task-cleanup"))
 
 			By("Deleting Task")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
@@ -416,7 +421,7 @@ var _ = Describe("Task E2E Tests", Label(LabelTask), func() {
 				return err != nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying Pod is garbage collected")
+			By("Verifying Pod is cleaned up via finalizer")
 			Eventually(func() bool {
 				job := &corev1.Pod{}
 				err := k8sClient.Get(ctx, jobKey, job)

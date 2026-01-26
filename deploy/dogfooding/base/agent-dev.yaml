@@ -10,7 +10,7 @@ spec:
   workspaceDir: /workspace
   # command is optional - uses default: /tools/opencode run "$(cat ${WORKSPACE_DIR}/task.md)"
   serviceAccountName: kubeopencode-agent
-  maxConcurrentTasks: 3
+  maxConcurrentTasks: 1
   # OpenCode configuration using Google Gemini 2.5 Pro
   # See: https://opencode.ai/docs/providers/
   config: |

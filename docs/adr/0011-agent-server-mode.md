@@ -103,7 +103,7 @@ spec:
 
 **Rationale**:
 - Intuitive mental model — same pattern for both modes
-- Clean lifecycle management — Pod deletion via OwnerReference
+- Clean lifecycle management — Pod deletion via finalizer
 - `maxConcurrentTasks` naturally limits concurrent pods
 
 #### 5. Separate Agent Controller
@@ -141,7 +141,7 @@ spec:
 │  - Detects Server-mode via agent.Spec.ServerConfig != nil   │
 │  - Creates Pod with: opencode run --attach <server-url>     │
 │  - Standard Pod status tracking (same as Pod mode)          │
-│  - Pod deleted via OwnerReference                            │
+│  - Pod deleted via finalizer                                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 

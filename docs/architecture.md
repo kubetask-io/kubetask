@@ -1114,7 +1114,7 @@ kubectl get agent default -o yaml
 **Task Lifecycle**:
 - No retry on failure (AI tasks are non-idempotent)
 - User-initiated stop via `kubeopencode.io/stop=true` annotation (graceful, Pod deleted)
-- OwnerReference cascade deletion (same-namespace) or finalizer cleanup (cross-namespace)
+- Finalizer-based cleanup for Pod and ConfigMap (works for both same-namespace and cross-namespace)
 
 **Batch Operations**:
 - Use Helm, Kustomize, or other templating tools

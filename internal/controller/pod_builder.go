@@ -165,7 +165,8 @@ const (
 	// OpenCode loads this file via the instructions config injected through OPENCODE_CONFIG_CONTENT.
 	ContextFileRelPath = ".kubeopencode/context.md"
 
-	// DefaultSecretFileMode is the default permission mode for secrets (read/write for owner only)
+	// DefaultSecretFileMode is the default permission mode for mounted secrets.
+	// 0600 gives read/write access to the owner only.
 	DefaultSecretFileMode int32 = 0600
 
 	// DefaultGitRef is the default Git reference to clone
@@ -441,7 +442,7 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 				volumeName := fmt.Sprintf("credential-%d", i)
 
 				// Default file mode is 0600 (read/write for owner only)
-				fileMode := DefaultSecretFileMode
+				var fileMode = DefaultSecretFileMode
 				if cred.FileMode != nil {
 					fileMode = *cred.FileMode
 				}
@@ -493,7 +494,7 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 			volumeName := fmt.Sprintf("credential-%d", i)
 
 			// Default file mode is 0600 (read/write for owner only)
-			fileMode := DefaultSecretFileMode
+			var fileMode = DefaultSecretFileMode
 			if cred.FileMode != nil {
 				fileMode = *cred.FileMode
 			}
@@ -785,20 +786,9 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 		Spec: podSpec,
 	}
 
-	// Only set OwnerReference when Pod is in the same namespace as Task.
-	// Cross-namespace owner references are not allowed in Kubernetes.
-	// For cross-namespace cleanup, the controller uses a finalizer on the Task.
-	if agentNamespace == task.Namespace {
-		pod.OwnerReferences = []metav1.OwnerReference{
-			{
-				APIVersion: task.APIVersion,
-				Kind:       task.Kind,
-				Name:       task.Name,
-				UID:        task.UID,
-				Controller: boolPtr(true),
-			},
-		}
-	}
+	// Pod cleanup is handled uniformly via finalizer on the Task.
+	// We don't use OwnerReference to keep cleanup behavior consistent
+	// across both same-namespace and cross-namespace scenarios.
 
 	return pod
 }
