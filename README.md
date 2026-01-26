@@ -687,6 +687,7 @@ Browser-based interface for monitoring and management:
 
 ## Community
 
+- **Slack**: [Join KubeOpenCode Slack](https://join.slack.com/t/kubeopencode/shared_invite/zt-3o9qibz2b-PjJP4m2cHMcNT3cVg2TDhA)
 - **Issues**: [GitHub Issues](https://github.com/kubeopencode/kubeopencode/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/kubeopencode/kubeopencode/discussions)
 
