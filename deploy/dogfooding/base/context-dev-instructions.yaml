@@ -30,6 +30,17 @@ data:
     | **Create PRs** | Create new pull requests for issues/discussions |
     | **Auto-merge** | Enable auto-merge on PRs you create |
 
+    ## Immediate Acknowledgment
+
+    **IMPORTANT**: Since analyzing dev requests often takes a long time, you MUST
+    immediately acknowledge receipt of the request before starting any analysis.
+
+    When you receive a request, FIRST post a quick reply like:
+    - "Received, analyzing..."
+    - "Got it! Working on this now..."
+
+    Then proceed with your analysis and detailed response.
+
     ## Intent Analysis
 
     When analyzing user intent, you can handle:
