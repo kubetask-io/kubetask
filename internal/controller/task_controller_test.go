@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -1982,6 +1983,11 @@ var _ = Describe("TaskController", func() {
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			// Wait for Task to be fully deleted (finalizer processed)
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, taskLookupKey, &kubeopenv1alpha1.Task{})
+				return apierrors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
 			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 
@@ -2072,29 +2078,49 @@ var _ = Describe("TaskController", func() {
 				}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
 			}
 
-			By("Waiting for oldest Task to be deleted due to retention limit")
-			// The first task (oldest) should be deleted
-			oldestTaskKey := types.NamespacedName{Name: taskNames[0], Namespace: taskNamespace}
-			Eventually(func() bool {
-				task := &kubeopenv1alpha1.Task{}
-				err := k8sClient.Get(ctx, oldestTaskKey, task)
-				return err != nil // Should be deleted (NotFound)
-			}, timeout, interval).Should(BeTrue())
+			By("Waiting for retention limit to reduce Tasks to 2")
+			// One of the Tasks should be deleted, leaving exactly 2
+			Eventually(func() int {
+				count := 0
+				for _, taskName := range taskNames {
+					taskKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+					task := &kubeopenv1alpha1.Task{}
+					if err := k8sClient.Get(ctx, taskKey, task); err == nil {
+						// Only count if not being deleted (no deletion timestamp)
+						if task.DeletionTimestamp == nil {
+							count++
+						}
+					}
+				}
+				return count
+			}, timeout, interval).Should(Equal(2))
 
-			By("Verifying newer Tasks still exist")
-			for _, taskName := range taskNames[1:] {
+			By("Verifying exactly 2 Tasks remain")
+			remainingCount := 0
+			for _, taskName := range taskNames {
 				taskKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
 				task := &kubeopenv1alpha1.Task{}
-				Expect(k8sClient.Get(ctx, taskKey, task)).Should(Succeed())
+				if err := k8sClient.Get(ctx, taskKey, task); err == nil && task.DeletionTimestamp == nil {
+					remainingCount++
+				}
 			}
+			Expect(remainingCount).To(Equal(2))
 
 			By("Cleaning up")
-			for _, taskName := range taskNames[1:] {
+			for _, taskName := range taskNames {
 				task := &kubeopenv1alpha1.Task{}
 				taskKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
 				if err := k8sClient.Get(ctx, taskKey, task); err == nil {
 					Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
 				}
+			}
+			// Wait for all Tasks to be fully deleted
+			for _, taskName := range taskNames {
+				taskKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, taskKey, &kubeopenv1alpha1.Task{})
+					return apierrors.IsNotFound(err)
+				}, timeout, interval).Should(BeTrue())
 			}
 			Expect(k8sClient.Delete(ctx, config)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())

@@ -763,11 +763,29 @@ func (r *TaskReconciler) handleTaskDeletion(ctx context.Context, task *kubeopenv
 		}
 	}
 
-	// Remove finalizer
-	controllerutil.RemoveFinalizer(task, TaskFinalizer)
-	if err := r.Update(ctx, task); err != nil {
-		log.Error(err, "failed to remove finalizer")
+	// Re-fetch the task to get the latest version before updating
+	// This is necessary because the task may have been modified during cleanup
+	latestTask := &kubeopenv1alpha1.Task{}
+	taskKey := types.NamespacedName{Name: task.Name, Namespace: task.Namespace}
+	if err := r.Get(ctx, taskKey, latestTask); err != nil {
+		if errors.IsNotFound(err) {
+			// Task already deleted, nothing to do
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, err
+	}
+
+	// Remove finalizer from the latest version
+	if controllerutil.ContainsFinalizer(latestTask, TaskFinalizer) {
+		controllerutil.RemoveFinalizer(latestTask, TaskFinalizer)
+		if err := r.Update(ctx, latestTask); err != nil {
+			if errors.IsNotFound(err) {
+				// Task deleted while we were updating, that's fine
+				return ctrl.Result{}, nil
+			}
+			log.Error(err, "failed to remove finalizer")
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
