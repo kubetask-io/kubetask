@@ -1,0 +1,292 @@
+# Copyright Contributors to the KubeOpenCode project
+#
+# Socket Mode Gateway - No Custom Image Required
+#
+# This deployment uses a standard Python image and mounts the gateway script
+# via ConfigMap. No need to build or push a custom Docker image.
+#
+# Prerequisites:
+# 1. Create slack-socket-mode-creds secret (see deployment-socket-mode-gateway.yaml)
+# 2. Apply this file: kubectl apply -f socket-mode-gateway-no-build.yaml -n kubeopencode-slack
+#
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: socket-mode-gateway-script
+data:
+  gateway.py: |
+    #!/usr/bin/env python3
+    # Socket Mode Gateway for Slack integration
+    # Creates KubeOpenCode Tasks when the bot is @mentioned
+
+    import os
+    import sys
+    import re
+    import logging
+    from datetime import datetime
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+
+    # Import after logging setup
+    from slack_bolt import App
+    from slack_bolt.adapter.socket_mode import SocketModeHandler
+    from kubernetes import client, config
+
+    # Configuration
+    SLACK_APP_TOKEN = os.environ.get("SLACK_APP_TOKEN")
+    SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
+    TASK_NAMESPACE = os.environ.get("TASK_NAMESPACE", "kubeopencode-dogfooding")
+    AGENT_NAME = os.environ.get("AGENT_NAME", "dev-agent")
+    AGENT_NAMESPACE = os.environ.get("AGENT_NAMESPACE", "kubeopencode-dogfooding")
+
+    if not SLACK_APP_TOKEN or not SLACK_BOT_TOKEN:
+        logger.error("SLACK_APP_TOKEN and SLACK_BOT_TOKEN are required")
+        sys.exit(1)
+
+    # Initialize Slack app
+    app = App(token=SLACK_BOT_TOKEN)
+
+    # Initialize Kubernetes client
+    try:
+        config.load_incluster_config()
+        k8s_api = client.CustomObjectsApi()
+        logger.info("Kubernetes client initialized (in-cluster)")
+    except Exception as e:
+        logger.error(f"Failed to initialize Kubernetes client: {e}")
+        sys.exit(1)
+
+
+    def sanitize_name(text: str) -> str:
+        """Convert text to a valid Kubernetes resource name."""
+        name = re.sub(r'[^a-z0-9-]', '-', text.lower()[:40])
+        name = re.sub(r'-+', '-', name).strip('-')
+        if name and not name[0].isalnum():
+            name = 'task-' + name
+        return name or 'slack-task'
+
+
+    def create_task(description: str, channel: str, thread_ts: str, user: str):
+        """Create a KubeOpenCode Task using Kubernetes API."""
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        name_hint = sanitize_name(' '.join(description.split()[:5]))
+        task_name = f"slack-{timestamp}-{name_hint}"[:63]
+
+        # Build full description with Slack context for the agent
+        full_description = (
+            f"## Task\n"
+            f"{description}\n\n"
+            f"## Slack Context\n"
+            f"- Channel: `{channel}`\n"
+            f"- Thread TS: `{thread_ts}`\n"
+            f"- User: `{user}`\n\n"
+            f"**IMPORTANT**: After completing the task, you MUST send the results back to Slack using:\n"
+            f"```bash\n"
+            f"slack-cli send --channel \"{channel}\" --thread-ts \"{thread_ts}\" --text \"Your response here\"\n"
+            f"```\n"
+        )
+
+        task_body = {
+            "apiVersion": "kubeopencode.io/v1alpha1",
+            "kind": "Task",
+            "metadata": {
+                "name": task_name,
+                "labels": {
+                    "kubeopencode.io/source": "slack",
+                },
+                "annotations": {
+                    "kubeopencode.io/slack-thread-ts": thread_ts,
+                    "kubeopencode.io/slack-user": user,
+                    "kubeopencode.io/slack-channel": channel,
+                }
+            },
+            "spec": {
+                "agentRef": {
+                    "name": AGENT_NAME,
+                    "namespace": AGENT_NAMESPACE
+                },
+                "description": full_description
+            }
+        }
+
+        try:
+            k8s_api.create_namespaced_custom_object(
+                group="kubeopencode.io",
+                version="v1alpha1",
+                namespace=TASK_NAMESPACE,
+                plural="tasks",
+                body=task_body
+            )
+            logger.info(f"Created Task: {task_name}")
+            return True, task_name, ""
+        except Exception as e:
+            logger.error(f"Failed to create Task: {e}")
+            return False, task_name, str(e)
+
+
+    def extract_message_text(event: dict) -> str:
+        """Extract message text, removing bot mentions."""
+        text = event.get("text", "")
+        return re.sub(r'<@[A-Z0-9]+>', '', text).strip()
+
+
+    @app.event("app_mention")
+    def handle_app_mention(event, say):
+        """Handle @mention events."""
+        channel = event.get("channel")
+        thread_ts = event.get("thread_ts") or event.get("ts")
+        user = event.get("user")
+        description = extract_message_text(event)
+
+        if not description:
+            say(text="Please provide a task description.", thread_ts=thread_ts)
+            return
+
+        logger.info(f"Mention from {user}: {description[:100]}...")
+
+        # Acknowledge
+        say(
+            text=f"🤖 Got it! Creating task for:\n> {description[:200]}{'...' if len(description) > 200 else ''}",
+            thread_ts=thread_ts
+        )
+
+        # Create Task
+        success, task_name, error = create_task(description, channel, thread_ts, user)
+
+        if success:
+            say(
+                text=f"✅ Task created: `{task_name}`\nNamespace: `{TASK_NAMESPACE}`",
+                thread_ts=thread_ts
+            )
+        else:
+            say(text=f"❌ Failed to create task: {error}", thread_ts=thread_ts)
+
+
+    @app.event("message")
+    def handle_message(event, say):
+        """Handle DMs."""
+        if event.get("channel_type") != "im" or event.get("bot_id"):
+            return
+
+        text = event.get("text", "")
+        if not text:
+            return
+
+        channel = event.get("channel")
+        thread_ts = event.get("ts")
+        user = event.get("user")
+
+        say(text=f"🤖 Creating task...", thread_ts=thread_ts)
+
+        success, task_name, error = create_task(text, channel, thread_ts, user)
+        if success:
+            say(text=f"✅ Task: `{task_name}`", thread_ts=thread_ts)
+        else:
+            say(text=f"❌ Failed: {error}", thread_ts=thread_ts)
+
+
+    if __name__ == "__main__":
+        logger.info(f"Starting Socket Mode Gateway...")
+        logger.info(f"Task namespace: {TASK_NAMESPACE}, Agent: {AGENT_NAME}")
+        handler = SocketModeHandler(app, SLACK_APP_TOKEN)
+        handler.start()
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: slack-socket-mode-gateway
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: slack-socket-mode-gateway
+rules:
+  - apiGroups: ["kubeopencode.io"]
+    resources: ["tasks"]
+    verbs: ["create", "get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: slack-socket-mode-gateway
+subjects:
+  - kind: ServiceAccount
+    name: slack-socket-mode-gateway
+    namespace: kubeopencode-slack
+roleRef:
+  kind: ClusterRole
+  name: slack-socket-mode-gateway
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slack-socket-mode-gateway
+  labels:
+    app: slack-socket-mode-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: slack-socket-mode-gateway
+  template:
+    metadata:
+      labels:
+        app: slack-socket-mode-gateway
+    spec:
+      serviceAccountName: slack-socket-mode-gateway
+      containers:
+        - name: gateway
+          # Use standard Python image - no custom build needed
+          image: python:3.12-slim
+          command:
+            - /bin/sh
+            - -c
+            - |
+              pip install --quiet slack-bolt kubernetes && \
+              python /app/gateway.py
+          env:
+            - name: SLACK_APP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: slack-socket-mode-creds
+                  key: app-token
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: slack-socket-mode-creds
+                  key: bot-token
+            - name: TASK_NAMESPACE
+              value: "kubeopencode-slack"
+            - name: AGENT_NAME
+              value: "slack"
+            - name: AGENT_NAMESPACE
+              value: "kubeopencode-dogfooding"
+          volumeMounts:
+            - name: gateway-script
+              mountPath: /app
+            - name: pip-cache
+              mountPath: /.cache
+            - name: pip-local
+              mountPath: /.local
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: gateway-script
+          configMap:
+            name: socket-mode-gateway-script
+        - name: pip-cache
+          emptyDir: {}
+        - name: pip-local
+          emptyDir: {}
+      restartPolicy: Always

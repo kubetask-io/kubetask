@@ -1,0 +1,21 @@
+# Copyright Contributors to the KubeOpenCode project
+#
+# Kustomization for Slack Socket Mode Gateway
+#
+# This deploys a Socket Mode Gateway that:
+# - Connects to Slack via WebSocket (no public ingress required)
+# - Listens for @mentions of the bot
+# - Creates KubeOpenCode Tasks when mentioned
+#
+# Prerequisites:
+# 1. Create slack-socket-mode-creds secret with app-token and bot-token
+# 2. Enable Socket Mode in your Slack App settings
+#
+# For Argo Events webhook approach (alternative), see argo-events-webhook/ subdirectory
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kubeopencode-slack
+resources:
+  - namespace.yaml
+  - secrets.yaml
+  - socket-mode-gateway.yaml

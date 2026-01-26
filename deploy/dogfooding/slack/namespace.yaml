@@ -1,0 +1,5 @@
+# Copyright Contributors to the KubeOpenCode project
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeopencode-slack

@@ -12,9 +12,11 @@ resources:
   - agent-bot.yaml
   - agent-dev.yaml
   - agent-refactor.yaml
+  - agent-slack.yaml
   - context-bot-instructions.yaml
   - context-dev-instructions.yaml
   - context-refactor-instructions.yaml
+  - context-slack-instructions.yaml
 
 # Note: Webhook functionality has been migrated to Argo Events.
 # See ../github/ for EventSource and Sensor configuration.

@@ -1,0 +1,59 @@
+# Copyright Contributors to the KubeOpenCode project
+# Agent configuration for Slack bot interactions
+apiVersion: kubeopencode.io/v1alpha1
+kind: Agent
+metadata:
+  name: slack
+spec:
+  agentImage: quay.io/kubeopencode/kubeopencode-agent-opencode:latest
+  executorImage: quay.io/kubeopencode/kubeopencode-agent-devbox:latest
+  workspaceDir: /workspace
+  serviceAccountName: kubeopencode-agent
+  maxConcurrentTasks: 1
+  # Rate limiting: max 100 tasks per hour
+  quota:
+    maxTaskStarts: 100
+    windowSeconds: 3600
+  # OpenCode configuration
+  config: |
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "model": "opencode/gemini-3-flash",
+      "small_model": "opencode/gemini-3-flash",
+      "share": "disabled",
+      "autoupdate": false
+    }
+  # Contexts for Slack agent
+  contexts:
+    # Instructions for handling Slack events
+    - name: slack-instructions
+      description: "Instructions for handling Slack events"
+      type: ConfigMap
+      configMap:
+        name: slack-instructions
+    # KubeOpenCode source code repository
+    - name: kubeopencode
+      description: "KubeOpenCode source code repository"
+      type: Git
+      git:
+        repository: https://github.com/kubeopencode/kubeopencode.git
+        ref: main
+      mountPath: kubeopencode
+  credentials:
+    # Mount entire secret - all keys become env vars automatically
+    - name: git
+      secretRef:
+        name: git-settings
+    - name: opencode
+      secretRef:
+        name: opencode-credentials
+    # GitHub App credentials mounted as directory
+    - name: github-app
+      secretRef:
+        name: github-bot-credentials
+    # Slack Bot Token
+    - name: slack
+      secretRef:
+        name: slack-creds
+        key: bot-token
+      env: SLACK_BOT_TOKEN

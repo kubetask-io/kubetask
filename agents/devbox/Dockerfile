@@ -126,6 +126,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends zsh \
 # Usage: Just mount credentials to /etc/github-app/ and use gh/git normally
 COPY --chmod=755 scripts/*.sh /usr/local/bin/
 
+# === Slack CLI ===
+# Zero-dependency Python script for Slack interaction
+COPY --chmod=755 scripts/slack-cli.py /usr/local/bin/slack-cli
+
 # Setup gh wrapper: gh command transparently gets token from GitHub App
 # Move real gh to gh-real, then link wrapper as gh
 RUN mv /usr/bin/gh /usr/bin/gh-real \

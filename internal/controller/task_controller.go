@@ -1702,7 +1702,9 @@ func (r *TaskReconciler) recordTaskStart(ctx context.Context, agent *kubeopenv1a
 // we use labels to find the owning Task.
 // It uses the kubeopencode.io/task label to find the Task name and
 // kubeopencode.io/task-namespace label for cross-namespace scenarios.
-func podToTaskMapper(_ context.Context, obj client.Object) []ctrl.Request {
+func podToTaskMapper(ctx context.Context, obj client.Object) []ctrl.Request {
+	logger := log.FromContext(ctx).WithName("podToTaskMapper")
+
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		return nil
@@ -1720,6 +1722,13 @@ func podToTaskMapper(_ context.Context, obj client.Object) []ctrl.Request {
 	if ns, ok := pod.Labels[TaskNamespaceLabelKey]; ok && ns != "" {
 		taskNamespace = ns
 	}
+
+	logger.V(1).Info("mapping Pod event to Task",
+		"pod", pod.Name,
+		"podNamespace", pod.Namespace,
+		"podPhase", pod.Status.Phase,
+		"taskName", taskName,
+		"taskNamespace", taskNamespace)
 
 	return []ctrl.Request{{
 		NamespacedName: types.NamespacedName{
