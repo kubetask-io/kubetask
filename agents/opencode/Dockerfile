@@ -39,7 +39,7 @@ FROM debian:bookworm-slim
 
 # OpenCode version to download (use specific version to avoid cache issues)
 # Override with: --build-arg OPENCODE_VERSION=x.y.z
-ARG OPENCODE_VERSION=1.1.36
+ARG OPENCODE_VERSION=1.1.39
 
 # Install curl for downloading
 RUN apt-get update && apt-get install -y --no-install-recommends \
