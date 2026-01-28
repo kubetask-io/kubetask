@@ -132,6 +132,9 @@ const (
 	// ToolsVolumeName is the volume name for sharing OpenCode binary between containers
 	ToolsVolumeName = "tools"
 
+	// WorkspaceVolumeName is the volume name for the writable workspace
+	WorkspaceVolumeName = "workspace"
+
 	// ToolsMountPath is the mount path for the tools volume
 	ToolsMountPath = "/tools"
 
@@ -186,6 +189,13 @@ const (
 
 	// DefaultShell is the default SHELL for SCC compatibility
 	DefaultShell = "/bin/bash"
+
+	// EnvTaskName is the environment variable for the task name
+	EnvTaskName = "TASK_NAME"
+	// EnvTaskNamespace is the environment variable for the task namespace
+	EnvTaskNamespace = "TASK_NAMESPACE"
+	// EnvWorkspaceDir is the environment variable for the workspace directory
+	EnvWorkspaceDir = "WORKSPACE_DIR"
 )
 
 // buildOpenCodeInitContainer creates an init container that copies OpenCode binary to /tools.
@@ -291,7 +301,7 @@ type contextInitDirMapping struct {
 // The init container uses /kubeopencode context-init command which reads configuration from environment variables.
 func buildContextInitContainer(workspaceDir string, fileMounts []fileMount, dirMounts []dirMount, sysCfg systemConfig) corev1.Container {
 	envVars := []corev1.EnvVar{
-		{Name: "WORKSPACE_DIR", Value: workspaceDir},
+		{Name: EnvWorkspaceDir, Value: workspaceDir},
 		{Name: "CONFIGMAP_PATH", Value: "/configmap-files"},
 	}
 
@@ -370,13 +380,13 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 	// This is essential for SCC environments where containers run with random UIDs
 	// that don't have write access to directories created in the container image.
 	volumes = append(volumes, corev1.Volume{
-		Name: "workspace",
+		Name: WorkspaceVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	})
 	volumeMounts = append(volumeMounts, corev1.VolumeMount{
-		Name:      "workspace",
+		Name:      WorkspaceVolumeName,
 		MountPath: cfg.workspaceDir,
 	})
 
@@ -389,9 +399,9 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 	envVars = append(envVars,
 		corev1.EnvVar{Name: "HOME", Value: DefaultHomeDir},
 		corev1.EnvVar{Name: "SHELL", Value: DefaultShell},
-		corev1.EnvVar{Name: "TASK_NAME", Value: task.Name},
-		corev1.EnvVar{Name: "TASK_NAMESPACE", Value: task.Namespace},
-		corev1.EnvVar{Name: "WORKSPACE_DIR", Value: cfg.workspaceDir},
+		corev1.EnvVar{Name: EnvTaskName, Value: task.Name},
+		corev1.EnvVar{Name: EnvTaskNamespace, Value: task.Namespace},
+		corev1.EnvVar{Name: EnvWorkspaceDir, Value: cfg.workspaceDir},
 	)
 
 	// If OpenCode config is provided, set OPENCODE_CONFIG env var
@@ -579,7 +589,7 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 		// Start with contextInitMounts (ConfigMap volume mounts) and add workspace mount
 		contextInit.VolumeMounts = contextInitMounts
 		contextInit.VolumeMounts = append(contextInit.VolumeMounts, corev1.VolumeMount{
-			Name:      "workspace",
+			Name:      WorkspaceVolumeName,
 			MountPath: cfg.workspaceDir,
 		})
 

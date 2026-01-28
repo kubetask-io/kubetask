@@ -74,7 +74,7 @@ func BuildServerDeployment(agent *kubeopenv1alpha1.Agent, agentCfg agentConfig, 
 
 	// Build environment variables
 	envVars := []corev1.EnvVar{
-		{Name: "WORKSPACE_DIR", Value: agentCfg.workspaceDir},
+		{Name: EnvWorkspaceDir, Value: agentCfg.workspaceDir},
 		// OpenCode permission settings for automated execution
 		{Name: OpenCodePermissionEnvVar, Value: DefaultOpenCodePermission},
 	}
@@ -90,7 +90,7 @@ func BuildServerDeployment(agent *kubeopenv1alpha1.Agent, agentCfg agentConfig, 
 	// Build volume mounts
 	volumeMounts := []corev1.VolumeMount{
 		{Name: ToolsVolumeName, MountPath: ToolsMountPath},
-		{Name: "workspace", MountPath: agentCfg.workspaceDir},
+		{Name: WorkspaceVolumeName, MountPath: agentCfg.workspaceDir},
 	}
 
 	// Build volumes
@@ -102,7 +102,7 @@ func BuildServerDeployment(agent *kubeopenv1alpha1.Agent, agentCfg agentConfig, 
 			},
 		},
 		{
-			Name: "workspace",
+			Name: WorkspaceVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
