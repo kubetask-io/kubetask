@@ -13,8 +13,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -27,7 +29,7 @@ var _ = Describe("TaskController", func() {
 	)
 
 	Context("When creating a Task with description", func() {
-		It("Should create a Job and update Task status", func() {
+		It("Should create a Pod and update Task status", func() {
 			taskName := "test-task-description"
 			description := "# Test Task\n\nThis is a test task."
 
@@ -55,11 +57,11 @@ var _ = Describe("TaskController", func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Checking Pod is created")
-			jobName := fmt.Sprintf("%s-pod", taskName)
-			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
 			createdPod := &corev1.Pod{}
 			Eventually(func() bool {
-				return k8sClient.Get(ctx, jobLookupKey, createdPod) == nil
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("Verifying Pod has correct labels")
@@ -79,7 +81,7 @@ var _ = Describe("TaskController", func() {
 			Expect(createdPod.Spec.InitContainers[0].Image).Should(Equal(DefaultAgentImage))
 
 			By("Verifying Task status has PodName set")
-			Expect(createdTask.Status.PodName).Should(Equal(jobName))
+			Expect(createdTask.Status.PodName).Should(Equal(podName))
 			Expect(createdTask.Status.StartTime).ShouldNot(BeNil())
 
 			By("Checking context ConfigMap is created")
@@ -134,11 +136,11 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
 			By("Checking Pod uses custom executor image for worker container")
-			jobName := fmt.Sprintf("%s-pod", taskName)
-			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
 			createdPod := &corev1.Pod{}
 			Eventually(func() string {
-				if err := k8sClient.Get(ctx, jobLookupKey, createdPod); err != nil {
+				if err := k8sClient.Get(ctx, podLookupKey, createdPod); err != nil {
 					return ""
 				}
 				if len(createdPod.Spec.Containers) == 0 {
@@ -225,11 +227,11 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
 			By("Checking Pod has credential env var")
-			jobName := fmt.Sprintf("%s-pod", taskName)
-			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
 			createdPod := &corev1.Pod{}
 			Eventually(func() bool {
-				if err := k8sClient.Get(ctx, jobLookupKey, createdPod); err != nil {
+				if err := k8sClient.Get(ctx, podLookupKey, createdPod); err != nil {
 					return false
 				}
 				return len(createdPod.Spec.Containers) > 0
@@ -265,7 +267,7 @@ var _ = Describe("TaskController", func() {
 	})
 
 	Context("When creating a Task with Agent that has podSpec.labels", func() {
-		It("Should apply labels to the Job's pod template", func() {
+		It("Should apply labels to the Pod", func() {
 			taskName := "test-task-labels"
 			agentName := "test-workspace-labels"
 			description := "# Test with podSpec.labels"
@@ -303,11 +305,11 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
 			By("Checking Pod template has custom labels")
-			jobName := fmt.Sprintf("%s-pod", taskName)
-			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
 			createdPod := &corev1.Pod{}
 			Eventually(func() bool {
-				if err := k8sClient.Get(ctx, jobLookupKey, createdPod); err != nil {
+				if err := k8sClient.Get(ctx, podLookupKey, createdPod); err != nil {
 					return false
 				}
 				return createdPod.Labels != nil
@@ -325,7 +327,7 @@ var _ = Describe("TaskController", func() {
 	})
 
 	Context("When creating a Task with Agent that has podSpec.scheduling", func() {
-		It("Should apply scheduling configuration to the Job", func() {
+		It("Should apply scheduling configuration to the Pod", func() {
 			taskName := "test-task-scheduling"
 			agentName := "test-workspace-scheduling"
 			description := "# Test with podSpec.scheduling"
@@ -373,11 +375,11 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
 			By("Checking Pod has node selector")
-			jobName := fmt.Sprintf("%s-pod", taskName)
-			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
 			createdPod := &corev1.Pod{}
 			Eventually(func() map[string]string {
-				if err := k8sClient.Get(ctx, jobLookupKey, createdPod); err != nil {
+				if err := k8sClient.Get(ctx, podLookupKey, createdPod); err != nil {
 					return nil
 				}
 				return createdPod.Spec.NodeSelector
@@ -661,11 +663,11 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
 			By("Waiting for Pod to be created")
-			jobName := fmt.Sprintf("%s-pod", taskName)
-			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
 			createdPod := &corev1.Pod{}
 			Eventually(func() bool {
-				return k8sClient.Get(ctx, jobLookupKey, createdPod) == nil
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("Simulating Pod success")
@@ -710,11 +712,11 @@ var _ = Describe("TaskController", func() {
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
 			By("Waiting for Pod to be created")
-			jobName := fmt.Sprintf("%s-pod", taskName)
-			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
 			createdPod := &corev1.Pod{}
 			Eventually(func() bool {
-				return k8sClient.Get(ctx, jobLookupKey, createdPod) == nil
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("Simulating Pod failure")
@@ -1002,7 +1004,7 @@ var _ = Describe("TaskController", func() {
 	})
 
 	Context("When stopping a Running Task via annotation", func() {
-		It("Should suspend Job and set Task status to Completed with Stopped condition", func() {
+		It("Should delete Pod and set Task status to Completed with Stopped condition", func() {
 			taskName := "test-task-stop"
 			agentName := "test-agent-stop"
 			description := "# Stop test"
@@ -1044,11 +1046,11 @@ var _ = Describe("TaskController", func() {
 			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
 
 			By("Checking Pod is created")
-			jobName := fmt.Sprintf("%s-pod", taskName)
-			jobLookupKey := types.NamespacedName{Name: jobName, Namespace: taskNamespace}
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
 			createdPod := &corev1.Pod{}
 			Eventually(func() bool {
-				return k8sClient.Get(ctx, jobLookupKey, createdPod) == nil
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("Adding stop annotation to Task")
@@ -1073,7 +1075,7 @@ var _ = Describe("TaskController", func() {
 			// Pod should be deleted when stop annotation is set
 			Eventually(func() bool {
 				deletedPod := &corev1.Pod{}
-				err := k8sClient.Get(ctx, jobLookupKey, deletedPod)
+				err := k8sClient.Get(ctx, podLookupKey, deletedPod)
 				return err != nil // Pod should not be found
 			}, timeout, interval).Should(BeTrue())
 
@@ -2340,6 +2342,889 @@ var _ = Describe("TaskController", func() {
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task1)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, task2)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+	})
+
+	Context("Cross-namespace Agent with AllowedNamespaces", func() {
+		It("Should allow Task when allowedNamespaces is empty (default: all allowed)", func() {
+			agentName := "test-agent-cross-ns-empty"
+			agentNamespace := "default"
+			taskNamespace := "default" // Using default namespace for simplicity
+			description := "Test cross-namespace access"
+
+			By("Creating Agent without AllowedNamespaces (should allow all)")
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: agentNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					// AllowedNamespaces is empty - should allow all namespaces
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task referencing the Agent")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-task-cross-ns-allowed",
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef: &kubeopenv1alpha1.AgentReference{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task transitions to Running (not Failed)")
+			taskLookupKey := types.NamespacedName{Name: task.Name, Namespace: taskNamespace}
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+
+		It("Should allow Task when namespace matches AllowedNamespaces pattern", func() {
+			agentName := "test-agent-pattern-match"
+			agentNamespace := "default"
+			taskNamespace := "default" // Matches pattern
+			description := "Test pattern matching"
+
+			By("Creating Agent with AllowedNamespaces pattern")
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: agentNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					AllowedNamespaces:  []string{"default", "team-*"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task in matching namespace")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-task-pattern-match",
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef: &kubeopenv1alpha1.AgentReference{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task transitions to Running")
+			taskLookupKey := types.NamespacedName{Name: task.Name, Namespace: taskNamespace}
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+
+		It("Should reject Task when namespace doesn't match AllowedNamespaces", func() {
+			agentName := "test-agent-ns-denied"
+			agentNamespace := "default"
+			description := "Test denied access"
+
+			By("Creating test namespace for denied access")
+			deniedNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-denied-ns",
+				},
+			}
+			err := k8sClient.Create(ctx, deniedNs)
+			if err != nil && !apierrors.IsAlreadyExists(err) {
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+
+			By("Creating Agent with AllowedNamespaces that doesn't include test-denied-ns")
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: agentNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					AllowedNamespaces:  []string{"prod-*", "staging"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task in non-matching namespace")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-task-ns-denied",
+					Namespace: "test-denied-ns",
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef: &kubeopenv1alpha1.AgentReference{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task transitions to Failed with AgentError reason")
+			taskLookupKey := types.NamespacedName{Name: task.Name, Namespace: "test-denied-ns"}
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseFailed))
+
+			By("Verifying error message mentions namespace not allowed")
+			var readyCondition *metav1.Condition
+			for i := range createdTask.Status.Conditions {
+				if createdTask.Status.Conditions[i].Type == kubeopenv1alpha1.ConditionTypeReady {
+					readyCondition = &createdTask.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(readyCondition).ShouldNot(BeNil())
+			Expect(readyCondition.Reason).Should(Equal(kubeopenv1alpha1.ReasonAgentError))
+			Expect(readyCondition.Message).Should(ContainSubstring("not allowed"))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+
+		It("Should support glob patterns like team-*", func() {
+			agentName := "test-agent-glob-pattern"
+			agentNamespace := "default"
+			description := "Test glob pattern matching"
+
+			By("Creating test namespace matching pattern")
+			teamNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "team-alpha",
+				},
+			}
+			err := k8sClient.Create(ctx, teamNs)
+			if err != nil && !apierrors.IsAlreadyExists(err) {
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+
+			By("Creating Agent with glob pattern in AllowedNamespaces")
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: agentNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					AllowedNamespaces:  []string{"team-*"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task in matching namespace (team-alpha)")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-task-glob-match",
+					Namespace: "team-alpha",
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef: &kubeopenv1alpha1.AgentReference{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task transitions to Running (pattern matched)")
+			taskLookupKey := types.NamespacedName{Name: task.Name, Namespace: "team-alpha"}
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+	})
+
+	Context("Custom agent command", func() {
+		It("Should use custom command when specified", func() {
+			agentName := "test-agent-custom-cmd"
+			taskName := "test-task-custom-cmd"
+			description := "Test custom command"
+
+			By("Creating Agent with custom command")
+			customCmd := []string{"sh", "-c", "/tools/opencode run --format json \"$(cat /workspace/task.md)\""}
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					Command:            customCmd,
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Pod uses custom command")
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
+			createdPod := &corev1.Pod{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(createdPod.Spec.Containers[0].Command).Should(Equal(customCmd))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+
+		It("Should use default command when not specified", func() {
+			agentName := "test-agent-default-cmd"
+			taskName := "test-task-default-cmd"
+			description := "Test default command"
+
+			By("Creating Agent without command (should use default)")
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					// Command is not specified
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Pod uses default command")
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
+			createdPod := &corev1.Pod{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			// Default command should contain opencode run
+			Expect(len(createdPod.Spec.Containers[0].Command)).Should(BeNumerically(">", 0))
+			// Verify it's the default command pattern (sh -c "...")
+			Expect(createdPod.Spec.Containers[0].Command[0]).Should(Equal("sh"))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+	})
+
+	Context("Pod resource requirements", func() {
+		It("Should apply resource requests and limits to agent container", func() {
+			agentName := "test-agent-resources"
+			taskName := "test-task-resources"
+			description := "Test resource requirements"
+
+			By("Creating Agent with resource requirements")
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					PodSpec: &kubeopenv1alpha1.AgentPodSpec{
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("500m"),
+								corev1.ResourceMemory: resource.MustParse("512Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("2"),
+								corev1.ResourceMemory: resource.MustParse("2Gi"),
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Pod has resource requirements")
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
+			createdPod := &corev1.Pod{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			container := createdPod.Spec.Containers[0]
+			Expect(container.Resources.Requests.Cpu().String()).Should(Equal("500m"))
+			Expect(container.Resources.Requests.Memory().String()).Should(Equal("512Mi"))
+			Expect(container.Resources.Limits.Cpu().String()).Should(Equal("2"))
+			Expect(container.Resources.Limits.Memory().String()).Should(Equal("2Gi"))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+		})
+	})
+
+	Context("Credentials - Entire Secret as environment variables", func() {
+		It("Should expose all Secret keys as environment variables when no key is specified", func() {
+			taskName := "test-task-entire-secret-env"
+			agentName := "test-agent-entire-secret-env"
+			secretName := "test-entire-secret-env"
+			description := "Test entire secret as env vars"
+
+			By("Creating Secret with multiple keys")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: taskNamespace,
+				},
+				Data: map[string][]byte{
+					"API_KEY":    []byte("api-key-value"),
+					"API_SECRET": []byte("api-secret-value"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating Agent with credential referencing entire Secret (no key)")
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					Credentials: []kubeopenv1alpha1.Credential{
+						{
+							Name: "api-credentials",
+							SecretRef: kubeopenv1alpha1.SecretReference{
+								Name: secretName,
+								// Key is not specified - entire Secret becomes env vars
+							},
+							// No MountPath, no Env - all keys become env vars
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Pod has all Secret keys as environment variables")
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
+			createdPod := &corev1.Pod{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			// Check for envFrom with secretRef
+			container := createdPod.Spec.Containers[0]
+			var foundSecretEnvFrom bool
+			for _, envFrom := range container.EnvFrom {
+				if envFrom.SecretRef != nil && envFrom.SecretRef.Name == secretName {
+					foundSecretEnvFrom = true
+					break
+				}
+			}
+			Expect(foundSecretEnvFrom).Should(BeTrue(), "Expected envFrom with secretRef for entire secret")
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+		})
+
+		It("Should mount entire Secret as directory when mountPath is specified", func() {
+			taskName := "test-task-entire-secret-dir"
+			agentName := "test-agent-entire-secret-dir"
+			secretName := "test-entire-secret-dir"
+			mountPath := "/etc/credentials"
+			description := "Test entire secret as directory"
+
+			By("Creating Secret with multiple keys")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: taskNamespace,
+				},
+				Data: map[string][]byte{
+					"ca.crt":     []byte("ca-cert-data"),
+					"client.crt": []byte("client-cert-data"),
+					"client.key": []byte("client-key-data"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating Agent with credential referencing entire Secret with mountPath")
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ServiceAccountName: "test-agent",
+					WorkspaceDir:       "/workspace",
+					Credentials: []kubeopenv1alpha1.Credential{
+						{
+							Name: "tls-certs",
+							SecretRef: kubeopenv1alpha1.SecretReference{
+								Name: secretName,
+								// Key is not specified - entire Secret
+							},
+							MountPath: &mountPath, // Mount as directory
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Creating Task")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Pod has Secret mounted as directory")
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
+			createdPod := &corev1.Pod{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			// Check for volume mount at mountPath
+			container := createdPod.Spec.Containers[0]
+			var foundMount bool
+			for _, vm := range container.VolumeMounts {
+				if vm.MountPath == mountPath {
+					foundMount = true
+					break
+				}
+			}
+			Expect(foundMount).Should(BeTrue(), "Expected volume mount at %s", mountPath)
+
+			// Check for corresponding secret volume
+			var foundSecretVolume bool
+			for _, vol := range createdPod.Spec.Volumes {
+				if vol.Secret != nil && vol.Secret.SecretName == secretName {
+					foundSecretVolume = true
+					break
+				}
+			}
+			Expect(foundSecretVolume).Should(BeTrue(), "Expected secret volume for %s", secretName)
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+		})
+	})
+
+	Context("ConfigMap Context directory mount", func() {
+		It("Should mount entire ConfigMap as directory when key is not specified and mountPath is set", func() {
+			taskName := "test-task-configmap-dir"
+			configMapName := "test-configmap-dir"
+			mountPath := "/workspace/config"
+			description := "Test ConfigMap directory mount"
+
+			By("Creating ConfigMap with multiple keys")
+			configMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: taskNamespace,
+				},
+				Data: map[string]string{
+					"config.yaml":   "key: value\nenabled: true",
+					"settings.json": `{"setting": "value"}`,
+					"readme.txt":    "This is a readme file",
+				},
+			}
+			Expect(k8sClient.Create(ctx, configMap)).Should(Succeed())
+
+			By("Creating Task with ConfigMap context (no key, with mountPath)")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					Description: &description,
+					Contexts: []kubeopenv1alpha1.ContextItem{
+						{
+							Type: kubeopenv1alpha1.ContextTypeConfigMap,
+							ConfigMap: &kubeopenv1alpha1.ConfigMapContext{
+								Name: configMapName,
+								// Key is not specified - mount entire ConfigMap
+							},
+							MountPath: mountPath, // Mount as directory
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Pod has ConfigMap volume for directory mount")
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
+			createdPod := &corev1.Pod{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			// Check for ConfigMap volume (used by context-init to copy to workspace)
+			var foundConfigMapVolume bool
+			for _, vol := range createdPod.Spec.Volumes {
+				if vol.ConfigMap != nil && vol.ConfigMap.Name == configMapName {
+					foundConfigMapVolume = true
+					break
+				}
+			}
+			Expect(foundConfigMapVolume).Should(BeTrue(), "Expected ConfigMap volume for %s", configMapName)
+
+			// Check for context-init container that copies directory contents
+			var foundContextInit bool
+			for _, initC := range createdPod.Spec.InitContainers {
+				if initC.Name == "context-init" {
+					foundContextInit = true
+					// Verify it has DIR_MAPPINGS environment variable
+					for _, env := range initC.Env {
+						if env.Name == "DIR_MAPPINGS" {
+							Expect(env.Value).Should(ContainSubstring(mountPath))
+							break
+						}
+					}
+					break
+				}
+			}
+			Expect(foundContextInit).Should(BeTrue(), "Expected context-init container for directory mount")
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, configMap)).Should(Succeed())
+		})
+	})
+
+	// NOTE: The Optional field on ContextItem is defined in the API but not yet implemented
+	// in the controller. These tests are marked as Pending until the feature is implemented.
+	Context("Optional contexts", func() {
+		PIt("Should proceed when optional ConfigMap is not found (TODO: implement Optional field support)", func() {
+			// This test verifies that when ContextItem.Optional=true, the Task should
+			// proceed even if the ConfigMap doesn't exist. Currently not implemented.
+		})
+
+		It("Should fail when required ConfigMap is not found", func() {
+			taskName := "test-task-required-configmap"
+			description := "Test required ConfigMap"
+
+			By("Creating Task with required ConfigMap context that doesn't exist")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					Description: &description,
+					Contexts: []kubeopenv1alpha1.ContextItem{
+						{
+							Type: kubeopenv1alpha1.ContextTypeConfigMap,
+							ConfigMap: &kubeopenv1alpha1.ConfigMapContext{
+								Name: "non-existent-required-configmap",
+								Key:  "key1",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task transitions to Failed")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseFailed))
+
+			By("Verifying error condition is set")
+			var readyCondition *metav1.Condition
+			for i := range createdTask.Status.Conditions {
+				if createdTask.Status.Conditions[i].Type == kubeopenv1alpha1.ConditionTypeReady {
+					readyCondition = &createdTask.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(readyCondition).ShouldNot(BeNil())
+			Expect(readyCondition.Message).Should(ContainSubstring("not found"))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+		})
+	})
+
+	// NOTE: URL Context type is defined in the API (ContextTypeURL) but not yet implemented
+	// in the controller. This test is marked as Pending until the feature is implemented.
+	Context("URL Context", func() {
+		PIt("Should create url-fetch init container for URL context (TODO: implement URL context type)", func() {
+			// This test verifies URL context type creates a url-fetch init container.
+			// Currently returns "unknown context type: URL" error.
+		})
+	})
+
+	Context("Git Context configuration", func() {
+		It("Should create git-init container with correct arguments", func() {
+			taskName := "test-task-git-context"
+			description := "Test Git context"
+			mountPath := "/workspace/source"
+
+			By("Creating Task with Git context")
+			depth := 1
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					Description: &description,
+					Contexts: []kubeopenv1alpha1.ContextItem{
+						{
+							Name: "source-code",
+							Type: kubeopenv1alpha1.ContextTypeGit,
+							Git: &kubeopenv1alpha1.GitContext{
+								Repository: "https://github.com/example/repo.git",
+								Ref:        "main",
+								Depth:      &depth,
+							},
+							MountPath: mountPath,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task status")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
+
+			By("Checking Pod has git-init-0 container")
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
+			createdPod := &corev1.Pod{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			// Git init containers are named git-init-0, git-init-1, etc.
+			var foundGitInit bool
+			for _, initC := range createdPod.Spec.InitContainers {
+				if initC.Name == "git-init-0" {
+					foundGitInit = true
+					// Verify git-init has correct environment variables
+					var foundRepoUrl, foundRef bool
+					for _, env := range initC.Env {
+						if env.Name == "GIT_REPO" && env.Value == "https://github.com/example/repo.git" {
+							foundRepoUrl = true
+						}
+						if env.Name == "GIT_REF" && env.Value == "main" {
+							foundRef = true
+						}
+					}
+					Expect(foundRepoUrl).Should(BeTrue(), "Expected GIT_REPO env var")
+					Expect(foundRef).Should(BeTrue(), "Expected GIT_REF env var")
+					break
+				}
+			}
+			Expect(foundGitInit).Should(BeTrue(), "Expected git-init-0 container")
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
+		})
+	})
+
+	Context("Server-mode Task execution", func() {
+		It("Should create Pod with --attach flag pointing to server URL", func() {
+			agentName := "test-server-agent-task"
+			taskName := "test-task-server-mode"
+			description := "Test server mode task"
+
+			By("Creating Server-mode Agent")
+			agent := &kubeopenv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.AgentSpec{
+					ExecutorImage:      "quay.io/kubeopencode/kubeopencode-agent-devbox:latest",
+					WorkspaceDir:       "/workspace",
+					ServiceAccountName: "test-agent",
+					ServerConfig: &kubeopenv1alpha1.ServerConfig{
+						Port: 4096,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).Should(Succeed())
+
+			By("Waiting for Agent Deployment to be created")
+			deploymentName := ServerDeploymentName(agentName)
+			Eventually(func() error {
+				var deployment appsv1.Deployment
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      deploymentName,
+					Namespace: taskNamespace,
+				}, &deployment)
+			}, timeout, interval).Should(Succeed())
+
+			By("Creating Task with Server-mode Agent")
+			task := &kubeopenv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: taskNamespace,
+				},
+				Spec: kubeopenv1alpha1.TaskSpec{
+					AgentRef:    &kubeopenv1alpha1.AgentReference{Name: agentName},
+					Description: &description,
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Checking Task transitions to Running")
+			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: taskNamespace}
+			createdTask := &kubeopenv1alpha1.Task{}
+			Eventually(func() kubeopenv1alpha1.TaskPhase {
+				if err := k8sClient.Get(ctx, taskLookupKey, createdTask); err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseRunning))
+
+			By("Checking Pod command contains --attach flag")
+			podName := fmt.Sprintf("%s-pod", taskName)
+			podLookupKey := types.NamespacedName{Name: podName, Namespace: taskNamespace}
+			createdPod := &corev1.Pod{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, podLookupKey, createdPod) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			// Server mode should use --attach flag in command
+			container := createdPod.Spec.Containers[0]
+			commandStr := fmt.Sprintf("%v", container.Command)
+			Expect(commandStr).Should(ContainSubstring("--attach"))
+
+			// Should contain server URL
+			expectedURL := ServerURL(agentName, taskNamespace, 4096)
+			Expect(commandStr).Should(ContainSubstring(expectedURL))
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, agent)).Should(Succeed())
 		})
 	})
