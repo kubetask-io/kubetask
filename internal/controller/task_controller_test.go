@@ -3006,19 +3006,12 @@ var _ = Describe("TaskController", func() {
 		})
 	})
 
-	// NOTE: The Optional field on ContextItem is defined in the API but not yet implemented
-	// in the controller. These tests are marked as Pending until the feature is implemented.
-	Context("Optional contexts", func() {
-		PIt("Should proceed when optional ConfigMap is not found (TODO: implement Optional field support)", func() {
-			// This test verifies that when ContextItem.Optional=true, the Task should
-			// proceed even if the ConfigMap doesn't exist. Currently not implemented.
-		})
+	Context("Missing ConfigMap context", func() {
+		It("Should fail when ConfigMap is not found", func() {
+			taskName := "test-task-missing-configmap"
+			description := "Test missing ConfigMap"
 
-		It("Should fail when required ConfigMap is not found", func() {
-			taskName := "test-task-required-configmap"
-			description := "Test required ConfigMap"
-
-			By("Creating Task with required ConfigMap context that doesn't exist")
+			By("Creating Task with ConfigMap context that doesn't exist")
 			task := &kubeopenv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      taskName,
@@ -3030,7 +3023,7 @@ var _ = Describe("TaskController", func() {
 						{
 							Type: kubeopenv1alpha1.ContextTypeConfigMap,
 							ConfigMap: &kubeopenv1alpha1.ConfigMapContext{
-								Name: "non-existent-required-configmap",
+								Name: "non-existent-configmap",
 								Key:  "key1",
 							},
 						},

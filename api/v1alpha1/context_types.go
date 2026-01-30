@@ -170,16 +170,6 @@ type ContextItem struct {
 	// +optional
 	Description string `json:"description,omitempty"`
 
-	// Optional specifies whether this context is required for task execution.
-	// If true, the task will proceed even if the context cannot be resolved
-	// (e.g., ConfigMap not found, Git clone failed, URL fetch failed).
-	// If false (default), the task will fail if the context cannot be resolved.
-	//
-	// Note: This field takes precedence over type-specific optional fields
-	// (e.g., configMap.optional). If both are specified, this field wins.
-	// +optional
-	Optional *bool `json:"optional,omitempty"`
-
 	// === Type and Mount Configuration ===
 
 	// Type of context source: Text, ConfigMap, Git, Runtime, Secret, or URL
