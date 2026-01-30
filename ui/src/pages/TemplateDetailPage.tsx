@@ -1,26 +1,14 @@
-import React, { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useParams, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import api from '../api/client';
 
 function TemplateDetailPage() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data: template, isLoading, error } = useQuery({
     queryKey: ['tasktemplate', namespace, name],
     queryFn: () => api.getTaskTemplate(namespace!, name!),
     enabled: !!namespace && !!name,
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: () => api.deleteTaskTemplate(namespace!, name!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasktemplates'] });
-      navigate('/templates');
-    },
   });
 
   if (isLoading) {
@@ -63,17 +51,9 @@ function TemplateDetailPage() {
       </div>
 
       <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-start">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">{template.name}</h2>
-            <p className="text-sm text-gray-500">{template.namespace}</p>
-          </div>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md"
-          >
-            Delete
-          </button>
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-bold text-gray-900">{template.name}</h2>
+          <p className="text-sm text-gray-500">{template.namespace}</p>
         </div>
 
         <div className="px-6 py-4 space-y-6">
@@ -147,40 +127,6 @@ function TemplateDetailPage() {
           </div>
         </div>
       </div>
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Delete Template</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Are you sure you want to delete the template "{template.name}"? This action cannot be undone.
-            </p>
-            {deleteMutation.isError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
-                <p className="text-sm text-red-800">
-                  {(deleteMutation.error as Error).message}
-                </p>
-              </div>
-            )}
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

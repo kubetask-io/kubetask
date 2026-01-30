@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../api/client';
@@ -28,7 +28,7 @@ function TemplatesPage() {
             Reusable task templates for common workflows
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex space-x-4">
+        <div className="mt-4 sm:mt-0">
           <select
             value={selectedNamespace}
             onChange={(e) => setSelectedNamespace(e.target.value)}
@@ -41,12 +41,6 @@ function TemplatesPage() {
               </option>
             ))}
           </select>
-          <Link
-            to="/templates/create"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700"
-          >
-            New Template
-          </Link>
         </div>
       </div>
 
@@ -69,7 +63,7 @@ function TemplatesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {data?.templates.length === 0 ? (
             <div className="col-span-full text-center py-12 text-gray-500">
-              No templates found. Create a template to define reusable task configurations.
+              No templates found.
             </div>
           ) : (
             data?.templates.map((template) => (

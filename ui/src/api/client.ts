@@ -101,13 +101,6 @@ export interface TaskTemplateListResponse {
   total: number;
 }
 
-export interface CreateTaskTemplateRequest {
-  name: string;
-  description?: string;
-  agentRef?: AgentReference;
-  contexts?: ContextItem[];
-}
-
 export interface ServerInfo {
   version: string;
 }
@@ -196,17 +189,6 @@ export const api = {
 
   getTaskTemplate: (namespace: string, name: string) =>
     request<TaskTemplate>(`/namespaces/${namespace}/tasktemplates/${name}`),
-
-  createTaskTemplate: (namespace: string, template: CreateTaskTemplateRequest) =>
-    request<TaskTemplate>(`/namespaces/${namespace}/tasktemplates`, {
-      method: 'POST',
-      body: JSON.stringify(template),
-    }),
-
-  deleteTaskTemplate: (namespace: string, name: string) =>
-    request<void>(`/namespaces/${namespace}/tasktemplates/${name}`, {
-      method: 'DELETE',
-    }),
 };
 
 export default api;
