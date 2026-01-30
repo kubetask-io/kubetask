@@ -553,15 +553,15 @@ func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *TaskReconciler) getAgentConfigWithName(ctx context.Context, task *kubeopenv1alpha1.Task) (agentConfig, string, string, error) {
 	log := log.FromContext(ctx)
 
-	// Determine which Agent to use and its namespace
-	agentName := "default"
-	agentNamespace := task.Namespace // Default: same namespace as Task
+	// AgentRef is required - Task must specify which Agent to use
+	if task.Spec.AgentRef == nil {
+		return agentConfig{}, "", "", fmt.Errorf("agentRef is required: Task %q does not specify agentRef", task.Name)
+	}
 
-	if task.Spec.AgentRef != nil {
-		agentName = task.Spec.AgentRef.Name
-		if task.Spec.AgentRef.Namespace != "" {
-			agentNamespace = task.Spec.AgentRef.Namespace
-		}
+	agentName := task.Spec.AgentRef.Name
+	agentNamespace := task.Namespace
+	if task.Spec.AgentRef.Namespace != "" {
+		agentNamespace = task.Spec.AgentRef.Namespace
 	}
 
 	// Get Agent from agentNamespace

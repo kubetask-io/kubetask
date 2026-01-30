@@ -50,6 +50,11 @@ var (
 const (
 	timeout  = time.Second * 10
 	interval = time.Millisecond * 250
+
+	// testAgentName is the name of the shared test Agent created in BeforeSuite.
+	// All tests that need an Agent should reference this name in their agentRef.
+	testAgentName      = "test-agent"
+	testAgentNamespace = "default"
 )
 
 func TestControllers(t *testing.T) {
@@ -111,20 +116,20 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 	}()
 
-	// Create default Agent for tests that don't specify one
-	By("Creating default Agent")
-	defaultAgent := &kubeopenv1alpha1.Agent{
+	// Create shared test Agent for tests that need an Agent
+	By("Creating shared test Agent")
+	testAgent := &kubeopenv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "default",
-			Namespace: "default",
+			Name:      testAgentName,
+			Namespace: testAgentNamespace,
 		},
 		Spec: kubeopenv1alpha1.AgentSpec{
-			ServiceAccountName: "test-agent",
+			ServiceAccountName: "test-agent-sa",
 			WorkspaceDir:       "/workspace",
-			Command:            []string{"sh", "-c", "echo 'default agent'"},
+			Command:            []string{"sh", "-c", "echo 'test agent'"},
 		},
 	}
-	Expect(k8sClient.Create(ctx, defaultAgent)).Should(Succeed())
+	Expect(k8sClient.Create(ctx, testAgent)).Should(Succeed())
 })
 
 var _ = AfterSuite(func() {

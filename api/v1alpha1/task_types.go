@@ -155,8 +155,8 @@ type TaskSpec struct {
 	// Supports cross-namespace references: when Agent is in a different namespace,
 	// the Pod runs in the Agent's namespace to keep credentials isolated.
 	//
+	// Required unless taskTemplateRef is set with an agentRef.
 	// If not specified and taskTemplateRef is set, uses the template's agentRef.
-	// If neither is specified, uses the "default" Agent in the same namespace.
 	// +optional
 	AgentRef *AgentReference `json:"agentRef,omitempty"`
 }
@@ -172,8 +172,7 @@ type TaskExecutionStatus struct {
 	Phase TaskPhase `json:"phase,omitempty"`
 
 	// AgentRef is the resolved Agent reference used for this task.
-	// This may come from Task.spec.agentRef, TaskTemplate.spec.agentRef,
-	// or the default Agent in the Task's namespace.
+	// This comes from Task.spec.agentRef or TaskTemplate.spec.agentRef.
 	// +optional
 	AgentRef *AgentReference `json:"agentRef,omitempty"`
 

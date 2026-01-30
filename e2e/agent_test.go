@@ -233,26 +233,10 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 		})
 	})
 
-	Context("Default Agent resolution", func() {
-		It("should use 'default' Agent when not specified", func() {
-			defaultWSConfigName := "default"
-			taskName := uniqueName("task-default-ws")
-			content := "# Default WS Test"
-
-			By("Creating 'default' Agent in test namespace")
-			defaultWSConfig := &kubeopenv1alpha1.Agent{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      defaultWSConfigName,
-					Namespace: testNS,
-				},
-				Spec: kubeopenv1alpha1.AgentSpec{
-					ExecutorImage:      echoImage,
-					ServiceAccountName: testServiceAccount,
-					WorkspaceDir:       "/workspace",
-					Command:            []string{"sh", "-c", "echo '=== Task Content ===' && find ${WORKSPACE_DIR} -type f -print0 2>/dev/null | sort -z | xargs -0 -I {} sh -c 'echo \"--- File: {} ---\" && cat \"{}\" && echo' && echo '=== Task Completed ==='"},
-				},
-			}
-			Expect(k8sClient.Create(ctx, defaultWSConfig)).Should(Succeed())
+	Context("AgentRef validation", func() {
+		It("should fail when agentRef is not specified", func() {
+			taskName := uniqueName("task-no-agent")
+			content := "# No Agent Test"
 
 			By("Creating Task without AgentRef")
 			task := &kubeopenv1alpha1.Task{
@@ -261,13 +245,13 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 					Namespace: testNS,
 				},
 				Spec: kubeopenv1alpha1.TaskSpec{
-					// AgentRef is NOT specified
+					// AgentRef is NOT specified - this should fail
 					Description: &content,
 				},
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
-			By("Waiting for Task to complete")
+			By("Waiting for Task to fail with agentRef required error")
 			taskKey := types.NamespacedName{Name: taskName, Namespace: testNS}
 			Eventually(func() kubeopenv1alpha1.TaskPhase {
 				t := &kubeopenv1alpha1.Task{}
@@ -275,21 +259,24 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 					return ""
 				}
 				return t.Status.Phase
-			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseCompleted))
+			}, timeout, interval).Should(Equal(kubeopenv1alpha1.TaskPhaseFailed))
 
-			By("Verifying echo agent ran successfully")
-			logs := getPodLogs(ctx, testNS, fmt.Sprintf("%s-pod", taskName))
-			Expect(logs).Should(ContainSubstring("Default WS Test"))
-
-			By("Verifying status.agentRef resolved to 'default' Agent")
-			completedTask := &kubeopenv1alpha1.Task{}
-			Expect(k8sClient.Get(ctx, taskKey, completedTask)).Should(Succeed())
-			Expect(completedTask.Status.AgentRef).ShouldNot(BeNil())
-			Expect(completedTask.Status.AgentRef.Name).Should(Equal("default"))
+			By("Verifying error condition mentions agentRef is required")
+			failedTask := &kubeopenv1alpha1.Task{}
+			Expect(k8sClient.Get(ctx, taskKey, failedTask)).Should(Succeed())
+			// Check that one of the conditions contains the error message
+			var foundError bool
+			for _, cond := range failedTask.Status.Conditions {
+				if cond.Type == "Failed" && cond.Status == metav1.ConditionTrue {
+					Expect(cond.Message).Should(ContainSubstring("agentRef is required"))
+					foundError = true
+					break
+				}
+			}
+			Expect(foundError).Should(BeTrue(), "Expected Failed condition with agentRef error message")
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, task)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, defaultWSConfig)).Should(Succeed())
 		})
 	})
 
@@ -1179,9 +1166,9 @@ var _ = Describe("Agent E2E Tests", Label(LabelAgent), func() {
 					Namespace: testNS,
 				},
 				Data: map[string][]byte{
-					"config.yaml": []byte("# Config file\nkey: value\nenv: test"),
-					"settings.json": []byte(`{"debug": true, "level": "info"}`),
-					"credentials.txt":  []byte("username=testuser\npassword=testpass"),
+					"config.yaml":     []byte("# Config file\nkey: value\nenv: test"),
+					"settings.json":   []byte(`{"debug": true, "level": "info"}`),
+					"credentials.txt": []byte("username=testuser\npassword=testpass"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())

@@ -342,7 +342,7 @@ spec:
         name: security-policy
       # Empty mountPath = write to .kubeopencode/context.md with XML tags
 
-  # Optional: Reference to Agent (defaults to "default")
+  # Required: Reference to Agent (unless using TaskTemplate with agentRef)
   agentRef: my-agent
 
 status:
@@ -363,7 +363,7 @@ status:
 |-------|------|----------|-------------|
 | `spec.description` | String | No | Task instruction (creates /workspace/task.md) |
 | `spec.contexts` | []ContextItem | No | Inline context definitions (see below) |
-| `spec.agentRef` | *AgentReference | No | Cross-namespace Agent reference (default: "default" in Task's namespace) |
+| `spec.agentRef` | *AgentReference | Yes* | Cross-namespace Agent reference (*required unless using TaskTemplate with agentRef) |
 
 **Status Field Description:**
 
@@ -473,7 +473,7 @@ KubeOpenCode uses a **two-container pattern**:
 apiVersion: kubeopencode.io/v1alpha1
 kind: Agent
 metadata:
-  name: default  # Convention: "default" is used when no agentRef is specified
+  name: my-agent
   namespace: kubeopencode-system
 spec:
   # OpenCode init container image (optional, has default)
@@ -692,7 +692,7 @@ KubeOpenCode uses a **two-container pattern** for AI task execution:
 ### How It Works
 
 The controller:
-1. Looks up the Agent referenced by `agentRef` (defaults to "default")
+1. Looks up the Agent referenced by `agentRef` (required)
 2. Resolves `agentImage` and `executorImage` with backward compatibility
 3. Generates a Pod with:
    - `opencode-init` init container (copies OpenCode binary to `/tools`)
@@ -994,7 +994,7 @@ metadata:
   name: complex-task
   namespace: kubeopencode-system
 spec:
-  agentRef: default
+  agentRef: my-agent
   description: "Refactor the authentication module"
   contexts:
     # ConfigMap context (specific key)
@@ -1086,7 +1086,7 @@ kubectl get agents -n kubeopencode-system
 kubectl apply -f agent.yaml
 
 # View agent details
-kubectl get agent default -o yaml
+kubectl get agent my-agent -o yaml
 ```
 
 ---
