@@ -199,10 +199,17 @@ make e2e-setup
 make e2e-test
 ```
 
-For iterative development only (when you've already run the full flow once in this session):
+For iterative e2e testing only (when you've already run the full flow once in this session):
 ```bash
 make e2e-reload  # Rebuild and reload controller image, then run e2e-test
 ```
+
+> **CRITICAL FOR AI ASSISTANTS**: The `e2e-reload` command is ONLY for e2e testing scenarios (`make e2e-test`). It uses a hardcoded Kind cluster name (`kubeopencode`) and runs e2e tests after reloading. Do NOT use `e2e-reload` for local-development testing. For local-development, follow the manual steps in `deploy/local-dev/local-development.md`:
+> ```bash
+> make docker-build
+> kind load docker-image quay.io/kubeopencode/kubeopencode:latest --name <your-cluster-name>
+> kubectl rollout restart deployment/kubeopencode-server -n kubeopencode-system
+> ```
 
 ### Docker and Registry
 
@@ -735,9 +742,8 @@ Image resolution:
 - If both are set: `agentImage` for init container, `executorImage` for worker container
 
 Agent lookup:
-- Task uses `agentRef` to reference an Agent
-- If not specified, looks for Agent named "default" in the same namespace
-- If not found, uses built-in default images
+- Task must specify `agentRef` to reference an Agent (required unless using TaskTemplate with agentRef)
+- If `agentRef` is not specified and no TaskTemplate provides one, the Task will fail with an error
 
 The controller generates Pods with:
 - Init containers for context initialization (git-init, context-init, url-fetch)

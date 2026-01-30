@@ -1,0 +1,29 @@
+{{- if .Values.server.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kubeopencode.fullname" . }}-server
+  labels:
+    {{- include "kubeopencode.server.labels" . | nindent 4 }}
+rules:
+# Read access to KubeOpenCode resources
+- apiGroups: ["kubeopencode.io"]
+  resources: ["tasks", "agents", "tasktemplates", "kubeopencodeconfigs"]
+  verbs: ["get", "list", "watch"]
+# Write access to Tasks (create, delete, patch for stop annotation)
+- apiGroups: ["kubeopencode.io"]
+  resources: ["tasks"]
+  verbs: ["create", "delete", "patch"]
+# Read access to Pods (for status and log streaming)
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+# Read access to Pod logs
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+# Read access to Namespaces (for namespace listing)
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list"]
+{{- end }}
