@@ -42,6 +42,7 @@ spec:
             comparator: "!="
             value:
               - kubeopencode-bot[bot]
+              - kubeopencode-dev[bot]
   triggers:
     - template:
         name: bot-mention

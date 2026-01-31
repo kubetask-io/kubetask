@@ -41,6 +41,7 @@ spec:
             comparator: "!="
             value:
               - dependabot[bot]
+              - kubeopencode-dev[bot]
   triggers:
     - template:
         name: pr-opened
@@ -119,4 +120,3 @@ spec:
                   - REPO={{ .Input.body.repository.full_name }}
                   - PR_NUMBER={{ .Input.body.pull_request.number }}
               dest: spec.description
-
