@@ -132,6 +132,9 @@ const (
 	// ToolsVolumeName is the volume name for sharing OpenCode binary between containers
 	ToolsVolumeName = "tools"
 
+	// WorkspaceVolumeName is the volume name for the writable workspace
+	WorkspaceVolumeName = "workspace"
+
 	// ToolsMountPath is the mount path for the tools volume
 	ToolsMountPath = "/tools"
 
@@ -370,13 +373,13 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 	// This is essential for SCC environments where containers run with random UIDs
 	// that don't have write access to directories created in the container image.
 	volumes = append(volumes, corev1.Volume{
-		Name: "workspace",
+		Name: WorkspaceVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	})
 	volumeMounts = append(volumeMounts, corev1.VolumeMount{
-		Name:      "workspace",
+		Name:      WorkspaceVolumeName,
 		MountPath: cfg.workspaceDir,
 	})
 
@@ -579,7 +582,7 @@ func buildPod(task *kubeopenv1alpha1.Task, podName string, agentNamespace string
 		// Start with contextInitMounts (ConfigMap volume mounts) and add workspace mount
 		contextInit.VolumeMounts = contextInitMounts
 		contextInit.VolumeMounts = append(contextInit.VolumeMounts, corev1.VolumeMount{
-			Name:      "workspace",
+			Name:      WorkspaceVolumeName,
 			MountPath: cfg.workspaceDir,
 		})
 

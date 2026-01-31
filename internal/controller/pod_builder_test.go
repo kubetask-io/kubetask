@@ -738,7 +738,7 @@ func TestBuildPod_WithContextConfigMap(t *testing.T) {
 	// Verify workspace emptyDir volume exists
 	var foundWorkspaceVolume bool
 	for _, vol := range pod.Spec.Volumes {
-		if vol.Name == "workspace" && vol.EmptyDir != nil {
+		if vol.Name == WorkspaceVolumeName && vol.EmptyDir != nil {
 			foundWorkspaceVolume = true
 		}
 	}
@@ -750,7 +750,7 @@ func TestBuildPod_WithContextConfigMap(t *testing.T) {
 	container := pod.Spec.Containers[0]
 	var foundWorkspaceMount bool
 	for _, mount := range container.VolumeMounts {
-		if mount.MountPath == "/workspace" && mount.Name == "workspace" {
+		if mount.MountPath == "/workspace" && mount.Name == WorkspaceVolumeName {
 			foundWorkspaceMount = true
 		}
 	}
@@ -771,7 +771,7 @@ func TestBuildPod_WithContextConfigMap(t *testing.T) {
 				if mount.Name == "context-files" && mount.MountPath == "/configmap-files" {
 					foundConfigMapMount = true
 				}
-				if mount.Name == "workspace" && mount.MountPath == "/workspace" {
+				if mount.Name == WorkspaceVolumeName && mount.MountPath == "/workspace" {
 					foundInitWorkspaceMount = true
 				}
 			}
@@ -836,7 +836,7 @@ func TestBuildPod_WithDirMounts(t *testing.T) {
 	// Verify workspace emptyDir volume exists
 	var foundWorkspaceVolume bool
 	for _, vol := range pod.Spec.Volumes {
-		if vol.Name == "workspace" && vol.EmptyDir != nil {
+		if vol.Name == WorkspaceVolumeName && vol.EmptyDir != nil {
 			foundWorkspaceVolume = true
 		}
 	}
@@ -848,7 +848,7 @@ func TestBuildPod_WithDirMounts(t *testing.T) {
 	container := pod.Spec.Containers[0]
 	var foundWorkspaceMount bool
 	for _, mount := range container.VolumeMounts {
-		if mount.MountPath == "/workspace" && mount.Name == "workspace" {
+		if mount.MountPath == "/workspace" && mount.Name == WorkspaceVolumeName {
 			foundWorkspaceMount = true
 		}
 	}
@@ -1274,7 +1274,7 @@ func TestBuildPod_WithExternalFileMounts(t *testing.T) {
 	// Verify workspace emptyDir volume exists
 	var foundWorkspaceVolume bool
 	for _, vol := range pod.Spec.Volumes {
-		if vol.Name == "workspace" && vol.EmptyDir != nil {
+		if vol.Name == WorkspaceVolumeName && vol.EmptyDir != nil {
 			foundWorkspaceVolume = true
 		}
 	}
