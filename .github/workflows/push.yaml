@@ -66,6 +66,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build UI
+        run: |
+          cd ui && npm install && npm run build
+
       - name: Run unit tests
         run: make test
 
@@ -96,6 +105,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build UI
+        run: |
+          cd ui && npm install && npm run build
+
       - name: Install Kind
         run: |
           curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
@@ -118,6 +136,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build UI
+        run: |
+          cd ui && npm install && npm run build
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
