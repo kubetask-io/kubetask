@@ -26,13 +26,22 @@ ui/dist/
 *.key
 .env
 .env.*
+
+# Secret patterns - exclude vendor directory
 *credentials*
 *secret*
 !*.example
-*_id*
-*_secret*
-*_key*
-*_token*
+!vendor/
+
+# Common secret file patterns (only at root or config directories)
+/*_id
+/*_id.*
+/*_secret
+/*_secret.*
+/*_key
+/*_key.*
+/*_token
+/*_token.*
 
 # Dogfooding environment config (contains smee.io URL)
 deploy/dogfooding/system/configmap-smee.yaml
